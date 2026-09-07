@@ -3,7 +3,7 @@ name: leo-skill-ersteller
 trigger: '"neuen skill", "skill erstellen", "skill bauen"'
 zweck: Baut einen neuen Skill normgerecht und trägt ihn ins Register ein
 type: skill
-version: 1.7-core
+version: 1.7
 ---
 
 # Skill: Leo Skill-Ersteller

@@ -3,7 +3,7 @@ name: leo-notiz
 trigger: '"notiere an geeigneter stelle", "an geeigneter stelle notieren", "notier das", "nicht vergessen", "merk dir das"'
 zweck: Einen offenen Punkt so im Repo verankern, dass er mechanisch wiederkommt statt im Chat zu sterben - zustaendige Datei finden, gegen Bestehendes pruefen, Status-Block mit Owner und Wiedervorlage setzen
 type: skill
-version: 1.0-core
+version: 1.0
 ---
 
 # Skill: Leo Notiz

@@ -2,7 +2,7 @@
 titel: INDEX (Landkarte des Leo)
 zweck: Einstiegspunkt der Agentic Search; Hierarchie, Bereiche, Systemdateien
 type: index
-version: 1.0-core
+version: 1.0
 hinweis: Der Ordnerbaum wird mechanisch aktualisiert (build-index-geruest.ps1). Beschreibungen sind kuratiert und rein deskriptiv. Der Auto-Block "Ordnerbaum" unten traegt die aktuelle Stand-Zeitangabe.
 ---
 
@@ -14,7 +14,7 @@ Im frischen Kern ist die Themenbereichs-Liste leer, bis du den ersten Themenordn
 
 ## Ordnerbaum (mechanisch aktuell)
 <!-- AUTO:BAUM:BEGIN -->
-Stand: 2026-09-07 17:03 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
+Stand: 2026-09-07 17:14 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
 
 - .codex\  (0 Dateien)
 - 00_INDEX\  (1 Dateien)

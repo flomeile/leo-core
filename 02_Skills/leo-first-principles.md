@@ -3,7 +3,7 @@ name: leo-first-principles
 trigger: '"first principles", "first-principles", "dekonstruiere das", "von grund auf neu denken", "fundamental hinterfragen"'
 zweck: Ein bestehendes Modell, einen Prozess oder eine Branchenlösung radikal auf fundamentale Wahrheiten dekonstruieren und von Null neu aufbauen, Wahrheit strikt von Konvention getrennt, mit konkretem erstem Zug am Ende
 type: skill
-version: 1.0-core
+version: 1.0
 ---
 
 # Skill: Leo First Principles

@@ -3,7 +3,7 @@ name: leo-faktencheck
 trigger: '"faktencheck", "fakten prüfen", "fakten checken", "stimmt das", "verifizieren", "quellen prüfen", "belege prüfen"'
 zweck: Jede überprüfbare Tatsachenbehauptung in einem Text vor Versand oder Veröffentlichung einzeln gegen Primärquellen prüfen und ein Urteil je Behauptung plus korrigierte Fassung liefern
 type: skill
-version: 1.0-core
+version: 1.0
 ---
 
 # Skill: Leo Faktencheck
