@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|MultiEdit|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"PFAD-ZU-DEINEM-REPO\\00_INDEX\\scripts\\guard-workspace.ps1\""
+          }
+        ]
+      }
+    ]
+  }
+}
