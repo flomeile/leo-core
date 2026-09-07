@@ -1,9 +1,9 @@
 ---
 name: leo-mechanik-update
-trigger: '"mechanik update", "grundgeruest aktualisieren", "starter update", "update ziehen", "neue version holen"'
+trigger: '"core update", "core aktualisieren", "neue core-version", "mechanik update", "grundgeruest aktualisieren", "starter update", "update ziehen", "neue version holen"'
 zweck: Verbesserungen am Grundgerüst übernehmen, ohne eigene Anpassungen und eigene Bauten zu beschädigen
 type: skill
-version: 1.13-core
+version: 1.14-core
 ---
 
 # Skill: Mechanik aktualisieren

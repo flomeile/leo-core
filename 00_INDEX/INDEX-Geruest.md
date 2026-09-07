@@ -2,16 +2,16 @@
 titel: Index-Geruest (mechanisch erzeugt)
 zweck: Vollstaendige, deterministische Baumliste aller Markdown-Dateien im Repo
 type: index-geruest
-erzeugt: 2026-09-03 10:36
+erzeugt: 2026-09-03 14:35
 hinweis: Automatisch erzeugt. Nicht von Hand bearbeiten. Sicherheitsnetz und Delta-Quelle fuer die kuratierten Indizes.
 ---
 
 # Index-Geruest
 
-Mechanisch aus dem Dateisystem erzeugt am 2026-09-03 10:36. Volle Hierarchie, jede real existierende .md-Datei.
+Mechanisch aus dem Dateisystem erzeugt am 2026-09-03 14:35. Volle Hierarchie, jede real existierende .md-Datei.
 Format je Datei: Name | Basis-Beschreibung (erste Ueberschrift) | Groesse | geaendert.
 
-- AGENTS.md | AGENTS.md: Master-Anweisung für Leo | 75.9 KB | 2026-09-03
+- AGENTS.md | AGENTS.md: Master-Anweisung für Leo | 76.8 KB | 2026-09-03
 - ANLEITUNG.md | Leo: Anleitung zum eigenen Second Brain | 68.6 KB | 2026-09-03
 - CLAUDE.md | CLAUDE.md | 1.6 KB | 2026-08-27
 - GEMINI.md | GEMINI.md | 1.7 KB | 2026-08-26
@@ -29,7 +29,7 @@ Format je Datei: Name | Basis-Beschreibung (erste Ueberschrift) | Groesse | geae
 - 02_Skills\
   - leo-faktencheck.md | Skill: Leo Faktencheck | 7.3 KB | 2026-09-03
   - leo-first-principles.md | Skill: Leo First Principles | 6.7 KB | 2026-09-03
-  - leo-mechanik-update.md | Skill: Mechanik aktualisieren | 27 KB | 2026-09-03
+  - leo-mechanik-update.md | Skill: Mechanik aktualisieren | 27.1 KB | 2026-09-03
   - leo-notiz.md | Skill: Leo Notiz | 4.7 KB | 2026-09-03
   - leo-skill-ersteller.md | Skill: Leo Skill-Ersteller | 6.8 KB | 2026-09-03
   - leo-system-health-check.md | Skill: System Health Check | 15.7 KB | 2026-09-03
