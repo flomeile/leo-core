@@ -3,7 +3,7 @@ name: leo-themenordner-anlegen
 trigger: '"neuer themenordner", "themenordner anlegen", "neues thema anlegen"'
 zweck: Neuen Themenordner vollständig anlegen (Ordner, README, lokale AGENTS.md, Routing, Index)
 type: skill
-version: 1.0-core
+version: 1.0
 ---
 
 # Skill: Themenordner anlegen

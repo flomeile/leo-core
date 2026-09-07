@@ -215,6 +215,69 @@ if ($tool -in @("Bash", "PowerShell")) {
         Write-Decision "deny" "Schreibendes Kommando mit Arbeitsverzeichnis ausserhalb des Repos: $cwd. Harte Regel, siehe AGENTS.md Abschnitt 18."
     }
 
+    # --- Zielpfade aufloesen, die erst zur Laufzeit entstehen (seit 3.2) -------
+    # Die Pfadsuche unten liest Pfade als TEXT. Ein Kommando, das sein Ziel erst
+    # beim Ausfuehren berechnet, enthaelt gar keinen Pfad und ging deshalb durch:
+    #   Join-Path ([Environment]::GetFolderPath('Desktop')) 'x.txt'
+    # hat auf den Desktop geschrieben, obwohl Hook und Matcher griffen. Dieselbe
+    # Luecke bestand bei $env:USERPROFILE, $HOME und der Bash-Tilde. Gemessen und
+    # mit demselben Ziel gegengemessen: berechnet keine Ausgabe, literal ein deny.
+    #
+    # Die Loesung ist bewusst NICHT, solche Ausdruecke pauschal zu blockieren:
+    # Das erlaubte Scratchpad und der Memory-Pfad werden genau so geschrieben,
+    # und eine Sperre, die legitime Arbeit trifft, wird irgendwann abgeschaltet.
+    # Stattdessen werden die bekannten Ausdruecke durch ihren echten Wert
+    # ersetzt, danach entscheidet dieselbe Pruefung wie fuer jeden anderen Pfad.
+    #
+    # GRENZE, ausdruecklich: Wer sein Ziel aus Teilstuecken zusammensetzt, kommt
+    # weiter durch. Diese Sperre ist gegen das Versehen gebaut, nicht gegen die
+    # Umgehung; letztere verbietet AGENTS.md Abschnitt 18 als Regel, und die
+    # tragende technische Ebene dafuer ist die Sandbox des Werkzeugs.
+    #
+    # BEKANNTES FALSCH-POSITIV, bewusst behalten: Ein Kommandotext, der eine
+    # solche Variable nur ERWAEHNT, statt sie als Ziel zu benutzen, wird ebenfalls
+    # aufgeloest und kann blockiert werden. Betroffen sind nur Kommandotexte,
+    # also auch Commit-Nachrichten; Repo-Dateien laufen ueber file_path. Abhilfe
+    # ist Umformulieren. Eine Blockade zu viel kostet einen Satz, eine Luecke
+    # kostet eine Datei.
+    $cmdN = $cmd
+    $ersatz = [ordered]@{
+        '\$\{?env:USERPROFILE\}?'      = $env:USERPROFILE
+        '\$\{?env:LOCALAPPDATA\}?'     = $env:LOCALAPPDATA
+        '\$\{?env:APPDATA\}?'          = $env:APPDATA
+        '\$\{?env:PUBLIC\}?'           = $env:PUBLIC
+        '\$\{?env:ONEDRIVE\}?'         = $env:OneDrive
+        '\$\{?env:PROGRAMDATA\}?'      = $env:ProgramData
+        '\$\{?env:SYSTEMROOT\}?'       = $env:SystemRoot
+        '\$\{?env:WINDIR\}?'           = $env:windir
+        '\$\{?env:TEMP\}?'             = $env:TEMP
+        '\$\{?env:TMP\}?'              = $env:TMP
+        '\$\{?env:HOMEDRIVE\}?\$\{?env:HOMEPATH\}?' = $env:USERPROFILE
+        '\$HOME\b'                     = $env:USERPROFILE
+    }
+    # Ersetzt wird ueber eine Lambda und nicht ueber einen Ersatzstring: In einem
+    # Ersatzstring ist "$" ein Sonderzeichen, und ein Pfad, der eines enthaelt,
+    # wuerde still verstuemmelt. Eine Lambda gibt den Wert unveraendert zurueck.
+    foreach ($k in $ersatz.Keys) {
+        $wert = $ersatz[$k]
+        if ($wert) { $cmdN = [regex]::Replace($cmdN, $k, { param($m) $wert }.GetNewClosure(), 'IgnoreCase') }
+    }
+    # [Environment]::GetFolderPath('Desktop') und Verwandte. Der Ordnername wird
+    # ueber die .NET-Aufzaehlung selbst aufgeloest, damit die Liste nicht von Hand
+    # gepflegt werden muss und auch bei umgeleiteten Ordnern stimmt (ein Desktop
+    # unterhalb eines Cloud-Speichers ist der Normalfall).
+    $cmdN = [regex]::Replace($cmdN, '\[(?:System\.)?Environment\]::GetFolderPath\(\s*[''"]?(?:System\.Environment\+SpecialFolder\.|SpecialFolder\.)?([A-Za-z]+)[''"]?\s*\)', {
+        param($m)
+        try {
+            $wert = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::($m.Groups[1].Value))
+            if ($wert) { return $wert }
+        } catch { }
+        return $m.Value
+    }, 'IgnoreCase')
+    # Bash-Tilde am Anfang eines Pfades.
+    $up = $env:USERPROFILE
+    $cmdN = [regex]::Replace($cmdN, '(?<![\w.])~(?=[\\/])', { param($m) $up }.GetNewClosure())
+
     # Absolute Pfade im Kommandotext einsammeln: Laufwerk, UNC, Git-Bash-Stil.
     # Das UNC-Muster verlangt bewusst einen Hostnamen und danach einen EINFACHEN
     # Trenner. Ohne diese Verschaerfung trifft es auch JSON mit escapten
@@ -224,7 +287,7 @@ if ($tool -in @("Bash", "PowerShell")) {
     # Erster Durchgang: Pfade in Anfuehrungszeichen. Die muessen als GANZES
     # geprueft werden, sonst zerfaellt ein Pfad mit Leerzeichen am ersten
     # Leerzeichen, und die Pruefung urteilt ueber etwas, das so nie gemeint war.
-    foreach ($m in [regex]::Matches($cmd, '"([^"\r\n]+)"|''([^''\r\n]+)''')) {
+    foreach ($m in [regex]::Matches($cmdN, '"([^"\r\n]+)"|''([^''\r\n]+)''')) {
         $inhalt = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
         if ($inhalt -match '^[a-zA-Z]:[\\/]' -or $inhalt -match '^\\\\[a-zA-Z0-9._-]+\\(?!\\)' -or $inhalt -match '^/[a-zA-Z]/') {
             $found += $inhalt
@@ -237,7 +300,7 @@ if ($tool -in @("Bash", "PowerShell")) {
     # und jeder Chrome-Aufruf mit Datei-URL waere blockiert (Fix aus dem
     # Ursprungssystem vom 11.08.2026, hier nachgezogen am 30.08.2026).
     foreach ($rx in @('(?<![A-Za-z0-9])[a-zA-Z]:[\\/][^"''`;,|)\s]*', '(?<!\\)\\\\[a-zA-Z0-9._-]+\\(?!\\)[^"''`;,|)\s]+', '(?<![\w.])/[a-zA-Z]/[^"''`;,|)\s]*')) {
-        foreach ($m in [regex]::Matches($cmd, $rx)) { $found += $m.Value }
+        foreach ($m in [regex]::Matches($cmdN, $rx)) { $found += $m.Value }
     }
     foreach ($f in ($found | Select-Object -Unique)) {
         if (-not (Test-Allowed $f)) {
@@ -248,7 +311,7 @@ if ($tool -in @("Bash", "PowerShell")) {
     # Erzeuger werden geprueft (Chrome-Export, Umleitungen), nicht jeder Pfad im
     # Kommando. Sonst blockiert die Sperre auch das sanktionierte Aufraeumen, etwa
     # Move-Item eines gestrandeten PDFs AUS dem Themenordner in den Artefakte-Ordner.
-    foreach ($m in [regex]::Matches($cmd, '(?:--print-to-pdf=|--screenshot=|>{1,2}\s*)"?([^"\r\n;|]+?)"?(?=\s|$)')) {
+    foreach ($m in [regex]::Matches($cmdN, '(?:--print-to-pdf=|--screenshot=|>{1,2}\s*)"?([^"\r\n;|]+?)"?(?=\s|$)')) {
         $ziel = $m.Groups[1].Value.Trim()
         if (Test-ArtefaktVerbot $ziel) {
             Write-Decision "deny" "Schreibendes Kommando, blockiertes Ausgabeziel: $ziel. $artefaktGrund"

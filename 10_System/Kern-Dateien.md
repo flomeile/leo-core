@@ -2,8 +2,8 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 3.1-core
-stand: 2026-09-03
+version: 3.2
+stand: 2026-09-07
 ---
 
 # Kern-Dateien: was ein Update anfassen darf
@@ -36,6 +36,7 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\health-check.ps1` | Prüfskript |
 | `00_INDEX\scripts\build-skill-wrapper.ps1` | Erzeugt die Skill-Zeiger für alle Werkzeuge (Abschnitt 11a) |
 | `00_INDEX\scripts\guard-workspace.ps1` | Arbeitsbereich-Sperre, blockiert Schreibzugriffe ausserhalb des Repos und erzeugte Ausgabeformate in Themenordnern (Abschnitte 5 und 18) |
+| `00_INDEX\scripts\guard-workspace-tests.ps1` | Regressionsreihe für die Arbeitsbereich-Sperre, Pflicht vor und nach jeder Änderung am Hook (seit 3.2) |
 | `00_INDEX\scripts\weekly-diagnose.ps1` | Unbeaufsichtigte Wochendiagnose; bei jedem Lauf entsteht `10_System\health-check-report.txt`, und diese Berichtsdatei gehört dir (seit 1.19) |
 | `00_INDEX\githooks\pre-commit` | Schutz vor beschädigten Commits |
 | `.gitattributes` | Zeilenenden-Behandlung |
@@ -57,6 +58,7 @@ Diese Dateien sind Mechanik, tragen aber zwingend etwas von dir. Ein Update darf
 | `GEMINI.md` | dasselbe |
 | `.clinerules` | dasselbe, hier als textliche Leseanweisung statt als Import |
 | `.claude\settings.json` | Hängt die Arbeitsbereich-Sperre ein. Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf |
+| `.codex\hooks.json` | Hängt die Arbeitsbereich-Sperre in Codex ein (seit 3.2). Dein Anteil ist der ausgeschriebene Pfad zu deinem Repo, den ein Update nie durch den Platzhalter zurückersetzt, dazu eigene weitere Hooks |
 | `.github\copilot-instructions.md` | dasselbe |
 | `ANLEITUNG.md` | Nichts, solange du sie nicht ergänzt hast. Wenn doch, gilt sie als deine Datei |
 | `.gitignore` | Deine eigenen Ignore-Zeilen. Neue Zeilen aus dem Grundgerüst werden ergänzt, deine nie entfernt |

@@ -3,7 +3,7 @@ name: leo-voice-check
 trigger: '"voice check", "voice-check", "schleif das", "schleifen", "stil check", "stilcheck"'
 zweck: Einen fertigen, ausgehenden Text (Mail, Präsentation, Post, Brief, Angebot) vor dem Versand gegen die eigene Voice-Datei prüfen und KI-Tells selbst korrigieren, statt dass der Besitzer sie von Hand nachbessert
 type: skill
-version: 1.0-core
+version: 1.0
 ---
 
 # Skill: Leo Voice-Check

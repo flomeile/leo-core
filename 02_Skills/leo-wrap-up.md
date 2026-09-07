@@ -3,7 +3,7 @@ name: leo-wrap-up
 trigger: '"wrap up", "session speichern", "zusammenfassen und ablegen", "session beenden", "log this"'
 zweck: Session zusammenfassen, ablegen, Lernschleife (Dauerwissen ins Repo zurückschreiben, notfalls neue Wissensdateien anlegen, sofort indexieren), Index leichtgewichtig aktuell halten, vollen System-Health-Check nur bei Bedarf anstossen
 type: skill
-version: 1.3-core
+version: 1.3
 ---
 
 # Skill: Leo Wrap-Up

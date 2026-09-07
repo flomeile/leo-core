@@ -1,9 +1,9 @@
 ---
 name: leo-mechanik-update
-trigger: '"mechanik update", "grundgeruest aktualisieren", "starter update", "update ziehen", "neue version holen"'
+trigger: '"core update", "core aktualisieren", "neue core-version", "mechanik update", "grundgeruest aktualisieren", "starter update", "update ziehen", "neue version holen"'
 zweck: Verbesserungen am Grundgerüst übernehmen, ohne eigene Anpassungen und eigene Bauten zu beschädigen
 type: skill
-version: 1.13-core
+version: 1.15
 ---
 
 # Skill: Mechanik aktualisieren
@@ -171,6 +171,8 @@ Melde am Ende jede Datei dieser Gruppe, auch die, die glattgegangen ist. `[NAME]
 
 - **`CLAUDE.md`, `GEMINI.md`, `.clinerules`, `.github\copilot-instructions.md`:** Der lokale Anteil sind die `@`-Importzeilen bzw. die textliche Leseanweisung, die auf die tatsächlich vorhandenen Basiskontext-Dateien zeigen. Übernimm alles Neue aus der Zielversion, lass die Zeilen des Nutzers unverändert stehen, auch wenn sie andere Dateinamen tragen als das Grundgerüst.
 - **`.claude\settings.json`:** Das ist eine JSON-Datei, kein Fliesstext, und sie wird zusammengeführt statt überschrieben. Vorgehen: Lies die lokale Datei vollständig, nimm aus der Zielversion NUR die Schlüssel dazu, die lokal fehlen, und lass alles Bestehende unangetastet, insbesondere `permissions.allow` und `permissions.deny`. In der Regel ist der einzige neue Schlüssel `hooks.PreToolUse` mit der Arbeitsbereich-Sperre. Hat der Nutzer dort bereits eigene Hooks, wird der neue Eintrag ergänzt und kein bestehender ersetzt. Existiert die Datei lokal gar nicht, leg sie aus der Zielversion an. **Diese Datei nie blind mit `git checkout <Zielversion> -- .claude/settings.json` überschreiben:** Der Nutzer verliert damit stillschweigend alle Berechtigungen, die er sich eingerichtet hat, und merkt es erst, wenn ihn das Werkzeug bei jedem zweiten Befehl wieder fragt.
+
+- **`.codex\hooks.json`:** Ebenfalls JSON und ebenfalls zusammenführen statt überschreiben, mit einer Besonderheit: Der lokale Anteil ist der ausgeschriebene Pfad zum Repo des Nutzers. Codex kennt keine Pfad-Abkürzung, deshalb steht dort ein echter Pfad, wo die Zielversion nur den Platzhalter `PFAD-ZU-DEINEM-REPO` trägt. **Diesen Platzhalter nie zurückschreiben:** Damit wäre die Sperre in Codex ab dem nächsten Start wirkungslos, ohne dass irgendetwas fehlschlägt. Existiert die Datei lokal nicht und arbeitet der Nutzer gar nicht mit Codex, leg sie an und sag ihm in einem Satz, dass sie unbenutzt danebenliegt, statt sie stillschweigend wegzulassen. Und weise ihn darauf hin, dass ein neuer Hook in Codex erst nach seiner Freigabe in der Oberfläche wirkt (`ANLEITUNG.md`, Teil 5, Schritt 7b).
 
 Ein Hinweis zur Arbeitsbereich-Sperre, damit du sie richtig einordnest: Sie ruft `powershell` auf und wirkt deshalb nur unter Windows. Läuft dieses System auf macOS, Linux oder in einer Cloud-Sitzung, schlägt der Hook-Aufruf fehl, ohne etwas zu blockieren; die Regel in `AGENTS.md` Abschnitt 18 gilt dann als reine Textregel weiter. Melde das dem Nutzer, statt den Hook-Eintrag stillschweigend wegzulassen.
 
