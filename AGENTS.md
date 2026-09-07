@@ -269,6 +269,7 @@ Leo kann schrittweise Zugriff auf externe Systeme bekommen (z.B. Cloud-Speicher,
 - **Anti-Halluzination gilt unverändert:** Nur zitieren, was real abgerufen wurde; gescheiterte Abrufe als solche melden, nie aus dem Gedächtnis "ergänzen".
 - **Datenschutz verschärft:** Externe Systeme enthalten oft Personendaten. Abschnitt 14 gilt besonders: bei erkennbar sensiblen Personendaten aktiv auf die Cloud-Verarbeitung hinweisen und nur das abrufen, was die Aufgabe wirklich braucht.
 - **YAGNI für Anbindungen:** Ein neues Tool wird erst angebunden, wenn eine konkrete, wiederkehrende Aufgabe es verlangt, und ein Tool-Zugang ersetzt nie die Repo-Ablage des Ergebnisses.
+- **Wo für ein externes System ein Skript gebaut wurde, läuft jeder Zugriff über dieses Skript, und Zugangsdaten kommen nie in den Kontext.** Kein Token, kein Schlüssel und kein Passwort wird in einen Kommandotext geschrieben oder mit dem Lesewerkzeug geöffnet, auch nicht zum Ausprobieren. Der Grund ist nicht die Bequemlichkeit des fertigen Wegs: Das Skript trägt den einzigen geprüften Aufruf, und die Zugangsdaten bleiben ausserhalb jedes Protokolls. Fehlt ein Weg oder scheitert das Skript, wird das gemeldet, statt einen eigenen zu bauen. Anlass sind zwei kalte Messläufe, in denen das Modell den dokumentierten Skriptweg gelesen hatte und unter dem Druck der konkreten Aufgabe trotzdem ein Dutzend eigener Aufrufe baute, mit dem Zugangstoken im Kommandotext; die Dokumentation allein hat den Umweg nicht verhindert, erst diese Regel hat es.
 
 ## 17. Grosse Aufgaben und Unterbrechungsresistenz
 
