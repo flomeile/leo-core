@@ -25,18 +25,23 @@ param(
     [string]$Skript = (Join-Path $PSScriptRoot 'guard-workspace.ps1')
 )
 
-$repo      = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)).TrimEnd('\')
-$artifacts = (Join-Path (Split-Path -Parent $repo) ((Split-Path -Leaf $repo) + " Artifacts")).TrimEnd('\')
-$archiv    = (Join-Path (Split-Path -Parent $repo) ((Split-Path -Leaf $repo) + " Archiv")).TrimEnd('\')
-$up        = $env:USERPROFILE
+$isWindowsHost = [System.IO.Path]::DirectorySeparatorChar -eq '\'
+$repo      = [System.IO.Path]::GetFullPath((Split-Path -Parent (Split-Path -Parent $PSScriptRoot)))
+$artifacts = Join-Path (Split-Path -Parent $repo) ((Split-Path -Leaf $repo) + " Artifacts")
+$archiv    = Join-Path (Split-Path -Parent $repo) ((Split-Path -Leaf $repo) + " Archiv")
+$up        = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+$desktop   = Join-Path $up 'Desktop'
 
-# PowerShell 7 bevorzugt, Windows PowerShell als Rueckfall: Ein System ohne pwsh
-# soll die Reihe trotzdem fahren koennen.
-$psExe = (Get-Command pwsh.exe -ErrorAction SilentlyContinue).Source
-if (-not $psExe) { $psExe = (Get-Command powershell.exe -ErrorAction SilentlyContinue).Source }
-if (-not $psExe) { "Weder pwsh.exe noch powershell.exe gefunden."; exit 1 }
+# PowerShell 7 bevorzugt, Windows PowerShell nur unter Windows als Rueckfall.
+$psExe = (Get-Command $(if ($isWindowsHost) { 'pwsh.exe' } else { 'pwsh' }) -ErrorAction SilentlyContinue).Source
+if (-not $psExe -and $isWindowsHost) { $psExe = (Get-Command powershell.exe -ErrorAction SilentlyContinue).Source }
+if (-not $psExe -and -not $isWindowsHost) {
+    $portablePwsh = Join-Path $PSHOME 'pwsh'
+    if (Test-Path -LiteralPath $portablePwsh) { $psExe = $portablePwsh }
+}
+if (-not $psExe) { "Kein passender PowerShell-Interpreter gefunden."; exit 1 }
 
-$faelle = @(
+$windowsFaelle = @(
     # Zur Laufzeit berechnete Ziele: der Fall, fuer den diese Reihe gebaut wurde.
     @{ n = "1 GetFolderPath Desktop";      erw = "DENY"; tool = "Bash"; cmd = "`$d = Join-Path ([Environment]::GetFolderPath('Desktop')) 'x.txt'; [System.IO.File]::WriteAllText(`$d, 'x')" }
     @{ n = "2 env:USERPROFILE Desktop";    erw = "DENY"; tool = "Bash"; cmd = "Set-Content -LiteralPath `"`$env:USERPROFILE\Desktop\x.txt`" -Value 'x'" }
@@ -57,6 +62,25 @@ $faelle = @(
     @{ n = "10 Lesen ausserhalb";          erw = "PASS"; tool = "Bash"; cmd = "Get-Content ([Environment]::GetFolderPath('Desktop') + '\x.txt')" }
 )
 
+$posixFaelle = @(
+    @{ n = "1 GetFolderPath Desktop";      erw = "DENY"; tool = "Bash"; cmd = "`$d = Join-Path ([Environment]::GetFolderPath('Desktop')) 'x.txt'; [System.IO.File]::WriteAllText(`$d, 'x')" }
+    @{ n = "2 HOME Desktop";               erw = "DENY"; tool = "Bash"; cmd = "touch `"`$HOME/Desktop/x.txt`"" }
+    @{ n = "3 Tilde Bash";                 erw = "DENY"; tool = "Bash"; cmd = "touch ~/test.txt" }
+    @{ n = "4 literal Benutzerordner";     erw = "DENY"; tool = "Bash"; cmd = "touch '$desktop/x.txt'" }
+    @{ n = "5 anderer Temp-Ordner";        erw = "DENY"; tool = "Bash"; cmd = "touch '$([System.IO.Path]::GetTempPath())fremd/x.txt'" }
+    @{ n = "6 Scratchpad ueber TMPDIR";    erw = "PASS"; tool = "Bash"; cmd = "touch `"`$TMPDIR/claude/projekt/x.txt`"" }
+    @{ n = "7 Repo literal";               erw = "PASS"; tool = "Bash"; cmd = "touch '$repo/90_Inbox/x.md'" }
+    @{ n = "8 Artefakte-Ordner literal";   erw = "PASS"; tool = "Bash"; cmd = "cp '$repo/x.md' '$artifacts/x.md'" }
+    @{ n = "9 Memory-Pfad loeschen";       erw = "PASS"; tool = "Bash"; cmd = "rm '$up/.claude/projects/projekt/memory/alt.md'" }
+    @{ n = "10 Lesen ausserhalb";          erw = "PASS"; tool = "Bash"; cmd = "cat '$desktop/x.txt'" }
+    @{ n = "11 Write-Werkzeug ausserhalb"; erw = "DENY"; tool = "Write"; file = "$desktop/x.md" }
+    @{ n = "12 Write-Werkzeug im Repo";    erw = "PASS"; tool = "Write"; file = "$repo/90_Inbox/x.md" }
+    @{ n = "13 fremdes Arbeitsverzeichnis"; erw = "DENY"; tool = "Bash"; cmd = "touch x.md"; cwd = $desktop }
+    @{ n = "14 Belegarchiv literal";       erw = "PASS"; tool = "Bash"; cmd = "mv '$repo/90_Inbox/a.pdf' '$archiv/a.pdf'" }
+)
+
+$faelle = if ($isWindowsHost) { $windowsFaelle } else { $posixFaelle }
+
 function Ruf($skript, $fall, $exe, $cwd) {
     $ti = if ($fall.tool -in @("Write","Edit")) { @{ file_path = $fall.file } } else { @{ command = $fall.cmd } }
     $json = @{ session_id = "test"; hook_event_name = "PreToolUse"; cwd = $cwd; tool_name = $fall.tool; tool_input = $ti } | ConvertTo-Json -Depth 5 -Compress
@@ -74,7 +98,8 @@ $fehler = 0
 "{0,-30} {1,-6} {2,-8} {3}" -f "Fall", "Erw.", "Ist", "Urteil"
 "-" * 62
 foreach ($f in $faelle) {
-    $ist = Ruf $Skript $f $psExe $repo
+    $cwd = if ($f.ContainsKey('cwd')) { $f.cwd } else { $repo }
+    $ist = Ruf $Skript $f $psExe $cwd
     $ok = if ($ist -eq $f.erw) { "ok" } else { "ABWEICHUNG" }
     if ($ist -ne $f.erw) { $fehler++ }
     "{0,-30} {1,-6} {2,-8} {3}" -f $f.n, $f.erw, $ist, $ok

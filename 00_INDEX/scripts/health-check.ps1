@@ -858,7 +858,13 @@ if (-not (Test-Path $guardSkript)) {
 } elseif ((Get-Content -Path $guardSettings -Raw -Encoding UTF8) -notmatch "guard-workspace") {
     Add-Check "WARN" $cat ".claude\settings.json haengt guard-workspace.ps1 nicht als PreToolUse-Hook ein. Die Sperre wirkt dann nicht."
 } else {
-    Add-Check "OK" $cat "Arbeitsbereich-Sperre aktiv (guard-workspace.ps1 als PreToolUse-Hook eingehaengt)."
+    $guardSettingsText = Get-Content -Path $guardSettings -Raw -Encoding UTF8
+    $guardIsWindows = [System.IO.Path]::DirectorySeparatorChar -eq '\'
+    if (-not $guardIsWindows -and $guardSettingsText -match '"command"\s*:\s*"powershell(?:\s|\")') {
+        Add-Check "WARN" $cat ".claude\settings.json haengt den Guard ein, ruft unter macOS/Linux aber die Windows-Befehlszeile powershell auf. Auf den absoluten pwsh-Pfad und POSIX-Pfade umstellen (ANLEITUNG.md Schritt 7a); sonst wirkt die Sperre nicht."
+    } else {
+        Add-Check "OK" $cat "Arbeitsbereich-Sperre eingehaengt. Ob der Hook im Werkzeug freigeschaltet ist, muss mit der Regressionsreihe und einem echten Blockierfall gegengemessen werden."
+    }
 }
 
 Write-Output "Portabilitaets-Checks erledigt."
