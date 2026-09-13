@@ -37,11 +37,11 @@ git status --short
 Ist irgendetwas offen, alles committen, bevor das Update beginnt:
 
 ```powershell
-git add -A
-git commit -m "Stand vor Mechanik-Update"
+$offen = @(git status --porcelain | ForEach-Object { ($_.Substring(3) -split ' -> ')[-1].Trim('"') })
+if ($offen.Count -gt 0) { git add -- $offen; git commit -m "Stand vor Mechanik-Update" }
 ```
 
-Hier ist `git add -A` ausdrücklich richtig, abweichend von der sonstigen Regel in der `AGENTS.md`, Abschnitt 12. Der Zweck ist genau, den kompletten Ist-Zustand einzufrieren, damit jeder Schritt danach rückgängig gemacht werden kann. Sag `[NAME]` in einem Satz, dass dieser Commit der Rückweg ist und wie er ihn nutzt: `git reset --hard <Commit-Hash>` stellt den Zustand von jetzt wieder her.
+Hier wird bewusst alles Offene gestaged, abweichend von der Regel "nur die eigenen Pfade" in der `AGENTS.md`, Abschnitt 12: Der Zweck ist genau, den kompletten Ist-Zustand einzufrieren, damit jeder Schritt danach rückgängig gemacht werden kann. Aufgezählt statt pauschal, weil seit 3.3 der Hook `guard-git.ps1` die Formen `git add -A`, `--all` und `.` in jedem Modus sperrt und dieser Skill sich sonst selbst blockieren würde (gefunden im kalten Messlauf zum Release 3.3, bevor es ein Nutzer fand). Die Liste aus `git status` ergibt denselben Commit, nur mit sichtbaren Pfaden, und die Sperre bleibt unangetastet. Sag `[NAME]` in einem Satz, dass dieser Commit der Rückweg ist und wie er ihn nutzt: `git reset --hard <Commit-Hash>` stellt den Zustand von jetzt wieder her.
 
 Gibt es kein Git-Repo in diesem Ordner, brich hier ab und sag es. Ohne Versionierung ist ein Update nicht verantwortbar; der Weg dorthin steht in `ANLEITUNG.md`, Teil 5.
 
@@ -251,9 +251,12 @@ Diese Prüfung bleibt dauerhaft in diesem Skill und wird nicht wieder entfernt. 
 Dann committen, mit einer Nachricht, die den Versionssprung nennt:
 
 ```powershell
-git add -A
+$offen = @(git status --porcelain | ForEach-Object { ($_.Substring(3) -split ' -> ')[-1].Trim('"') })
+git add -- $offen
 git commit -m "Mechanik-Update auf Grundgeruest <Zielversion>"
 ```
+
+Auch hier pfadweise statt `git add -A`, aus demselben Grund wie beim Checkpoint in Schritt 1: Die Sperre `guard-git.ps1` lässt die pauschale Form nicht durch, und alles Offene stammt in diesem Moment aus dem Update selbst.
 
 Push nur, wenn ein `origin` existiert.
 
