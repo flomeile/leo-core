@@ -215,11 +215,33 @@ Register-ScheduledTask -TaskName "Leo Wochendiagnose" -Action $action -Trigger $
   Lies zuerst C:\Leo\AGENTS.md vollständig und befolge sie für die gesamte Session.
   ```
 
-### Schritt 7b (nur wenn du Codex benutzt): Die Arbeitsbereich-Sperre dort scharfschalten
-In Claude Code läuft die Sperre nach der Einrichtung von allein, weil `.claude\settings.json` sie einhängt. Codex braucht zwei Handgriffe, und ohne sie darf dein Agent dort überall auf deinem Rechner schreiben.
+### Schritt 7a (nur macOS/Linux): Die Arbeitsbereich-Sperre startbar machen
+Der Guard selbst versteht seit dieser Fassung Windows- und POSIX-Pfade, aber die
+mitgelieferten Hook-Befehle bleiben Windows-Vorlagen. Installiere PowerShell 7 und
+ermittle seinen echten Pfad mit `command -v pwsh`. Trage diesen absoluten Pfad in
+den Hook ein; GUI-Programme erben den Suchpfad deines Terminals nicht immer.
 
-1. Öffne die Datei `C:\Leo\.codex\hooks.json` in deinem Texteditor. Nimm einen, der beim Schliessen nach ungespeicherten Änderungen fragt; der Windows-Editor tut das je nach Version nicht, und eine verlorene Änderung fällt hier erst auf, wenn die Sperre nicht greift.
-2. Ersetze in der Zeile mit `guard-workspace.ps1` den Text `PFAD-ZU-DEINEM-REPO` durch den Pfad deines Repos, also zum Beispiel `C:\Leo`. Die doppelten Backslashes bleiben stehen, die gehören zum JSON-Format. Codex kennt die Abkürzung `${CLAUDE_PROJECT_DIR}` nicht, deshalb muss der Pfad ausgeschrieben dastehen. Speichern.
+Für Claude Code sieht die Befehlszeile in `.claude/settings.json` zum Beispiel so aus:
+
+```json
+"command": "/usr/local/bin/pwsh -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}/00_INDEX/scripts/guard-workspace.ps1\""
+```
+
+Nimm statt `/usr/local/bin/pwsh` genau die Ausgabe von `command -v pwsh`. Prüfe
+danach zuerst die urteils-only Regressionsreihe; sie schreibt keine Dateien:
+
+```bash
+pwsh -NoProfile -ExecutionPolicy Bypass -File "/Users/DEIN-NAME/Leo/00_INDEX/scripts/guard-workspace-tests.ps1"
+```
+
+Alle 14 Fälle müssen bestehen. Ohne `pwsh` oder mit dem unveränderten Befehl
+`powershell` startet der Hook auf macOS/Linux nicht und blockiert nichts.
+
+### Schritt 7b (nur wenn du Codex benutzt): Die Arbeitsbereich-Sperre dort scharfschalten
+In Claude Code läuft die Sperre nach der plattformgerechten Einrichtung von allein, weil `.claude\settings.json` sie einhängt. Codex braucht zwei weitere Handgriffe, und ohne sie darf dein Agent dort überall auf deinem Rechner schreiben.
+
+1. Öffne die Datei `.codex/hooks.json` in deinem Repo. Nimm einen Editor, der beim Schliessen nach ungespeicherten Änderungen fragt; eine verlorene Änderung fällt hier erst auf, wenn die Sperre nicht greift.
+2. Ersetze in der Zeile mit `guard-workspace.ps1` den Text `PFAD-ZU-DEINEM-REPO` durch den Pfad deines Repos. Unter Windows bleibt es zum Beispiel `C:\\Leo`, mit den doppelten Backslashes des JSON-Formats. Unter macOS/Linux ersetzt du ausserdem `powershell` durch den absoluten `pwsh`-Pfad aus Schritt 7a und verwendest Schrägstriche, zum Beispiel: `"command": "/usr/local/bin/pwsh -NoProfile -ExecutionPolicy Bypass -File \"/Users/DEIN-NAME/Leo/00_INDEX/scripts/guard-workspace.ps1\""`. Codex kennt die Abkürzung `${CLAUDE_PROJECT_DIR}` nicht, deshalb muss der Repo-Pfad ausgeschrieben dastehen. Speichern.
 3. Starte Codex, öffne **Einstellungen**, dann **Programmierung**, dann **Hooks**. Dort steht dein Eintrag unter "Vor Tool-Nutzung", aber deaktiviert. Setze bei ihm den Schalter auf aktiv und bestätige das Vertrauen.
 4. Prüfe, dass es wirklich greift, statt es anzunehmen. Bitte deinen Agenten in Codex, eine Testdatei auf deinen Desktop zu schreiben. Er muss das mit einer Begründung ablehnen. Tut er es stattdessen, ist einer der Schritte oben nicht angekommen.
 
@@ -381,4 +403,4 @@ Beides ist öffentlich und bleibt dauerhaft auffindbar: kein Inhalt aus deinem S
 
 ## Für Nicht-Windows-Systeme (nur zur Info)
 
-Die Logik ist plattformunabhängig, die Automatik nicht. Auf macOS oder Linux braucht es `pwsh` (PowerShell 7 gibt es dort), die Pfade werden mit Schrägstrich geschrieben, und statt des Windows Task Scheduler nimmst du `cron` oder einen `launchd`-Job für den täglichen Lauf. Der Health-Check prüft Windows-spezifische Dinge (Scheduled Task) und meldet die dann als nicht gefunden; das ist auf anderen Systemen kein Fehler, sondern erwartbar. Für den Anfang ist Windows der Weg ohne Reibung.
+Die Logik ist plattformunabhängig, die Automatik nicht. Auf macOS oder Linux braucht es `pwsh` (PowerShell 7 gibt es dort), die Pfade werden mit Schrägstrich geschrieben, und die Hook-Befehle werden wie in Schritt 7a/7b angepasst. Statt des Windows Task Scheduler nimmst du `cron` oder einen `launchd`-Job für den täglichen Lauf. Der Health-Check prüft Windows-spezifische Dinge (Scheduled Task) und meldet die dann als nicht gefunden; das ist auf anderen Systemen kein Fehler, sondern erwartbar. Für den Anfang ist Windows der Weg ohne Reibung.

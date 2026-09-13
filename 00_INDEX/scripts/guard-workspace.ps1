@@ -23,9 +23,10 @@
 #
 # EINRICHTUNG: Der Hook wirkt nur, wenn er in .claude\settings.json unter
 # hooks.PreToolUse eingehaengt ist. Die Datei liegt im Paket bei. Ohne sie ist
-# Abschnitt 18 eine reine Textregel. Er ruft "powershell" auf und wirkt damit
-# nur unter Windows; auf macOS, Linux oder in einer Cloud-Sitzung schlaegt der
-# Aufruf fehl, ohne etwas zu blockieren.
+# Abschnitt 18 eine reine Textregel. Unter Windows startet die mitgelieferte
+# Konfiguration "powershell"; unter macOS/Linux muss sie "pwsh" aufrufen und
+# POSIX-Pfade verwenden, siehe ANLEITUNG.md. Fehlt der Interpreter, blockiert der
+# Hook nichts.
 #
 # ANPASSEN: Brauchst du dauerhaft einen weiteren Ort ausserhalb des Repos, traegst
 # DU ihn unten in $allowPatterns ein, nicht der Agent nebenbei.
@@ -37,6 +38,45 @@
 # genauso starten wie unter PowerShell 7.
 
 $ErrorActionPreference = "Stop"
+
+$isWindowsHost = [System.IO.Path]::DirectorySeparatorChar -eq '\'
+$pathComparison = if ($isWindowsHost) {
+    [System.StringComparison]::OrdinalIgnoreCase
+} else {
+    [System.StringComparison]::Ordinal
+}
+$pathSeparators = [char[]]@('\', '/')
+$homePath = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+$tempPath = [System.IO.Path]::GetTempPath()
+
+function Normalize-AbsolutePath([string]$path) {
+    if ([string]::IsNullOrWhiteSpace($path)) { return $null }
+    $p = $path.Trim().Trim('"').Trim("'")
+
+    if ($homePath) {
+        if ($p -eq '~') { $p = $homePath }
+        elseif ($p -match '^~[\\/]') { $p = Join-Path $homePath $p.Substring(2) }
+    }
+
+    # Git-Bash-Schreibweise /c/Repo/... nur unter Windows umformen. Auf POSIX ist
+    # derselbe Text bereits ein regulaerer absoluter Pfad.
+    if ($isWindowsHost -and $p -match '^/([a-zA-Z])/(.*)$') {
+        $p = $matches[1].ToUpper() + ":\" + ($matches[2] -replace '/', '\')
+    }
+    if ($isWindowsHost) { $p = $p -replace '/', '\' }
+
+    if (-not [System.IO.Path]::IsPathRooted($p)) { return $null }
+    try { $p = [System.IO.Path]::GetFullPath($p) } catch { return $null }
+    return $p.TrimEnd($pathSeparators)
+}
+
+function Test-PathWithin([string]$path, [string]$root) {
+    $p = Normalize-AbsolutePath $path
+    $r = Normalize-AbsolutePath $root
+    if (-not $p -or -not $r) { return $false }
+    if ($p.Equals($r, $pathComparison)) { return $true }
+    return $p.StartsWith($r + [System.IO.Path]::DirectorySeparatorChar, $pathComparison)
+}
 
 # WICHTIG: Im Durchlass-Fall gibt dieser Hook NICHTS aus und beendet sich nur mit
 # Exitcode 0. Die Hook-Dokumentation kennt zwar einen Rueckgabewert "defer" fuer
@@ -67,46 +107,48 @@ $raw = [Console]::In.ReadToEnd()
 if ([string]::IsNullOrWhiteSpace($raw)) { Write-Decision "durch" "" }
 $in = $raw | ConvertFrom-Json
 
-$repo = (Split-Path -Parent (Split-Path -Parent $PSScriptRoot)).TrimEnd('\')
+$repo = Normalize-AbsolutePath (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
 # Der Artefakte-Ordner ist der Geschwisterordner "<Repo> Artifacts". Join-Path statt
 # Zeichenkette, weil ein Repo direkt auf einem Laufwerk sonst einen doppelten
 # Trenner ergibt: Split-Path liefert dort den Laufwerksnamen samt Trennzeichen.
-$artifacts = (Join-Path (Split-Path -Parent $repo) ((Split-Path -Leaf $repo) + " Artifacts")).TrimEnd('\')
+$artifacts = Normalize-AbsolutePath (Join-Path (Split-Path -Parent $repo) ((Split-Path -Leaf $repo) + " Artifacts"))
 # Das Belegarchiv ist der zweite Geschwisterordner, nach demselben Muster gebildet:
 # dort liegen die Primaerquellen, aus denen Wissensnotizen entstanden sind
 # (Abschnitt 5). Getrennt von Artifacts, weil die Herkunft unterschiedlich ist:
 # Artifacts traegt, was das System erzeugt hat, das Archiv, was von aussen kam.
-$archiv = (Join-Path (Split-Path -Parent $repo) ((Split-Path -Leaf $repo) + " Archiv")).TrimEnd('\')
+$archiv = Normalize-AbsolutePath (Join-Path (Split-Path -Parent $repo) ((Split-Path -Leaf $repo) + " Archiv"))
+$scratch = Normalize-AbsolutePath (Join-Path $tempPath 'claude')
+$memoryProjects = if ($homePath) {
+    Normalize-AbsolutePath (Join-Path (Join-Path $homePath '.claude') 'projects')
+} else { $null }
+$memoryPattern = if ($memoryProjects) { Join-Path (Join-Path $memoryProjects '*') 'memory' } else { $null }
+$memorySubtreePattern = if ($memoryPattern) { Join-Path $memoryPattern '*' } else { $null }
 
 # --- Erlaubte Bereiche ------------------------------------------------------
 # Das Repo selbst, dazu drei Ausnahmen, die je einen Ablauf betreffen, der ohne
-# sie bricht. Die Muster enden bewusst auf "\*" statt auf "*": sonst wuerde ein
-# Muster fuer "C:\Leo" auch "C:\Leonardo" mit erlauben.
+# sie bricht. Die Muster enthalten vor dem Stern immer einen echten
+# Verzeichnistrenner: sonst wuerde ein Muster fuer C:\Leo auch C:\Leonardo
+# erlauben, und eines fuer /Users/a/Leo auch /Users/a/Leo-old.
 $allowPatterns = @(
     $repo                                          # das Repo selbst
-    "$repo\*"                                      # alles darin
+    (Join-Path $repo '*')                         # alles darin
     $artifacts                                     # erzeugte Artefakte (Abschnitt 5)
-    "$artifacts\*"
+    (Join-Path $artifacts '*')
     $archiv                                        # Primaerquellen-Archiv (Abschnitt 5)
-    "$archiv\*"
-    "$([System.IO.Path]::GetTempPath())claude\*"   # Scratchpad des Werkzeugs
-    "$env:TEMP\claude\*"                           # dasselbe, andere Schreibweise
-    "$env:USERPROFILE\.claude\projects\*\memory"   # nur um Harness-Memory zu LOESCHEN
-    "$env:USERPROFILE\.claude\projects\*\memory\*"
+    (Join-Path $archiv '*')
+    $scratch                                       # Scratchpad des Werkzeugs
+    (Join-Path $scratch '*')
+    $memoryPattern                                 # nur um Harness-Memory zu LOESCHEN
+    $memorySubtreePattern
 )
 
 function Test-Allowed([string]$path) {
     if ([string]::IsNullOrWhiteSpace($path)) { return $true }
-    $p = $path.Trim().Trim('"').Trim("'")
-    # Git-Bash-Schreibweise /c/Repo/... auf Laufwerk-Schreibweise normalisieren
-    if ($p -match '^/([a-zA-Z])/(.*)$') { $p = $matches[1].ToUpper() + ":\" + ($matches[2] -replace '/', '\') }
-    $p = $p -replace '/', '\'
+    $p = Normalize-AbsolutePath $path
     # Relative Pfade werden hier nicht bewertet, dafuer zaehlt das Arbeitsverzeichnis.
-    if ($p -notmatch '^[a-zA-Z]:\\' -and $p -notmatch '^\\\\') { return $true }
-    try { $p = [System.IO.Path]::GetFullPath($p) } catch { }
-    $p = $p.TrimEnd('\')
+    if (-not $p) { return $true }
     foreach ($pat in $allowPatterns) {
-        if ($p -like $pat) { return $true }
+        if ($pat -and (($isWindowsHost -and $p -like $pat) -or (-not $isWindowsHost -and $p -clike $pat))) { return $true }
     }
     # Abgeschnittener Pfad aus einem Kommandotext. Die Pfad-Regex weiter unten
     # endet am Leerzeichen, weil ein Leerzeichen in einem unquotierten Kommando
@@ -117,9 +159,10 @@ function Test-Allowed([string]$path) {
     # Erlaubt wird nur der echte Abschneidefall: Der Fund muss Anfang eines
     # erlaubten Pfades sein UND dort muss genau ein Leerzeichen folgen.
     foreach ($pat in $allowPatterns) {
-        $klar = $pat.TrimEnd('*').TrimEnd('\')
+        if (-not $pat) { continue }
+        $klar = $pat.TrimEnd('*').TrimEnd($pathSeparators)
         if ($klar.Length -gt $p.Length -and
-            $klar.StartsWith($p, [System.StringComparison]::OrdinalIgnoreCase) -and
+            $klar.StartsWith($p, $pathComparison) -and
             $klar[$p.Length] -eq ' ') { return $true }
     }
     return $false
@@ -137,13 +180,9 @@ $artefaktEndungen = @('.pdf','.png','.jpg','.jpeg','.gif','.svg','.webp','.ico',
                       '.html','.htm','.mp4','.mp3','.wav')
 function Test-ArtefaktVerbot([string]$path) {
     if ([string]::IsNullOrWhiteSpace($path)) { return $false }
-    $p = $path.Trim().Trim('"').Trim("'")
-    if ($p -match '^/([a-zA-Z])/(.*)$') { $p = $matches[1].ToUpper() + ":\" + ($matches[2] -replace '/', '\') }
-    $p = $p -replace '/', '\'
-    if ($p -notmatch '^[a-zA-Z]:\\') { return $false }
-    try { $p = [System.IO.Path]::GetFullPath($p) } catch { }
-    if (-not $p.StartsWith($repo + '\', [System.StringComparison]::OrdinalIgnoreCase)) { return $false }
-    $rel = $p.Substring($repo.Length + 1)
+    $p = Normalize-AbsolutePath $path
+    if (-not $p -or -not (Test-PathWithin $p $repo) -or $p.Equals($repo, $pathComparison)) { return $false }
+    $rel = $p.Substring($repo.Length).TrimStart($pathSeparators)
     if ($rel -notmatch '^(2\d|3\d|05)_') { return $false }
     $name = [System.IO.Path]::GetFileName($p)
     if ($name -like '*last-run.txt' -or $name -like 'zustand-*.json') { return $false }
@@ -160,7 +199,7 @@ function Test-ArtefaktVerbot([string]$path) {
     $marker = @('package.json','pyproject.toml','requirements.txt','Cargo.toml','go.mod',
                 'tsconfig.json','pom.xml','composer.json','.code-projekt')
     $dir = [System.IO.Path]::GetDirectoryName($p)
-    while ($dir -and $dir.Length -gt $repo.Length) {
+    while ($dir -and (Test-PathWithin $dir $repo) -and -not $dir.Equals($repo, $pathComparison)) {
         foreach ($m in $marker) {
             if (Test-Path -LiteralPath (Join-Path $dir $m)) { return $false }
         }
@@ -242,7 +281,8 @@ if ($tool -in @("Bash", "PowerShell")) {
     # kostet eine Datei.
     $cmdN = $cmd
     $ersatz = [ordered]@{
-        '\$\{?env:USERPROFILE\}?'      = $env:USERPROFILE
+        '\$\{?env:USERPROFILE\}?'      = $homePath
+        '\$\{?env:HOME\}?'             = $homePath
         '\$\{?env:LOCALAPPDATA\}?'     = $env:LOCALAPPDATA
         '\$\{?env:APPDATA\}?'          = $env:APPDATA
         '\$\{?env:PUBLIC\}?'           = $env:PUBLIC
@@ -250,10 +290,11 @@ if ($tool -in @("Bash", "PowerShell")) {
         '\$\{?env:PROGRAMDATA\}?'      = $env:ProgramData
         '\$\{?env:SYSTEMROOT\}?'       = $env:SystemRoot
         '\$\{?env:WINDIR\}?'           = $env:windir
-        '\$\{?env:TEMP\}?'             = $env:TEMP
-        '\$\{?env:TMP\}?'              = $env:TMP
-        '\$\{?env:HOMEDRIVE\}?\$\{?env:HOMEPATH\}?' = $env:USERPROFILE
-        '\$HOME\b'                     = $env:USERPROFILE
+        '\$\{?env:TEMP\}?'             = $tempPath
+        '\$\{?env:TMP\}?'              = $tempPath
+        '\$\{?env:TMPDIR\}?'           = $tempPath
+        '\$\{?env:HOMEDRIVE\}?\$\{?env:HOMEPATH\}?' = $homePath
+        '\$\{?HOME\}?'                 = $homePath
     }
     # Ersetzt wird ueber eine Lambda und nicht ueber einen Ersatzstring: In einem
     # Ersatzstring ist "$" ein Sonderzeichen, und ein Pfad, der eines enthaelt,
@@ -275,10 +316,11 @@ if ($tool -in @("Bash", "PowerShell")) {
         return $m.Value
     }, 'IgnoreCase')
     # Bash-Tilde am Anfang eines Pfades.
-    $up = $env:USERPROFILE
+    $up = $homePath
     $cmdN = [regex]::Replace($cmdN, '(?<![\w.])~(?=[\\/])', { param($m) $up }.GetNewClosure())
 
-    # Absolute Pfade im Kommandotext einsammeln: Laufwerk, UNC, Git-Bash-Stil.
+    # Absolute Pfade im Kommandotext einsammeln: Laufwerk, UNC, Git-Bash-Stil
+    # oder ein nativer POSIX-Pfad.
     # Das UNC-Muster verlangt bewusst einen Hostnamen und danach einen EINFACHEN
     # Trenner. Ohne diese Verschaerfung trifft es auch JSON mit escapten
     # Backslashes und blockiert damit jeden Versuch, eine Hook-Konfiguration
@@ -289,9 +331,7 @@ if ($tool -in @("Bash", "PowerShell")) {
     # Leerzeichen, und die Pruefung urteilt ueber etwas, das so nie gemeint war.
     foreach ($m in [regex]::Matches($cmdN, '"([^"\r\n]+)"|''([^''\r\n]+)''')) {
         $inhalt = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
-        if ($inhalt -match '^[a-zA-Z]:[\\/]' -or $inhalt -match '^\\\\[a-zA-Z0-9._-]+\\(?!\\)' -or $inhalt -match '^/[a-zA-Z]/') {
-            $found += $inhalt
-        }
+        if (Normalize-AbsolutePath $inhalt) { $found += $inhalt }
     }
     # Zweiter Durchgang: unquotierte Pfade. Endet zwangslaeufig am Leerzeichen,
     # den Abschneidefall faengt Test-Allowed ab.
@@ -299,7 +339,13 @@ if ($tool -in @("Bash", "PowerShell")) {
     # ein "Laufwerk" gefunden wird: file:///C:/... enthaelt sonst den Fund e:///,
     # und jeder Chrome-Aufruf mit Datei-URL waere blockiert (Fix aus dem
     # Ursprungssystem vom 11.08.2026, hier nachgezogen am 30.08.2026).
-    foreach ($rx in @('(?<![A-Za-z0-9])[a-zA-Z]:[\\/][^"''`;,|)\s]*', '(?<!\\)\\\\[a-zA-Z0-9._-]+\\(?!\\)[^"''`;,|)\s]+', '(?<![\w.])/[a-zA-Z]/[^"''`;,|)\s]*')) {
+    $pathRegexes = if ($isWindowsHost) {
+        @('(?<![A-Za-z0-9])[a-zA-Z]:[\\/][^"''`;,|)\s]*', '(?<!\\)\\\\[a-zA-Z0-9._-]+\\(?!\\)[^"''`;,|)\s]+', '(?<![\w.])/[a-zA-Z]/[^"''`;,|)\s]*')
+    } else {
+        # Der linke Anker verhindert Treffer in URLs wie https://example.org/x.
+        @('(?<![A-Za-z0-9:/.])/(?!/)[^"''`;,|)\s]+')
+    }
+    foreach ($rx in $pathRegexes) {
         foreach ($m in [regex]::Matches($cmdN, $rx)) { $found += $m.Value }
     }
     foreach ($f in ($found | Select-Object -Unique)) {
