@@ -60,6 +60,13 @@ $windowsFaelle = @(
     @{ n = "13 Repo-Pfad im git-Kommando"; erw = "PASS"; tool = "Bash"; cmd = "git add $repo\10_System\Kern-Dateien.md" }
     # Lesen bleibt frei, auch mit berechnetem Pfad ausserhalb des Repos.
     @{ n = "10 Lesen ausserhalb";          erw = "PASS"; tool = "Bash"; cmd = "Get-Content ([Environment]::GetFolderPath('Desktop') + '\x.txt')" }
+    # Seit 3.3 (macOS-Fassung des Guards, Windows-Reihe): Bash-Variablen in geschweifter
+    # Form, und Zeichenketten in Anfuehrungszeichen, die mit \ oder / beginnen, ohne
+    # Pfad zu sein. Beides waren Abweichungen der ersten Fassung.
+    @{ n = "15 HOME geschweift";           erw = "DENY"; tool = "Bash"; cmd = "touch `"`${HOME}/Desktop/x.txt`"" }
+    @{ n = "16 HOMEDRIVE HOMEPATH";        erw = "DENY"; tool = "Bash"; cmd = "Set-Content `"`$env:HOMEDRIVE`$env:HOMEPATH\Desktop\x.txt`" 'x'" }
+    @{ n = "17 Escape in Anfuehrungszeichen"; erw = "PASS"; tool = "Bash"; cmd = "printf `"\n`" >> x.md" }
+    @{ n = "18 dev-null in Anfuehrungszeichen"; erw = "PASS"; tool = "Bash"; cmd = "git add x 2>`"/dev/null`"" }
 )
 
 $posixFaelle = @(
@@ -77,6 +84,9 @@ $posixFaelle = @(
     @{ n = "12 Write-Werkzeug im Repo";    erw = "PASS"; tool = "Write"; file = "$repo/90_Inbox/x.md" }
     @{ n = "13 fremdes Arbeitsverzeichnis"; erw = "DENY"; tool = "Bash"; cmd = "touch x.md"; cwd = $desktop }
     @{ n = "14 Belegarchiv literal";       erw = "PASS"; tool = "Bash"; cmd = "mv '$repo/90_Inbox/a.pdf' '$archiv/a.pdf'" }
+    # Seit 3.3: Geraetedateien und die geschweifte Variablenform.
+    @{ n = "15 dev-null Umleitung";        erw = "PASS"; tool = "Bash"; cmd = "git add x 2>/dev/null" }
+    @{ n = "16 HOME geschweift";           erw = "DENY"; tool = "Bash"; cmd = "touch `"`${HOME}/Desktop/x.txt`"" }
 )
 
 $faelle = if ($isWindowsHost) { $windowsFaelle } else { $posixFaelle }

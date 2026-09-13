@@ -47,7 +47,11 @@ $pathComparison = if ($isWindowsHost) {
 }
 $pathSeparators = [char[]]@('\', '/')
 $homePath = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
-$tempPath = [System.IO.Path]::GetTempPath()
+# Ohne Trenner am Ende: GetTempPath liefert ihn mit, und ein Ersatz von $env:TEMP in
+# einem Kommandotext ergibt sonst "...\Temp\\claude\...", was die UNC-Suche unten als
+# Netzwerkpfad \\claude\... liest und blockiert (Regression, gefunden 13.09.2026 in der
+# Windows-Reihe der macOS-Fassung).
+$tempPath = [System.IO.Path]::GetTempPath().TrimEnd($pathSeparators)
 
 function Normalize-AbsolutePath([string]$path) {
     if ([string]::IsNullOrWhiteSpace($path)) { return $null }
@@ -65,6 +69,14 @@ function Normalize-AbsolutePath([string]$path) {
     }
     if ($isWindowsHost) { $p = $p -replace '/', '\' }
 
+    # Absolut heisst hier: unter Windows ein Laufwerk oder ein UNC-Pfad, auf POSIX ein
+    # fuehrender Schraegstrich. IsPathRooted allein reicht nicht: Unter Windows gilt
+    # ihm auch "\n" oder "\dev\null" als verwurzelt (aktuelles Laufwerk), und damit
+    # wurde jeder Kommandotext mit einer Escape-Sequenz in Anfuehrungszeichen
+    # blockiert (printf "\n" >> x.md). Gefunden 13.09.2026, gemessen in der Reihe.
+    if ($isWindowsHost) {
+        if ($p -notmatch '^[a-zA-Z]:\\' -and $p -notmatch '^\\\\') { return $null }
+    } elseif ($p -notmatch '^/') { return $null }
     if (-not [System.IO.Path]::IsPathRooted($p)) { return $null }
     try { $p = [System.IO.Path]::GetFullPath($p) } catch { return $null }
     return $p.TrimEnd($pathSeparators)
@@ -141,6 +153,12 @@ $allowPatterns = @(
     $memoryPattern                                 # nur um Harness-Memory zu LOESCHEN
     $memorySubtreePattern
 )
+# Auf POSIX sind die Geraetedateien keine Schreibziele im Sinn der Sperre: Eine
+# Umleitung wie "2>/dev/null" steht in fast jedem Shell-Kommando, und ein Guard, der
+# sie blockiert, wird abgeschaltet. Unter Windows tauchen diese Pfade nicht auf.
+if (-not $isWindowsHost) {
+    $allowPatterns += @('/dev/null', '/dev/stdout', '/dev/stderr', '/dev/tty')
+}
 
 function Test-Allowed([string]$path) {
     if ([string]::IsNullOrWhiteSpace($path)) { return $true }
@@ -282,7 +300,10 @@ if ($tool -in @("Bash", "PowerShell")) {
     $cmdN = $cmd
     $ersatz = [ordered]@{
         '\$\{?env:USERPROFILE\}?'      = $homePath
-        '\$\{?env:HOME\}?'             = $homePath
+        # Wortgrenze hinter HOME: sonst frisst das Muster den Anfang von $env:HOMEDRIVE
+        # und $HOMEPATH, und aus dem Ziel wird Buchstabensalat, den Windows PowerShell
+        # 5.1 nicht mehr als Pfad liest (Bypass, gefunden 13.09.2026).
+        '\$\{?env:HOME\}?(?![A-Za-z0-9_])' = $homePath
         '\$\{?env:LOCALAPPDATA\}?'     = $env:LOCALAPPDATA
         '\$\{?env:APPDATA\}?'          = $env:APPDATA
         '\$\{?env:PUBLIC\}?'           = $env:PUBLIC
@@ -294,7 +315,8 @@ if ($tool -in @("Bash", "PowerShell")) {
         '\$\{?env:TMP\}?'              = $tempPath
         '\$\{?env:TMPDIR\}?'           = $tempPath
         '\$\{?env:HOMEDRIVE\}?\$\{?env:HOMEPATH\}?' = $homePath
-        '\$\{?HOME\}?'                 = $homePath
+        '\$\{?HOME\}?(?![A-Za-z0-9_])'   = $homePath
+        '\$\{?TMPDIR\}?(?![A-Za-z0-9_])' = $tempPath
     }
     # Ersetzt wird ueber eine Lambda und nicht ueber einen Ersatzstring: In einem
     # Ersatzstring ist "$" ein Sonderzeichen, und ein Pfad, der eines enthaelt,

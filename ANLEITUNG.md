@@ -215,11 +215,8 @@ Register-ScheduledTask -TaskName "Leo Wochendiagnose" -Action $action -Trigger $
   Lies zuerst C:\Leo\AGENTS.md vollständig und befolge sie für die gesamte Session.
   ```
 
-### Schritt 7a (nur macOS/Linux): Die Arbeitsbereich-Sperre startbar machen
-Der Guard selbst versteht seit dieser Fassung Windows- und POSIX-Pfade, aber die
-mitgelieferten Hook-Befehle bleiben Windows-Vorlagen. Installiere PowerShell 7 und
-ermittle seinen echten Pfad mit `command -v pwsh`. Trage diesen absoluten Pfad in
-den Hook ein; GUI-Programme erben den Suchpfad deines Terminals nicht immer.
+### Schritt 7a (nur macOS/Linux): Die Sperren startbar machen
+Die Sperren selbst verstehen seit 3.3 Windows- und POSIX-Pfade (beigesteuert von einem Nutzer des Grundgerüsts, Pull Request #7), aber die mitgelieferten Hook-Befehle bleiben Windows-Vorlagen. Installiere PowerShell 7 und ermittle seinen echten Pfad mit `command -v pwsh`. Trage diesen absoluten Pfad in jeden Hook-Eintrag ein, also bei der Arbeitsbereich-Sperre und bei der Sperre gegen pauschales Stagen; GUI-Programme erben den Suchpfad deines Terminals nicht immer.
 
 Für Claude Code sieht die Befehlszeile in `.claude/settings.json` zum Beispiel so aus:
 
@@ -227,15 +224,13 @@ Für Claude Code sieht die Befehlszeile in `.claude/settings.json` zum Beispiel 
 "command": "/usr/local/bin/pwsh -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}/00_INDEX/scripts/guard-workspace.ps1\""
 ```
 
-Nimm statt `/usr/local/bin/pwsh` genau die Ausgabe von `command -v pwsh`. Prüfe
-danach zuerst die urteils-only Regressionsreihe; sie schreibt keine Dateien:
+Nimm statt `/usr/local/bin/pwsh` genau die Ausgabe von `command -v pwsh`. Prüfe danach zuerst die Regressionsreihe; sie urteilt nur und schreibt keine Dateien:
 
 ```bash
 pwsh -NoProfile -ExecutionPolicy Bypass -File "/Users/DEIN-NAME/Leo/00_INDEX/scripts/guard-workspace-tests.ps1"
 ```
 
-Alle 14 Fälle müssen bestehen. Ohne `pwsh` oder mit dem unveränderten Befehl
-`powershell` startet der Hook auf macOS/Linux nicht und blockiert nichts.
+Alle Fälle müssen bestehen. Ohne `pwsh` oder mit dem unveränderten Befehl `powershell` startet der Hook auf macOS/Linux nicht und blockiert nichts; der Health-Check meldet diesen Zustand seit 3.3 als WARN.
 
 ### Schritt 7b (nur wenn du Codex benutzt): Die Arbeitsbereich-Sperre dort scharfschalten
 In Claude Code läuft die Sperre nach der plattformgerechten Einrichtung von allein, weil `.claude\settings.json` sie einhängt. Codex braucht zwei weitere Handgriffe, und ohne sie darf dein Agent dort überall auf deinem Rechner schreiben.
