@@ -1653,7 +1653,16 @@ if (Test-Path -LiteralPath $meinSystemPfad) {
                     # unter dem Grundgeruest-Namen vergleichen, Zeilenenden normalisiert
                     # (kalt gemessen am 03.09.2026: ohne das galten alle zehn Kern-Skills eines
                     # umbenannten Systems als abweichend, obwohl sie identisch waren).
-                    $tagInhalt = (& git -C $repo show "${tag}:${relTag}" 2>$null) -join "`n"
+                    # Die Ausgabe von git wird mit [Console]::OutputEncoding gelesen, und die steht
+                    # unter Windows oft auf einer OEM-Codepage (ibm850). Jeder Umlaut im Skill kommt
+                    # dann verstuemmelt an, der Vergleich meldet alle Kern-Skills als abweichend,
+                    # obwohl sie byteidentisch sind (kalt gemessen am 13.09.2026: 9 von 9 falsch).
+                    # Deshalb fuer diesen einen Aufruf auf UTF-8 umschalten und danach zuruecksetzen.
+                    $prevEnc = [Console]::OutputEncoding
+                    try {
+                        [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+                        $tagInhalt = (& git -C $repo show "${tag}:${relTag}" 2>$null) -join "`n"
+                    } finally { [Console]::OutputEncoding = $prevEnc }
                     if ($LASTEXITCODE -eq 0) {
                         $lokalInhalt = ([System.IO.File]::ReadAllText($lokal)) -replace "`r`n","`n"
                         $tagInhalt = ($tagInhalt -replace "`r`n","`n").TrimEnd("`n")
