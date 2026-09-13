@@ -3,7 +3,7 @@ name: leo-system-optimierung
 trigger: '"system-optimierung", "system optimieren", "optimierungslauf", "pruefset fahren", "prüfset fahren", "messlauf", "regeltreue messen"'
 zweck: Misst mit kalten Prüfset-Läufen, ob das System seine eigenen Regeln einhält, leitet aus Durchfallern gezielte Regel- oder Mechanik-Fixes ab und misst nach; Rollback bei sinkender Quote
 type: skill
-version: 1
+version: 2
 ---
 
 # Skill: Leo System-Optimierung
@@ -34,7 +34,7 @@ claude -p '<Eingabe im Wortlaut>' --permission-mode acceptEdits --output-format 
 Messhygiene (in der Prüfset-Datei gepflegt): Fantasienamen je Lauf wechseln, weil der Prüfling die Prüfset-Datei per Volltextsuche finden kann; Prompts mit Pfaden ausserhalb des Repos über eine Scratchpad-Datei übergeben (der eigene Guard-Hook blockiert sie sonst im Kommandotext); Fälle, die das Archiv lesen, mit `--add-dir`.
 
 ### 3. Je Fall am Beleg urteilen, sofort protokollieren
-Bestanden oder durchgefallen entscheidet der Beleg (Antworttext, Werkzeug-Log aus dem JSONL, Dateizustand danach), nie die eigene Erwartung; Grenzfälle zulasten des Systems, mit Begründung. Ergebnis nach JEDEM Fall in die Lauf-Tabelle der Prüfset-Datei schreiben (Unterbrechungsresistenz), Testartefakte desselben Falls sofort zurückbauen (Dateien löschen, Test-Commits per `git reset --soft` zurücknehmen).
+Bestanden oder durchgefallen entscheidet der Beleg (Antworttext, Werkzeug-Log aus dem JSONL, Dateizustand danach), nie die eigene Erwartung; Grenzfälle zulasten des Systems, mit Begründung. Ergebnis nach JEDEM Fall in die Lauf-Tabelle der Prüfset-Datei schreiben (Unterbrechungsresistenz), Testartefakte desselben Falls sofort zurückbauen, **aber eng** (seit 3.3): nur die Pfade, die der Prüffall selbst benennt oder die im Werkzeug-Log des Laufs als vom Lauf geschrieben stehen; einen Test-Commit per `git reset --soft` nur auf den Hash, den der Lauf selbst erzeugt hat, nie auf "den Stand vor dem Lauf"; und `git checkout --` nie pauschal auf alles, was `git status` zeigt. Auf dem Repo arbeitet oft eine andere Session parallel, und ein pauschaler Rückbau verwirft deren offene Änderungen, ohne dass es jemand merkt. Was nach dem engen Rückbau noch offen ist, wird als fremd gemeldet und liegen gelassen.
 
 ### 4. Learnings in den richtigen Fix übersetzen
 Für jeden Durchfaller die Wurzel bestimmen, denn sie entscheidet die Fix-Sorte:
@@ -50,7 +50,26 @@ Jeder Fix folgt der Trennlinie steuernd/begründend (Root-AGENTS.md, Abschnitt 1
 Nach gezielten Fixes: Delta-Lauf nur über die betroffenen Fälle. Nach einem umfangreichen Umbau: volles Set erneut, und die Iteration wiederholt sich, bis die Quote hält. Sinkt die Quote gegenüber dem Ausgangswert, wird der Umbau zurückgerollt (Checkpoint aus Schritt 1).
 
 ### 6. Lean-Stand erheben
-`pwsh -NoProfile -ExecutionPolicy Bypass -File "00_INDEX\scripts\health-check.ps1"` (im Repo-Root), Kategorie `Lean` ansehen. Bei WARN: Erzählungen nach der Trennlinie auslagern. Wird die Baseline durch einen bewussten Umbau verschoben, `$leanSchwelleKB` im Skript nachführen.
+`pwsh -NoProfile -ExecutionPolicy Bypass -File "00_INDEX\scripts\health-check.ps1"` (im Repo-Root), Kategorie `Lean` ansehen. Bei WARN: Erzählungen nach der Trennlinie auslagern. Feste Schwellen gibt es nicht: Der Check misst AGENTS.md und Pflichtkontext gegen die eigene letzte Referenzgrösse in `00_INDEX\lean-baseline.txt`, meldet sich bei jedem Wachstumsschritt von 15 Prozent einmal und schreibt die Referenz danach selbst fort. Nach einem erfolgreichen Optimierungslauf sinkt sie beim nächsten Lauf von selbst auf den kleineren Stand; von Hand ist nichts nachzuführen.
+
+### 6a. Modellstand des Systems prüfen (seit 3.3)
+Ein System veraltet, wenn die Welt sich weiterdreht und niemand nachsieht. Drei Prüfungen, jede mit Beleg:
+
+1. **Was das System fest eingetragen hat.** `10_System\Modellwahl.md` lesen (dort `gueltig_bis`), dazu per Grep prüfen, ob ein Skript oder eine Konfiguration ein Modell an der Modellwahl vorbei fest einträgt (`grep -rn "claude-[a-z]*-[0-9]" 00_INDEX/scripts .claude`); jede zweite Fundstelle für dieselbe Information wird auf einen Ort zusammengezogen (eine Information hat genau einen Ort, `AGENTS.md` Abschnitt 5).
+2. **Was der Anbieter heute hat.** Per Websuche die Modellübersicht und die Abkündigungsliste des Anbieters lesen und gegen den Eintrag halten: Gibt es ein neueres Modell derselben Klasse, ist das eingetragene abgekündigt oder mit Enddatum versehen, hat sich der Preis geändert (dann die Preistabelle in `00_INDEX\scripts\session-kosten.py` nachführen)? Die installierte CLI gegen die aktuelle Version prüft der Health-Check selbst (Kategorie `CLI`).
+3. **Der Befund, immer ausdrücklich.** "Geprüft am <Datum>, aktuell" ist ein Ergebnis und wird in `Modellwahl.md` mit Datum nachgeführt. Gibt es Neueres oder eine Abkündigung: nicht selbst umstellen, sondern als offenen Punkt mit Wiedervorlage verankern (Skill `leo-notiz`), mit Preis, Erscheinungsdatum, Quelle und dem einen Handgriff für den Wechsel. Ein Modellwechsel ändert Preis, Berechtigungen und Verhalten und bleibt die Entscheidung von `[NAME]`.
+
+### 6b. Token-Verbrauch analysieren (seit 3.3)
+Grundlage ist der Bericht, der bei jedem Health-Check aus `00_INDEX\scripts\session-kosten.py` entsteht: `00_INDEX\session-kosten.md` (Verbrauch aller lokalen Transkripte des Werkzeugs der letzten 14 Tage zu API-Listenpreisen; längerer Zeitraum mit `--tage 30`, das Skript direkt aufgerufen). Der Health-Check meldet nur die Ausreisser (Session über 200 Aufrufe, Tag über der Kostenschwelle); dieser Schritt liest das Muster dahinter. Vier Fragen, jede mit Zahl und Beispiel beantwortet, keine davon mit "unauffällig" ohne Beleg:
+
+1. **Rohmaterial.** Welche Dateiarten kamen im Zeitraum in `90_Inbox` und ins Belegarchiv, und welche davon wurden ungefiltert in den Kontext gelesen statt vorher per Skript eingedampft (Auszug statt Ganzes, Markup und Kopfzeilen entfernt)? Ergebnis: je Dateiart der Weg, der ab jetzt gilt, und wo ein Skript fehlt. `[NAME]` bereitet nichts vor; jede Eindampfung ist Arbeit des Systems (`AGENTS.md`, Abschnitt 1).
+2. **Sessions ausserhalb des Systems.** Welche Sessions (Titel und Kosten in der Tabelle) hätten ohne den Pflichtkontext auskommen können: reine Websuche, Übersetzung, Zusammenfassung eines fremden Textes ohne Bezug zu den eigenen Dateien? Jede Session in diesem Repo lädt den ganzen Pflichtkontext je Aufruf. Ergebnis: eine Liste mit Empfehlung je Typ ("Chat ohne dieses Repo", "Agent in einem leeren Ordner", "bleibt hier, weil ...").
+3. **Modell und Effort.** Spalte "Modell / Effort" gegen `10_System\Modellwahl.md` halten: Wo lief das teuerste Modell oder ein hoher Effort für mechanische Arbeit (Index, Skripte, Formatierung), wo ein grosses Modell für eine einfache Wissensfrage? Ergebnis: die drei teuersten Fehlbesetzungen mit dem Betrag, der beim passenden Modell angefallen wäre.
+4. **Bündelungsregel.** Aufrufe je Session und Kontext je Aufruf (Spalten im Bericht) sowie die Zahl der Kaltstarts. Sinkt die Zahl der Aufrufe je Session bei vergleichbarer Arbeit? Wenn nicht: zwei Sessions stichprobenartig im Transkript ansehen (`<Benutzerordner>\.claude\projects\<Projektordner>\<id>.jsonl`), die Ketten benennen (vier und mehr aufeinanderfolgende Einzelaufrufe wie Read, Grep, Glob oder Bash mit `sed -n` auf dieselben Dateien) und den Wortlaut der Regel schärfen oder einen Prüffall anlegen. Eine Kennzahl dafür gibt es bewusst nicht: Eine Quote "Werkzeuge je Aufruf" sieht die Bündelung in ein Skript nicht (ein Skript mit zehn Schritten ist ein Werkzeug in einem Aufruf). Messhinweis: Ein Transkript trägt je Inhaltsblock eine eigene Zeile mit derselben `message.id`; wer nach Id entdoppelt, statt die Blöcke einer Id zusammenzuführen, verliert Werkzeugaufrufe.
+
+Ergebnis des Schritts: ein Abschnitt "Token-Verbrauch" im Bericht mit den drei grössten Hebeln als entscheidungsreifer Zug (Datei, Änderung, erwartete Ersparnis). Was `[NAME]` entscheidet, wird im selben Zug in Skill, `AGENTS.md` oder Modellwahl geschrieben.
+
+**Bündelung des Laufs selbst** (seit 3.3): Die kalten Fälle laufen parallel als PowerShell-Jobs aus einem Skript, die JSONL-Auswertung und die Analysen aus 6b je als ein Skript. Ein Lauf nacheinander kostet dieselben Tokens und ein Vielfaches der Zeit.
 
 ### 7. Abschliessen
 Prüfset-Datei: Ergebnis als Zahl, Lauf-Datum, `stand:` aktualisieren. Eigene Pfade committen und pushen. Bericht: Quote vorher/nachher, jeder Durchfaller mit Wurzel und Fix, Lean-Stand in KB.
@@ -69,4 +88,6 @@ Prüfset-Datei: Ergebnis als Zahl, Lauf-Datum, `stand:` aktualisieren. Eigene Pf
 - [ ] Jeder Durchfaller hat eine benannte Wurzel und entweder einen umgesetzten Fix (mit Delta-Nachmessung) oder den begründeten Entscheid, nichts zu ändern
 - [ ] Kein Testartefakt mehr im Repo oder ausserhalb (`git status` sauber bis auf eigene Arbeit)
 - [ ] Health-Check-Kategorie `Lean` ist OK oder ihr WARN hat einen konkreten nächsten Zug
+- [ ] Modellstand geprüft (Schritt 6a): Modellwahl gegen die Anbieterliste gehalten, Prüfdatum nachgeführt, bei Neuerem ein offener Punkt mit Wiedervorlage
+- [ ] Token-Verbrauch analysiert (Schritt 6b): die drei grössten Hebel stehen als entscheidungsreifer Zug im Bericht
 - [ ] Eigene Pfade committet und gepusht; Quote vorher/nachher berichtet

@@ -865,6 +865,17 @@ if (-not (Test-Path $guardSkript)) {
     } else {
         Add-Check "OK" $cat "Arbeitsbereich-Sperre eingehaengt. Ob der Hook im Werkzeug freigeschaltet ist, muss mit der Regressionsreihe und einem echten Blockierfall gegengemessen werden."
     }
+    # Zweiter Hook seit 3.3: die Sperre gegen pauschales Stagen (AGENTS.md Abschnitt 12).
+    # Eine Verbotsliste in den Einstellungen greift in einem Modus mit vollen Rechten nicht,
+    # ein Hook schon. Fehlt der Eintrag, ist die Regel dort nur Text.
+    $gitGuardSkript = Join-Path $repo "00_INDEX\scripts\guard-git.ps1"
+    if (-not (Test-Path $gitGuardSkript)) {
+        Add-Check "WARN" $cat "guard-git.ps1 fehlt. Die Sperre gegen pauschales Stagen (git add -A) aus AGENTS.md Abschnitt 12 ist damit nur eine Textregel."
+    } elseif ($guardSettingsText -notmatch "guard-git") {
+        Add-Check "WARN" $cat ".claude\settings.json haengt guard-git.ps1 nicht als PreToolUse-Hook ein. In einem Lauf mit vollen Rechten ist git add -A dann nicht gesperrt. Eintrag aus der Zielversion ergaenzen (Skill leo-mechanik-update, Kategorie B)."
+    } else {
+        Add-Check "OK" $cat "Sperre gegen pauschales Stagen eingehaengt (guard-git.ps1)."
+    }
 }
 
 Write-Output "Portabilitaets-Checks erledigt."
@@ -899,6 +910,35 @@ if (-not (Test-Path $memPath)) {
     }
 }
 Write-Output "Harness-Memory-Check erledigt."
+
+# ---------------------------------------------------------------------------
+# 12b) CLI-STAND (Update des Werkzeugs verfuegbar?)
+# ---------------------------------------------------------------------------
+# Seit 3.3. Ein veraltetes Werkzeug faellt im Alltag nicht auf, weil nichts fehlschlaegt;
+# Verbesserungen und Fehlerbehebungen bleiben einfach aus. Vergleicht die installierte
+# Claude-Code-CLI mit der aktuellen Version auf npm; WARN nennt den einen Befehl.
+# Fail-open: ohne Netz, ohne npm oder ohne diese CLI nur INFO, nie ein Befund.
+$cat = "CLI"
+try {
+    $inst = $null
+    if (Get-Command claude -ErrorAction SilentlyContinue) {
+        $inst = (& claude --version 2>$null | Select-Object -First 1) -replace '[^0-9.].*$', ''
+    }
+    $akt = $null
+    if ($inst -and (Get-Command npm -ErrorAction SilentlyContinue)) {
+        try { $akt = (& npm view @anthropic-ai/claude-code version 2>$null | Select-Object -Last 1).Trim() } catch { }
+    }
+    if (-not $inst) {
+        Add-Check "INFO" $cat "Keine Claude-Code-CLI gefunden; CLI-Stand nicht pruefbar (bei einem anderen Werkzeug erwartbar)."
+    } elseif (-not $akt) {
+        Add-Check "INFO" $cat "Installiert $inst; aktuelle Version auf npm nicht abrufbar (kein Netz oder npm fehlt). Kein Befund ueber die CLI."
+    } elseif ($inst -eq $akt) {
+        Add-Check "OK" $cat "Claude Code $inst ist aktuell (npm: $akt)."
+    } else {
+        Add-Check "WARN" $cat "Claude Code Update verfuegbar: installiert $inst, aktuell $akt. In der Kommandozeile: claude update"
+    }
+} catch { Add-Check "INFO" $cat "CLI-Pruefung fehlgeschlagen: $($_.Exception.Message)" }
+Write-Output "CLI-Check erledigt."
 Write-Output ""
 
 
@@ -1152,7 +1192,12 @@ $cmdPattern = '^(git|pwsh|powershell|cd|python|schtasks|npm)\s|\s--\s'
 # Zitat in der Zieldatei bleibt bewusst stehen und ist die Herkunftsangabe selbst.
 $provExemptTarget = '^90_Inbox[\\/]'
 # Ein Satz, der das Anlegen einer Datei ankuendigt, verweist nicht auf sie.
-$planPattern = '(?i)(anlegen|anzulegen|neue Datei|wird erzeugt|entsteht|erstellen|festhalten|Ergebnis als|geplant)'
+# Seit 3.3 um Formen erweitert, die im Alltag dieselbe Ankuendigung tragen und vom
+# urspruenglichen Muster nicht erfasst wurden: "der Agent entwirft X", "legt ... in X an",
+# "Ergebnis: X" und der Absatzmarker "Naechster Zug:", unter dem in Agenda-Dokumenten der
+# geplante naechste Schritt steht. Der Umlaut steht als Punkt-Platzhalter, damit das
+# Muster unabhaengig von der Kodierung der Quelldatei greift.
+$planPattern = '(?i)(anlegen|anzulegen|neue Datei|wird erzeugt|entsteht|erstellen|festhalten|Ergebnis als|Ergebnis:|entwirft|entwerfen|legt .{0,60} an\b|N.chster Zug|geplant|soll .{0,30}(entstehen|stehen)|gibt es nicht|existiert nicht|nicht vorhanden|fehlt noch|noch nicht angelegt|wurde nie)'
 $topLevel = @(Get-ChildItem -Path $repo -Directory | Where-Object { $_.Name -notmatch '^\.' } | ForEach-Object { $_.Name.ToLower() })
 $allBaseNames = @{}
 foreach ($x in (Get-ChildItem -Path $repo -Recurse -File | Where-Object { $_.FullName -notmatch $excludedDirPattern })) {
@@ -1193,8 +1238,12 @@ foreach ($f in $mdAll) {
         if ((Test-Path -LiteralPath $abs) -or (Test-Path -LiteralPath $absRel)) { continue }
         # Umbenanntes System: leo-x.md im Text, w1-x.md auf der Platte (siehe Test-RepoPfad)
         if (Test-RepoPfad $p) { continue }
-        $ctxStart = [Math]::Max(0, $m.Index - 120)
-        $ctx = $noFence.Substring($ctxStart, [Math]::Min(240, $noFence.Length - $ctxStart))
+        # Fenster seit 3.3 von 120 auf 200 Zeichen vor dem Treffer erweitert: Der
+        # Ankuendigungsmarker steht am Satzanfang ("Naechster Zug: ..."), und ein Satz ist
+        # regelmaessig laenger als 120 Zeichen; mit dem alten Fenster fiel derselbe Satz je
+        # nach Laenge mal durch und mal nicht.
+        $ctxStart = [Math]::Max(0, $m.Index - 200)
+        $ctx = $noFence.Substring($ctxStart, [Math]::Min(400, $noFence.Length - $ctxStart))
         if ($ctx -match $planPattern) { continue }
         $provIssues += "$rel -> $t"
     }
@@ -1743,6 +1792,35 @@ if (Test-Path $pruefsetPfad) {
     }
 } else {
     Add-Check "INFO" $cat "Kein 10_System\Pruefset.md vorhanden. Die Regeltreue-Messung ist optional; die Vorlage liegt in 10_System\Pruefset-Vorlage.md (Skill leo-system-optimierung)."
+}
+# Session-Kosten (seit 3.3): 00_INDEX\scripts\session-kosten.py misst den Verbrauch aller
+# lokalen Claude-Code-Transkripte der letzten 14 Tage zu API-Listenpreisen und schreibt
+# 00_INDEX\session-kosten.md. Hier nur die Befundzeilen (Session ueber 200 Aufrufe, Tag
+# ueber der Kostenschwelle, sonst eine OK-Zeile mit Summe und Kontext je Aufruf).
+# Hintergrund AGENTS.md Abschnitt 1 (Buendelungsregel) und 13. Braucht Python im PATH;
+# fehlt es, ist das ein INFO und kein Befund: Die Messung ist Zusatz, nicht Grundlage.
+$kostenSkript = Join-Path $repo "00_INDEX\scripts\session-kosten.py"
+if (Test-Path -LiteralPath $kostenSkript) {
+    if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
+        Add-Check "INFO" $cat "Python nicht im PATH; Session-Kosten nicht gemessen (00_INDEX\scripts\session-kosten.py, optional)."
+    } else {
+        $kostenZeilen = @()
+        try {
+            $kostenZeilen = & python $kostenSkript --health 2>&1
+            & python $kostenSkript 2>&1 | Out-Null
+            Remove-Item -LiteralPath (Join-Path $repo "00_INDEX\scripts\__pycache__") -Recurse -Force -ErrorAction SilentlyContinue
+        } catch { $kostenZeilen = @("WARN|session-kosten.py liess sich nicht starten: $($_.Exception.Message)") }
+        foreach ($kz in $kostenZeilen) {
+            $kz = [string]$kz
+            if ($kz -match '^(OK|WARN|INFO)\|(.+)$') {
+                $stufe = if ($Matches[1] -eq "INFO") { "OK" } else { $Matches[1] }
+                Add-Check $stufe $cat $Matches[2]
+            }
+        }
+        if (-not ($kostenZeilen | Where-Object { [string]$_ -match '^(OK|WARN|INFO)\|' })) {
+            Add-Check "WARN" $cat "session-kosten.py lieferte keine Befundzeile (Ausgabe: $(($kostenZeilen | Select-Object -First 1)))."
+        }
+    }
 }
 Write-Output "Lean-Check erledigt."
 Write-Output ""

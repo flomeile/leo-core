@@ -80,6 +80,17 @@ function Add-DirTree {
     }
 }
 
+function Write-RepoFile([string]$path, [string]$text) {
+    # Schreibt UTF-8 OHNE BOM, in jeder PowerShell-Version gleich (seit 3.3).
+    # Grund: "Set-Content -Encoding UTF8" bedeutet in Windows PowerShell 5.1 UTF-8
+    # MIT BOM und erst ab PowerShell 7 ohne. Startet der Scheduler pwsh (7) und eine
+    # Session einmal powershell (5.1), tragen alle erzeugten Indexdateien plus die
+    # AGENTS.md ein BOM als einzige Aenderung im Diff. Diese Funktion macht das
+    # Ergebnis unabhaengig davon, wer das Skript startet. Kein -NoNewline noetig:
+    # WriteAllText haengt von sich aus nichts an.
+    [System.IO.File]::WriteAllText($path, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
+
 function Set-AutoBlock([string]$file, [string]$blockName, [string[]]$bodyLines) {
     # Ersetzt den Inhalt zwischen den Markern des benannten Auto-Blocks. Rein mechanisch.
     if (-not (Test-Path $file)) { Write-Output "WARNUNG: $file fehlt, Auto-Block $blockName nicht aktualisiert."; return }
@@ -91,11 +102,11 @@ function Set-AutoBlock([string]$file, [string]$blockName, [string[]]$bodyLines) 
     if ($i -lt 0 -or $j -lt $i) { Write-Output "WARNUNG: Marker AUTO:$blockName fehlen in $file."; return }
     $body = ($bodyLines -join "`r`n")
     $newText = $text.Substring(0, $i + $begin.Length) + "`r`n" + $body + "`r`n" + $text.Substring($j)
-    # -NoNewline ist Pflicht: $newText enthaelt ueber $text.Substring($j) bereits das
-    # originale Dateiende samt Zeilenumbruch. Ohne -NoNewline haengt Set-Content bei
-    # JEDEM Lauf eine weitere Leerzeile an (taeglicher Scheduler = taegliches Wachstum
-    # und eine sinnlose Aenderung im Commit).
-    Set-Content -Path $file -Value $newText -Encoding UTF8 -NoNewline
+    # $newText enthaelt ueber $text.Substring($j) bereits das originale Dateiende samt
+    # Zeilenumbruch. Write-RepoFile haengt nichts an; wuerde hier etwas angehaengt,
+    # wuechse die Datei bei JEDEM Lauf um eine Leerzeile (taeglicher Scheduler =
+    # taegliches Wachstum und eine sinnlose Aenderung im Commit).
+    Write-RepoFile -path $file -text $newText
 }
 
 # --- 1) INDEX-Geruest.md -----------------------------------------------------
@@ -123,7 +134,7 @@ $g.Add("---")
 $g.Add("Ende des Geruests. Anzahl Dateien: $($allFiles.Count)")
 
 $geruestFile = Join-Path $repo "00_INDEX\INDEX-Geruest.md"
-($g -join "`r`n") | Set-Content -Path $geruestFile -Encoding UTF8
+Write-RepoFile -path $geruestFile -text (($g -join "`r`n") + "`r`n")
 Write-Output "Index-Geruest geschrieben: $geruestFile ($($allFiles.Count) Dateien)"
 
 # --- 2) Ordnerbaum in INDEX.md -----------------------------------------------
@@ -253,7 +264,7 @@ foreach ($t in $themeDirs) {
             'Format je Eintrag: "- **Relativpfad** - Beschreibung". Eintraege zu geloeschten Dateien entfernt das Skript automatisch.',
             ""
         )
-        ($tpl -join "`r`n") | Set-Content -Path $idx -Encoding UTF8
+        Write-RepoFile -path $idx -text (($tpl -join "`r`n") + "`r`n")
         Write-Output "Neu angelegt: $idx"
     }
 
@@ -285,7 +296,7 @@ foreach ($t in $themeDirs) {
         $result.Add($ln)
     }
     if ($removed.Count -gt 0) {
-        ($result -join "`r`n") | Set-Content -Path $idx -Encoding UTF8
+        Write-RepoFile -path $idx -text (($result -join "`r`n") + "`r`n")
         Write-Output "Bereinigt in $($t.Name)\_INDEX.md (Datei existiert nicht mehr): $($removed -join ', ')"
     }
     Write-Output "Lokaler Index aktualisiert: $idx"

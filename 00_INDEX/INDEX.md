@@ -1,4 +1,4 @@
-﻿---
+---
 titel: INDEX (Landkarte des Leo)
 zweck: Einstiegspunkt der Agentic Search; Hierarchie, Bereiche, Systemdateien
 type: index
@@ -14,7 +14,7 @@ Im frischen Kern ist die Themenbereichs-Liste leer, bis du den ersten Themenordn
 
 ## Ordnerbaum (mechanisch aktuell)
 <!-- AUTO:BAUM:BEGIN -->
-Stand: 2026-09-07 17:14 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
+Stand: 2026-09-13 15:12 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
 
 - .codex\  (0 Dateien)
 - 00_INDEX\  (1 Dateien)
@@ -46,7 +46,6 @@ Diese Liste zeigt nur Rolle und Pfade, KEINE Datei-Beschreibungen. Die eigentlic
 - **GEMINI.md** — Minimaler Verweis auf AGENTS.md und MEIN-SYSTEM.md (für Gemini CLI, das standardmässig GEMINI.md lädt).
 - **README.md** — Einstieg für Menschen: was das Repo ist, Struktur-Kurzfassung, Verweis auf ANLEITUNG.md.
 - **ANLEITUNG.md** — Sinn und Funktionsweise von Leo plus die Schritt-für-Schritt-Ersteinrichtung (Repo, Git, Scheduler, Harness, Personalisierung).
-
 ### 01_Basiskontext (Kernkontext, für inhaltliche Arbeit zu Sessionbeginn laden)
 
 - **01_Basiskontext\Identity.md** — Vorlage für Werte, Haltung, Fundament und die Mensch-KI-Grenze. Leitfragen, die du mit deinen Angaben füllst.
@@ -81,5 +80,5 @@ Diese Liste zeigt nur Rolle und Pfade, KEINE Datei-Beschreibungen. Die eigentlic
 - **10_System\Modellwahl.md** — Modellempfehlungen für den Betrieb, mit Stand-Datum und Aktualisierungs-Anleitung.
 - **10_System\Kern-Dateien.md** — Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen (Kategorie A), welche nur eingearbeitet werden (B) und welche dir gehören und nie angefasst werden (C). Grundlage für den Skill `leo-mechanik-update`.
 - **10_System\Detailregeln aus AGENTS.md.md** — Nimmt nach der Trennlinie steuernd/begründend die Präzedenzfälle und Langbegründungen auf, die nicht in die Root-AGENTS.md gehören; wächst über die Lernschleife des Wrap-Ups und wird von Updates nie ersetzt.
-- **10_System\Pruefset-Vorlage.md** — Vorlage für das eigene Regeltreue-Prüfset (zwölf Fälle mit Eingabe, Erwartung, hartem Abbruchkriterium und geprüfter Regel; generische Fälle sofort nutzbar, Platzhalter für repo-spezifische). Wird im selben Ordner zur Datei Pruefset.md kopiert, die ab dann dir gehört.
+- **10_System\Pruefset-Vorlage.md** — Vorlage für das eigene Regeltreue-Prüfset (zwanzig Fälle mit Eingabe, Erwartung, hartem Abbruchkriterium und geprüfter Regel, darunter ein zweistufiger Fall über zwei Züge derselben Session; generische Fälle sofort nutzbar, Platzhalter für repo-spezifische). Wird im selben Ordner zur Datei Pruefset.md kopiert, die ab dann dir gehört.
 - **10_System\AGENTS.md** — Lokale Rollen-Datei: System-Experte.

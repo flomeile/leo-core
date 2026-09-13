@@ -2,8 +2,8 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 3.2
-stand: 2026-09-07
+version: 3.3
+stand: 2026-09-13
 ---
 
 # Kern-Dateien: was ein Update anfassen darf
@@ -36,7 +36,10 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\health-check.ps1` | Prüfskript |
 | `00_INDEX\scripts\build-skill-wrapper.ps1` | Erzeugt die Skill-Zeiger für alle Werkzeuge (Abschnitt 11a) |
 | `00_INDEX\scripts\guard-workspace.ps1` | Arbeitsbereich-Sperre, blockiert Schreibzugriffe ausserhalb des Repos und erzeugte Ausgabeformate in Themenordnern (Abschnitte 5 und 18) |
-| `00_INDEX\scripts\guard-workspace-tests.ps1` | Regressionsreihe für die Arbeitsbereich-Sperre, Pflicht vor und nach jeder Änderung am Hook (seit 3.2) |
+| `00_INDEX\scripts\guard-workspace-tests.ps1` | Regressionsreihe für die Arbeitsbereich-Sperre, Pflicht vor und nach jeder Änderung am Hook (seit 3.2; seit 3.3 mit eigener Reihe für macOS/Linux) |
+| `00_INDEX\scripts\guard-git.ps1` | Sperre gegen pauschales Stagen (`git add -A`, `--all`, `.`), als Hook wirksam in jedem Berechtigungsmodus (Abschnitt 12, seit 3.3) |
+| `00_INDEX\scripts\guard-git-tests.ps1` | Regressionsreihe für die Stagen-Sperre (seit 3.3) |
+| `00_INDEX\scripts\session-kosten.py` | Misst den Verbrauch aller lokalen Claude-Code-Sessions zu Listenpreisen und liefert dem Health-Check die Ausreisser (Abschnitt 13, seit 3.3); die Berichtsdatei, die dabei entsteht (`00_INDEX\session-kosten.md`), gehört dir |
 | `00_INDEX\scripts\weekly-diagnose.ps1` | Unbeaufsichtigte Wochendiagnose; bei jedem Lauf entsteht `10_System\health-check-report.txt`, und diese Berichtsdatei gehört dir (seit 1.19) |
 | `00_INDEX\githooks\pre-commit` | Schutz vor beschädigten Commits |
 | `.gitattributes` | Zeilenenden-Behandlung |
@@ -57,8 +60,8 @@ Diese Dateien sind Mechanik, tragen aber zwingend etwas von dir. Ein Update darf
 | `CLAUDE.md` | Die `@`-Importzeilen, die auf deine Basiskontext-Dateien zeigen |
 | `GEMINI.md` | dasselbe |
 | `.clinerules` | dasselbe, hier als textliche Leseanweisung statt als Import |
-| `.claude\settings.json` | Hängt die Arbeitsbereich-Sperre ein. Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf |
-| `.codex\hooks.json` | Hängt die Arbeitsbereich-Sperre in Codex ein (seit 3.2). Dein Anteil ist der ausgeschriebene Pfad zu deinem Repo, den ein Update nie durch den Platzhalter zurückersetzt, dazu eigene weitere Hooks |
+| `.claude\settings.json` | Hängt die beiden Sperren ein (Arbeitsbereich, seit 3.3 auch pauschales Stagen). Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf; unter macOS/Linux ausserdem der ausgeschriebene `pwsh`-Pfad in den Hook-Befehlen (`ANLEITUNG.md`, Teil 5, Schritt 7a) |
+| `.codex\hooks.json` | Hängt dieselben Sperren in Codex ein (seit 3.2). Dein Anteil ist der ausgeschriebene Pfad zu deinem Repo, den ein Update nie durch den Platzhalter zurückersetzt, dazu eigene weitere Hooks |
 | `.github\copilot-instructions.md` | dasselbe |
 | `ANLEITUNG.md` | Nichts, solange du sie nicht ergänzt hast. Wenn doch, gilt sie als deine Datei |
 | `.gitignore` | Deine eigenen Ignore-Zeilen. Neue Zeilen aus dem Grundgerüst werden ergänzt, deine nie entfernt |
@@ -79,6 +82,7 @@ Alles andere. Ein Update liest diese Dateien höchstens, um zu prüfen, ob deine
 - `00_INDEX\INDEX.md`, `00_INDEX\INDEX-Geruest.md` und alle `_INDEX.md` (maschinell erzeugt, aus deinen Inhalten)
 - `00_INDEX\drift-ausnahmen.txt` (Commits, die der Health-Check bei der Drift-Prüfung überspringt; sie stammen aus deiner Historie, deshalb gehört die Datei dir. Sie liegt bewusst neben dem Prüfskript und nicht darin, weil das Skript Kategorie A ist und ein dort eingetragener Hash beim nächsten Update verloren wäre)
 - `00_INDEX\lean-baseline.txt` (die Referenzgrössen, gegen die der Health-Check das Wachstum deines Pflichtkontexts misst. Sie beschreiben dein System, nicht das Grundgerüst, und der Check schreibt sie selbst fort. Löschen ist ungefährlich: Der nächste Lauf legt sie mit deinen heutigen Werten neu an)
+- Der Kostenbericht, der bei jedem Health-Check neu entsteht: `00_INDEX\session-kosten.md` (mechanisch erzeugt aus deinen Transkripten, deshalb deins; steht in der `.gitignore`, weil er die Titel aller Sessions deines Rechners trägt)
 - `03_Sessionlogs\*`, `04_Changelog\*`, `90_Inbox\*`
 
 ## Wenn du doch eine Kern-Datei ändern willst

@@ -4,3 +4,5 @@
 .timestamp
 03_Sessionlogs/_ClaudeMemory/
 00_INDEX/lean-baseline.txt
+# Kostenbericht von session-kosten.py: mechanisch erzeugt, traegt die Titel aller Sessions des Rechners
+00_INDEX/session-kosten.md

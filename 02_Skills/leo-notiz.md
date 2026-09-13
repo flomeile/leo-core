@@ -3,7 +3,7 @@ name: leo-notiz
 trigger: '"notiere an geeigneter stelle", "an geeigneter stelle notieren", "notier das", "nicht vergessen", "merk dir das"'
 zweck: Einen offenen Punkt so im Repo verankern, dass er mechanisch wiederkommt statt im Chat zu sterben - zustaendige Datei finden, gegen Bestehendes pruefen, Status-Block mit Owner und Wiedervorlage setzen
 type: skill
-version: 1.0
+version: 1.1
 ---
 
 # Skill: Leo Notiz
@@ -14,11 +14,15 @@ Was "notiere an geeigneter Stelle" heisst: Der Punkt darf nicht vergessen gehen,
 
 ## Wann ausführen
 
-Immer, wenn `[NAME]` sinngemäss verlangt, dass etwas nicht verloren gehen darf. Auch ohne Trigger-Wort selbst ausführen, wenn am Ende einer Arbeit etwas Offenes zurückbleibt, das keinen Ort mit Datum hat (`AGENTS.md`, Abschnitt 11: formt vorhandene Arbeit, also selbst ausführen). NICHT für blosse Fakten ohne Handlungsbedarf: Die werden als normale Wissensnotiz in der zuständigen Datei abgelegt, ohne Status-Block. Über-Auslösung ist hier billiger als Unter-Auslösung: Ein doppelt geprüfter Punkt kostet eine Suche, ein vergessener kostet den Besitzer genau die Arbeit, die er delegiert hat.
+Immer, wenn `[NAME]` sinngemäss verlangt, dass etwas nicht verloren gehen darf. Auch ohne Trigger-Wort selbst ausführen, wenn am Ende einer Arbeit etwas Offenes zurückbleibt, das keinen Ort mit Datum hat (`AGENTS.md`, Abschnitt 11: formt vorhandene Arbeit, also selbst ausführen). NICHT für blosse Fakten ohne Handlungsbedarf: Die werden als normale Wissensnotiz in der zuständigen Datei abgelegt, ohne Status-Block. Und NICHT für Regeln, Arbeitsweisen und Korrekturen, die `[NAME]` im Gespräch setzt: Die gehen nach `AGENTS.md`, Abschnitt 10 ("Korrektur im selben Zug") sofort als normativer Satz in die zuständige steuernde Datei (eigene Regel nach `MEIN-SYSTEM.md`, Abschnitt 2; Skill-Korrektur in den Skill; Themenregel in die lokale AGENTS.md), ohne Status-Block und ohne Wiedervorlage, weil eine Regel kein offener Punkt ist, sondern ab sofort gilt. Über-Auslösung ist hier billiger als Unter-Auslösung: Ein doppelt geprüfter Punkt kostet eine Suche, ein vergessener kostet den Besitzer genau die Arbeit, die er delegiert hat.
 
 ## Schritte
 
 1. **Zuständige Datei finden** (Suchstrategie aus `AGENTS.md`, Abschnitt 4). Erst prüfen, ob eine Agenda- oder Wissensdatei den Punkt schon führt; dann dort nachführen statt doppeln. Eine neue Datei nur, wenn wirklich keine passt.
+
+   **Führt die Suche nach `01_Basiskontext`, wird dort nicht geschrieben** (`AGENTS.md`, Abschnitt 8). Das gilt für jede Datei in diesem Ordner, auch für ein Personenregister, das bei Personennamen der naheliegende Ort ist. Stattdessen: die fertige Zeile im Wortlaut vorlegen, dazu Datei und Einfügestelle, und die Bestätigung von `[NAME]` abwarten; erst danach schreiben, plus Eintrag in `04_Changelog\Changelog.md`. Der Auftrag "merk dir das" ist die Freigabe zum Notieren, nicht die Freigabe für den geschützten Kernkontext.
+
+   **Der Basiskontext-Vorschlag ersetzt die Verankerung im Themenordner nicht** (seit 3.3, kalt gemessen: ein Lauf legte den Vorschlag vor und schrieb sonst nichts). Wer nur vorlegt, hat den Punkt nicht verankert: Antwortet `[NAME]` nicht, ist die Information beim Sessionende verloren, und genau das soll dieser Skill verhindern. Deshalb in dieser Reihenfolge: zuerst den Punkt in der zuständigen Themendatei ablegen (fehlt eine, wird sie nach den Ablageregeln angelegt, mit Frontmatter und Index-Beschreibung), dann zusätzlich die fertige Zeile für den Basiskontext vorlegen und auf die Bestätigung warten. Nur wenn der Punkt ausschliesslich `[NAME]` selbst betrifft (Identität, Muster, Stil, Ziele) und in keinem Themenordner einen Ort hat, bleibt es beim blossen Vorschlag; das ist die Ausnahme, nicht der Normalfall. Was nicht passiert: den Punkt ersatzweise in eine unpassende Datei schreiben.
 2. **Gegen Bestehendes prüfen:** Synonym-Volltextsuche über das Repo. Steht derselbe Punkt schon woanders, wird dort nachgeführt und höchstens ein Verweis gesetzt (eine Information hat genau einen Ort). Widerspricht der Punkt einer bestehenden Aussage, wird der Widerspruch gemeldet statt still notiert.
 3. **Als Status-Block anlegen**, exakt in dieser Form, weil das Status-Token den Zustand maschinell zählbar macht (`AGENTS.md`, Abschnitt 7) und eine Volltextsuche nach `**Status:** offen` alle offenen Punkte findet:
 
