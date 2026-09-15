@@ -8,7 +8,7 @@ type: readme
 
 Harness-unabhängiges Wissenssystem. Alles Wissen liegt als Markdown in thematischen Ordnern; jedes LLM mit Datei- und Werkzeug-Zugriff kann darauf arbeiten.
 
-Dies ist **Leo Core**, Version 3.5: das leere Grundgerüst mit der kompletten Mechanik, aber ohne Inhalte. Du füllst es mit deinen eigenen Themen. Bis Version 2.6 hiess dieses Repo `leo-starter`; "Starter" beschrieb den ersten Tag, "Core" beschreibt, was es geworden ist: ein laufend aktualisierter Kern, den die abgeleiteten Systeme ziehen (Skill `leo-mechanik-update`) und an den sie Verbesserungen zurückschicken. Die Kernschicht, die ein Update ersetzt, steht in `10_System\Kern-Dateien.md`; alles Persönliche bleibt stehen.
+Dies ist **Leo Core**, Version 3.6: das leere Grundgerüst mit der kompletten Mechanik, aber ohne Inhalte. Du füllst es mit deinen eigenen Themen. Bis Version 2.6 hiess dieses Repo `leo-starter`; "Starter" beschrieb den ersten Tag, "Core" beschreibt, was es geworden ist: ein laufend aktualisierter Kern, den die abgeleiteten Systeme ziehen (Skill `leo-mechanik-update`) und an den sie Verbesserungen zurückschicken. Die Kernschicht, die ein Update ersetzt, steht in `10_System\Kern-Dateien.md`; alles Persönliche bleibt stehen.
 
 
 ## Zwei Regeln für den Betrieb

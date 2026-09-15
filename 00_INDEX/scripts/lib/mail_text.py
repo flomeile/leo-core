@@ -158,7 +158,7 @@ def adresse_gueltig(adresse):
 
 
 def nur_adresse(eintrag):
-    """'Name <a@b.ch>' oder 'a@b.ch' -> 'a@b.ch' (klein)."""
+    """'Name <a@example.com>' oder 'a@example.com' -> 'a@example.com' (klein)."""
     return parseaddr(eintrag or "")[1].strip().lower()
 
 
@@ -170,7 +170,7 @@ def anzeige(name, adresse):
 
 def header_wert(eintraege):
     """RFC-konformer Header aus Anzeige-Strings: jeder Eintrag einzeln geparst und mit
-    formataddr kodiert. Noetig, weil ein Header wie 'Juerg Mueller <j@x.ch>' mit echten Umlauten
+    formataddr kodiert. Noetig, weil ein Header wie 'Juerg Mueller <j@example.com>' mit echten Umlauten
     als Ganzes zu einem einzigen encoded-word wird, Adresse inklusive, und die Mail dann keinen
     gueltigen Empfaenger mehr traegt."""
     teile = []
