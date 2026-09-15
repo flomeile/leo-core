@@ -1,0 +1,48 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------
+# Leo pre-push hook: Herausgeber-Gate (seit 3.7)
+#
+# Zweck: Wer dieses Grundgeruest herausgibt (oder einen eigenen Ableger fuer
+# andere veroeffentlicht), kann ein Pruefskript hinterlegen, das vor JEDEM Push
+# laeuft, unabhaengig davon, aus welchem Werkzeug, welcher Session oder von Hand
+# gepusht wird. Der Anlass: Ein oeffentliches Repo darf nichts Persoenliches
+# tragen, und ein Hook im Werkzeug des Agenten sieht nur die Pushes aus genau
+# diesem Werkzeug. Ein Git-Hook sieht alle.
+#
+# EINRICHTUNG (nur beim Herausgeber, nie im Repo selbst):
+#   git config leo.releaseGate "C:/Pfad/zum/pruefskript.ps1"
+# Das Skript bekommt den Repo-Pfad als -StarterPfad, muss mit Exit 0 enden, wenn
+# alles sauber ist, und mit Exit 1 bei Funden. Ohne diesen Konfigurationswert tut
+# der Hook nichts: Fuer jeden normalen Nutzer ist er unsichtbar (stilles Exit 0).
+#
+# BEWUSST STRENG: Ist ein Gate konfiguriert, aber nicht auffindbar oder nicht
+# lauffaehig, wird der Push abgebrochen, nicht durchgelassen. Ein Push ins
+# oeffentliche Repo ist nicht rueckrollbar; ein abgebrochener Push schon.
+# Aktiv nur mit gesetztem core.hooksPath (siehe ANLEITUNG.md, Teil 5, Schritt 3).
+# ---------------------------------------------------------------------------
+
+gate=$(git config --get leo.releaseGate 2>/dev/null)
+[ -z "$gate" ] && exit 0
+
+repo=$(git rev-parse --show-toplevel)
+if [ ! -f "$gate" ]; then
+    echo "pre-push: Release-Gate ist konfiguriert (leo.releaseGate), aber nicht gefunden: $gate" >&2
+    echo "pre-push: Push abgebrochen. Pfad korrigieren oder den Eintrag mit 'git config --unset leo.releaseGate' entfernen." >&2
+    exit 1
+fi
+
+if command -v pwsh >/dev/null 2>&1; then
+    ps=pwsh
+elif command -v powershell >/dev/null 2>&1; then
+    ps=powershell
+else
+    echo "pre-push: kein PowerShell-Interpreter fuer das Release-Gate gefunden, Push abgebrochen." >&2
+    exit 1
+fi
+
+echo "pre-push: Release-Gate laeuft ($gate) ..."
+if "$ps" -NoProfile -ExecutionPolicy Bypass -File "$gate" -StarterPfad "$repo"; then
+    exit 0
+fi
+echo "pre-push: Release-Gate meldet Funde oder lief nicht sauber durch. Push abgebrochen; jeder Fund wird bereinigt, nie umgangen." >&2
+exit 1

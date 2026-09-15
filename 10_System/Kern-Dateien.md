@@ -2,7 +2,7 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 3.6
+version: 3.7
 stand: 2026-09-15
 ---
 
@@ -48,6 +48,7 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\session-kosten.py` | Misst den Verbrauch aller lokalen Claude-Code-Sessions zu Listenpreisen und liefert dem Health-Check die Ausreisser (Abschnitt 13, seit 3.3); die Berichtsdatei, die dabei entsteht (`00_INDEX\session-kosten.md`), gehört dir |
 | `00_INDEX\scripts\weekly-diagnose.ps1` | Unbeaufsichtigte Wochendiagnose; bei jedem Lauf entsteht `10_System\health-check-report.txt`, und diese Berichtsdatei gehört dir (seit 1.19) |
 | `00_INDEX\githooks\pre-commit` | Schutz vor beschädigten Commits |
+| `00_INDEX\githooks\pre-push` | Herausgeber-Gate: läuft vor jedem Push ein Prüfskript, wenn `git config leo.releaseGate` gesetzt ist; ohne den Wert tut der Hook nichts (seit 3.7) |
 | `.gitattributes` | Zeilenenden-Behandlung |
 | `README.md` | Was dieses Grundgerüst ist. Beschreibt die Mechanik, nicht dich |
 | `.github\ISSUE_TEMPLATE\mechanik-befund.md` | Die Issue-Vorlage für Befunde am Kern; wirkt nur im Core-Repo, gehört aber zur Mechanik (Lücke, gefunden im kalten Update-Lauf am 03.09.2026) |

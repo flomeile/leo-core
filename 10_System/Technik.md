@@ -72,6 +72,8 @@ Gibt nur Trefferpfade zurück (token-sparsam), rekursiv über alle Ebenen. Codin
 **Zwei Fallstricke:** (a) `core.hooksPath` ist eine lokale Einstellung und wird nicht mitversioniert; nach einem frischen Clone liegt der Hook da und tut nichts. Deshalb prüft `health-check.ps1` (Kategorie `Git`) mechanisch, ob der Pfad gesetzt ist und die Datei existiert. (b) Steht `core.autocrlf` auf `true` (Windows-Standard), checkt Git den Hook mit CRLF aus, und `/bin/sh` bricht bei JEDEM Commit mit `\r: command not found` ab. Dagegen die mitgelieferte `.gitattributes` mit `00_INDEX/githooks/* text eol=lf`.
 **Regel:** Die Ausnahmelisten für den Frontmatter-Hinweis im Hook sind identisch zu denen in `health-check.ps1` gehalten. Wer eine ändert, zieht die andere nach.
 
+**Zweiter Hook im selben Ordner, `pre-push` (seit 3.7):** ein Herausgeber-Gate. Er liest `git config leo.releaseGate`; steht dort ein Pfad zu einem Prüfskript, läuft es vor jedem Push mit dem Repo-Pfad als `-StarterPfad`, und der Push wird abgebrochen, wenn das Skript Funde meldet oder nicht auffindbar ist. Ohne den Konfigurationswert tut der Hook nichts. Gebaut für den Herausgeber dieses Kerns, dessen Prüfskript bewusst ausserhalb des öffentlichen Repos liegt; nutzbar für jeden, der einen eigenen Ableger für andere veröffentlicht.
+
 ## Sonderzeichen in Pfaden (Coding-Agent)
 **Problem:** Manche Bash-Tools reichen Umlaute in Dateipfaden nicht sauber durch (das ä kommt als Ersatzzeichen an, "Datei nicht gefunden").
 **Lösung:** Pfade mit Sonderzeichen nicht aus Bash-Tool-Output kopieren, sondern korrekt eintippen, oder für Verzeichnisauflistungen das PowerShell-Werkzeug statt des Bash-Werkzeugs nutzen.
