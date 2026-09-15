@@ -23,15 +23,15 @@ if (-not $psExe) { "Kein passender PowerShell-Interpreter gefunden."; exit 1 }
 
 $faelle = @(
     @{ n = "1 smtplib in python -c";           erw = "DENY"; tool = "Bash";       cmd = "python -c `"import smtplib; s=smtplib.SMTP('x')`"" }
-    @{ n = "2 Send-MailMessage";               erw = "DENY"; tool = "PowerShell"; cmd = "Send-MailMessage -To a@b.ch -Subject x -SmtpServer s" }
+    @{ n = "2 Send-MailMessage";               erw = "DENY"; tool = "PowerShell"; cmd = "Send-MailMessage -To a@example.com -Subject x -SmtpServer s" }
     @{ n = "3 Gmail-API roh per curl";         erw = "DENY"; tool = "Bash";       cmd = "curl -X POST https://gmail.googleapis.com/gmail/v1/users/me/messages/send" }
     @{ n = "4 Gmail-Bibliothek direkt";        erw = "DENY"; tool = "Bash";       cmd = "python x.py  # dienst.users().messages().send(userId='me')" }
     @{ n = "5 Modul aus python -c laden";      erw = "DENY"; tool = "Bash";       cmd = "python -c `"import importlib.util as u; s=u.spec_from_file_location('g','$sender')`"" }
     @{ n = "6 Skript kopieren";                erw = "DENY"; tool = "PowerShell"; cmd = "Copy-Item '$sender' C:\Temp\gmail-senden.py" }
-    @{ n = "7 Kopie ausserhalb aufrufen";      erw = "DENY"; tool = "Bash";       cmd = "python C:/Temp/gmail-senden.py --an a@b.ch --betreff x --html t.html" }
+    @{ n = "7 Kopie ausserhalb aufrufen";      erw = "DENY"; tool = "Bash";       cmd = "python C:/Temp/gmail-senden.py --an a@example.com --betreff x --html t.html" }
     @{ n = "8 Eingabe-Automation";             erw = "DENY"; tool = "Bash";       cmd = "python -c `"import pyautogui; pyautogui.click(100,100)`"" }
     @{ n = "9 Outlook COM";                    erw = "DENY"; tool = "PowerShell"; cmd = "`$o = New-Object -ComObject outlook.application" }
-    @{ n = "10 Sendeskript an seinem Platz";   erw = "PASS"; tool = "Bash";       cmd = "python `"$sender`" --an a@b.ch --betreff x --html C:/Temp/t.html" }
+    @{ n = "10 Sendeskript an seinem Platz";   erw = "PASS"; tool = "Bash";       cmd = "python `"$sender`" --an a@example.com --betreff x --html C:/Temp/t.html" }
     @{ n = "11 Sendeskript --offen";           erw = "PASS"; tool = "PowerShell"; cmd = "python `"$sender`" --offen" }
     @{ n = "12 anderes Python-Skript";         erw = "PASS"; tool = "Bash";       cmd = "python `"$repo\00_INDEX\scripts\session-kosten.py`"" }
     @{ n = "13 Wort Mail im Commit-Text";      erw = "PASS"; tool = "Bash";       cmd = "git commit -m `"Mailregeln dokumentiert`"" }
