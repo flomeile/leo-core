@@ -1,0 +1,31 @@
+# Sperrbegriffe für gmail-senden.py (Regel 7 im Skript). Diese Datei gehört dir; das Grundgerüst
+# liefert nur die Keimdatei, ein Update ersetzt sie nie (10_System\Kern-Dateien.md, Kategorie B).
+#
+# Ein Begriff je Zeile, Vergleich ohne Gross-/Kleinschreibung, am Wortanfang (ein Begriff "Diagnose"
+# trifft auch "Diagnosebericht", "POTS" trifft nicht "spots"), gesucht in Betreff, Mailtext,
+# Anhangnamen und Textanhängen. Treffer: im Freigabefenster rot markiert, Senden erst nach dem
+# Häkchen "Geprüft, trotzdem senden"; in einer Routine bricht der Versand ab.
+#
+# Das ist ein zweites Netz gegen das Offensichtliche. Der eigentliche Schutz ist der Weg (Freigabe
+# im Fenster, kein Repo-Pfad als Text oder Anhang). Kein Personenname aus dem Geschäft gehört
+# hierher, weil er in einer legitimen Mail vorkommen darf; gesperrt sind Ordnermarker, Marker für
+# Internes und alles, was nie in eine Mail gehört (bei den meisten: Gesundheit, Behandlung, Innerstes).
+# Ergänze die Namen deiner Themenordner und deine eigenen Marker.
+
+# Repo- und Ordnermarker: eine Mail, die sie enthält, zitiert das Second Brain
+01_Basiskontext
+03_Sessionlogs
+Sessionlog
+Second Brain
+AGENTS.md
+MEIN-SYSTEM.md
+vertraulich
+confidential
+intern, nicht weitergeben
+
+# Behandlung und Gesundheit (Beispiele; an dein Leben anpassen)
+Diagnose
+Medikament
+Therapeut
+Psychiater
+Psycholog

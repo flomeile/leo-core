@@ -6,3 +6,5 @@
 00_INDEX/lean-baseline.txt
 # Kostenbericht von session-kosten.py: mechanisch erzeugt, traegt die Titel aller Sessions des Rechners
 00_INDEX/session-kosten.md
+# Python-Bytecode der Skripte in 00_INDEX/scripts/lib
+__pycache__/

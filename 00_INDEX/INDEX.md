@@ -14,17 +14,18 @@ Im frischen Kern ist die Themenbereichs-Liste leer, bis du den ersten Themenordn
 
 ## Ordnerbaum (mechanisch aktuell)
 <!-- AUTO:BAUM:BEGIN -->
-Stand: 2026-09-13 15:12 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
+Stand: 2026-09-15 19:58 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
 
 - .codex\  (0 Dateien)
 - 00_INDEX\  (1 Dateien)
   - githooks\  (0 Dateien)
   - scripts\  (0 Dateien)
+    - lib\  (0 Dateien)
 - 01_Basiskontext\  (4 Dateien)
 - 02_Skills\  (12 Dateien)
 - 03_Sessionlogs\  (1 Dateien)
 - 04_Changelog\  (2 Dateien)
-- 10_System\  (10 Dateien)
+- 10_System\  (11 Dateien)
 - 90_Inbox\  (1 Dateien)
 <!-- AUTO:BAUM:END -->
 
@@ -80,5 +81,6 @@ Diese Liste zeigt nur Rolle und Pfade, KEINE Datei-Beschreibungen. Die eigentlic
 - **10_System\Modellwahl.md** — Modellempfehlungen für den Betrieb, mit Stand-Datum und Aktualisierungs-Anleitung.
 - **10_System\Kern-Dateien.md** — Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen (Kategorie A), welche nur eingearbeitet werden (B) und welche dir gehören und nie angefasst werden (C). Grundlage für den Skill `leo-mechanik-update`.
 - **10_System\Detailregeln aus AGENTS.md.md** — Nimmt nach der Trennlinie steuernd/begründend die Präzedenzfälle und Langbegründungen auf, die nicht in die Root-AGENTS.md gehören; wächst über die Lernschleife des Wrap-Ups und wird von Updates nie ersetzt.
+- **10_System\Google-Anbindung.md** — Der Bausatz für Gmail und Google Drive ohne Connector: einmalige Einrichtung Schritt für Schritt (Cloud-Projekt, Drive API und Gmail API, Nutzertyp Intern bei Workspace oder Veröffentlichen beim privaten Konto, OAuth-Client Desktop-App, erste Anmeldung mit --auth, Konfigurationsblock im Sendeskript), was `gmail-senden.py` erzwingt (Offenlegung, Besitzer im CC, eigene Absenderadresse, Freigabefenster, Sperrbegriffe, Antwort im Thread), wie `google-sheets-fetch.py` ein Sheet als xlsx und Markdown holt, und was der Hook `guard-mail.ps1` sperrt.
 - **10_System\Pruefset-Vorlage.md** — Vorlage für das eigene Regeltreue-Prüfset (zwanzig Fälle mit Eingabe, Erwartung, hartem Abbruchkriterium und geprüfter Regel, darunter ein zweistufiger Fall über zwei Züge derselben Session; generische Fälle sofort nutzbar, Platzhalter für repo-spezifische). Wird im selben Ordner zur Datei Pruefset.md kopiert, die ab dann dir gehört.
 - **10_System\AGENTS.md** — Lokale Rollen-Datei: System-Experte.

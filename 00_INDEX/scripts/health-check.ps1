@@ -876,6 +876,17 @@ if (-not (Test-Path $guardSkript)) {
     } else {
         Add-Check "OK" $cat "Sperre gegen pauschales Stagen eingehaengt (guard-git.ps1)."
     }
+    # Dritter Hook seit 3.4: die Mailversand-Sperre (AGENTS.md Abschnitt 16). Ohne sie ist
+    # "Mails nur ueber gmail-senden.py" eine Textregel, und ein Modell unter Aufgabendruck
+    # baut sich einen eigenen Sendeweg ohne Offenlegung, CC und Freigabefenster.
+    $mailGuardSkript = Join-Path $repo "00_INDEX\scripts\guard-mail.ps1"
+    if (-not (Test-Path $mailGuardSkript)) {
+        Add-Check "WARN" $cat "guard-mail.ps1 fehlt. Die Mailversand-Sperre aus AGENTS.md Abschnitt 16 ist damit nur eine Textregel."
+    } elseif ($guardSettingsText -notmatch "guard-mail") {
+        Add-Check "WARN" $cat ".claude\settings.json haengt guard-mail.ps1 nicht als PreToolUse-Hook ein. Ein eigener Sendeweg aus einer Session ist dann nicht gesperrt. Eintrag aus der Zielversion ergaenzen (Skill leo-mechanik-update, Kategorie B)."
+    } else {
+        Add-Check "OK" $cat "Mailversand-Sperre eingehaengt (guard-mail.ps1)."
+    }
 }
 
 Write-Output "Portabilitaets-Checks erledigt."
