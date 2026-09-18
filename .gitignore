@@ -8,3 +8,5 @@
 00_INDEX/session-kosten.md
 # Python-Bytecode der Skripte in 00_INDEX/scripts/lib
 __pycache__/
+# Zeitstempel der Versionspruefung (version-check.ps1): aendert sich woechentlich, traegt keinen Inhalt
+10_System/version-check-last-run.txt
