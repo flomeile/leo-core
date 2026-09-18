@@ -2,17 +2,17 @@
 titel: Index-Geruest (mechanisch erzeugt)
 zweck: Vollstaendige, deterministische Baumliste aller Markdown-Dateien im Repo
 type: index-geruest
-erzeugt: 2026-09-18 21:12
+erzeugt: 2026-09-18 21:24
 hinweis: Automatisch erzeugt. Nicht von Hand bearbeiten. Sicherheitsnetz und Delta-Quelle fuer die kuratierten Indizes.
 ---
 
 # Index-Geruest
 
-Mechanisch aus dem Dateisystem erzeugt am 2026-09-18 21:12. Volle Hierarchie, jede real existierende .md-Datei.
+Mechanisch aus dem Dateisystem erzeugt am 2026-09-18 21:24. Volle Hierarchie, jede real existierende .md-Datei.
 Format je Datei: Name | Basis-Beschreibung (erste Ueberschrift) | Groesse | geaendert.
 
 - AGENTS.md | AGENTS.md: Master-Anweisung für Leo | 93.9 KB | 2026-09-18
-- ANLEITUNG.md | Leo: Anleitung zum eigenen Second Brain | 92.3 KB | 2026-09-18
+- ANLEITUNG.md | Leo: Anleitung zum eigenen Second Brain | 92.4 KB | 2026-09-18
 - CLAUDE.md | CLAUDE.md | 1.6 KB | 2026-08-27
 - GEMINI.md | GEMINI.md | 1.7 KB | 2026-08-26
 - MEIN-SYSTEM.md | Mein System | 7.3 KB | 2026-09-03

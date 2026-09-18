@@ -3,7 +3,7 @@
 # eingespielte Kern (MEIN-SYSTEM.md, Abschnitt 4) hinter dem neuesten Tag des Grundgeruests
 # auf GitHub? Eine Zeile Ausgabe, ein Zeitstempel in 10_System\version-check-last-run.txt.
 #
-# WARUM ES DAS GIBT (seit 3.10): Der Versions-Waechter im Health-Check meldet Rueckstand nur,
+# WARUM ES DAS GIBT (seit 4.0): Der Versions-Waechter im Health-Check meldet Rueckstand nur,
 # wenn der Health-Check laeuft, und im Modus mitbauen startet den niemand von selbst. Die
 # Grundpflege in der AGENTS.md (Abschnitt 1) ruft dieses Skript deshalb zu Beginn einer
 # Session, sobald der letzte Lauf laenger als sieben Tage zurueckliegt, in beiden Modi.

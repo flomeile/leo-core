@@ -2,7 +2,7 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 3.10
+version: 4.0
 stand: 2026-09-18
 ---
 
@@ -43,7 +43,7 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\guard-mail-tests.ps1` | Regressionsreihe für die Mailversand-Sperre (seit 3.4) |
 | `00_INDEX\scripts\guard-read.ps1` | Lese-Sperre: blockiert das Lesen von Zugangsdaten (`.env`, Schlüssel, `.ssh`, `.aws`, Token-Dateien) und der gesperrten Pfade aus `00_INDEX\gesperrte-pfade.txt` in Read, Grep, Glob und den Shell-Werkzeugen (Abschnitt 18, seit 3.8) |
 | `00_INDEX\scripts\guard-read-tests.ps1` | Regressionsreihe für die Lese-Sperre, 26 Fälle (seit 3.8) |
-| `00_INDEX\scripts\version-check.ps1` | Versionsprüfung ohne Modell: eingespielte Version gegen den neuesten Tag auf GitHub, eine Zeile Ausgabe; die Grundpflege in `AGENTS.md`, Abschnitt 1 ruft es zu Sessionbeginn, wenn der letzte Lauf über sieben Tage zurückliegt (seit 3.10). Der Zeitstempel `10_System\version-check-last-run.txt`, den es schreibt, gehört dir und steht in der `.gitignore` |
+| `00_INDEX\scripts\version-check.ps1` | Versionsprüfung ohne Modell: eingespielte Version gegen den neuesten Tag auf GitHub, eine Zeile Ausgabe; die Grundpflege in `AGENTS.md`, Abschnitt 1 ruft es zu Sessionbeginn, wenn der letzte Lauf über sieben Tage zurückliegt (seit 4.0). Der Zeitstempel `10_System\version-check-last-run.txt`, den es schreibt, gehört dir und steht in der `.gitignore` |
 | `00_INDEX\scripts\lib\google_zugang.py` | Gemeinsame Google-Anmeldung (OAuth, Token im Benutzerprofil, eine Scope-Liste) für alle Skripte der Google-Anbindung (seit 3.4) |
 | `00_INDEX\scripts\lib\mail_text.py` | HTML-, Text- und Adresshilfen für das Sendeskript (seit 3.4) |
 | `00_INDEX\scripts\lib\google-sheets-fetch.py` | Holt ein Google Sheet als xlsx und Markdown-Tabelle in den Zwischenspeicher, für kopflose Läufe ohne Connector (seit 3.4) |
