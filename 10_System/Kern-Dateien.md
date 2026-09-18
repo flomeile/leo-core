@@ -2,8 +2,8 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 3.7
-stand: 2026-09-15
+version: 3.8
+stand: 2026-09-18
 ---
 
 # Kern-Dateien: was ein Update anfassen darf
@@ -41,6 +41,8 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\guard-git-tests.ps1` | Regressionsreihe für die Stagen-Sperre (seit 3.3) |
 | `00_INDEX\scripts\guard-mail.ps1` | Mailversand-Sperre: jede Mail aus einer Session geht nur über `lib\gmail-senden.py`, jeder andere Sendeweg ist blockiert (Abschnitt 16, seit 3.4) |
 | `00_INDEX\scripts\guard-mail-tests.ps1` | Regressionsreihe für die Mailversand-Sperre (seit 3.4) |
+| `00_INDEX\scripts\guard-read.ps1` | Lese-Sperre: blockiert das Lesen von Zugangsdaten (`.env`, Schlüssel, `.ssh`, `.aws`, Token-Dateien) und der gesperrten Pfade aus `00_INDEX\gesperrte-pfade.txt` in Read, Grep, Glob und den Shell-Werkzeugen (Abschnitt 18, seit 3.8) |
+| `00_INDEX\scripts\guard-read-tests.ps1` | Regressionsreihe für die Lese-Sperre, 25 Fälle (seit 3.8) |
 | `00_INDEX\scripts\lib\google_zugang.py` | Gemeinsame Google-Anmeldung (OAuth, Token im Benutzerprofil, eine Scope-Liste) für alle Skripte der Google-Anbindung (seit 3.4) |
 | `00_INDEX\scripts\lib\mail_text.py` | HTML-, Text- und Adresshilfen für das Sendeskript (seit 3.4) |
 | `00_INDEX\scripts\lib\google-sheets-fetch.py` | Holt ein Google Sheet als xlsx und Markdown-Tabelle in den Zwischenspeicher, für kopflose Läufe ohne Connector (seit 3.4) |
@@ -67,7 +69,7 @@ Diese Dateien sind Mechanik, tragen aber zwingend etwas von dir. Ein Update darf
 | `CLAUDE.md` | Die `@`-Importzeilen, die auf deine Basiskontext-Dateien zeigen |
 | `GEMINI.md` | dasselbe |
 | `.clinerules` | dasselbe, hier als textliche Leseanweisung statt als Import |
-| `.claude\settings.json` | Hängt die drei Sperren ein (Arbeitsbereich, seit 3.3 pauschales Stagen, seit 3.4 Mailversand). Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf; unter macOS/Linux ausserdem der ausgeschriebene `pwsh`-Pfad in den Hook-Befehlen (`ANLEITUNG.md`, Teil 5, Schritt 7a) |
+| `.claude\settings.json` | Hängt die vier Sperren ein (Arbeitsbereich, seit 3.3 pauschales Stagen, seit 3.4 Mailversand, seit 3.8 Lesen von Zugangsdaten und gesperrten Pfaden) und bringt seit 3.8 Lese-Verbote für Schlüsseldateien unter `permissions.deny` mit. Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf (auch die mitgelieferten `permissions.deny`-Zeilen ergänzt ein Update nicht nachträglich, du übernimmst sie selbst); unter macOS/Linux ausserdem der ausgeschriebene `pwsh`-Pfad in den Hook-Befehlen (`ANLEITUNG.md`, Teil 5, Schritt 7a) |
 | `.codex\hooks.json` | Hängt dieselben Sperren in Codex ein (seit 3.2). Dein Anteil ist der ausgeschriebene Pfad zu deinem Repo, den ein Update nie durch den Platzhalter zurückersetzt, dazu eigene weitere Hooks |
 | `.github\copilot-instructions.md` | dasselbe |
 | `ANLEITUNG.md` | Nichts, solange du sie nicht ergänzt hast. Wenn doch, gilt sie als deine Datei |
@@ -75,6 +77,7 @@ Diese Dateien sind Mechanik, tragen aber zwingend etwas von dir. Ein Update darf
 | `10_System\Detailregeln aus AGENTS.md.md` | Alle Präzedenzfälle und Langbegründungen darin; das Grundgerüst liefert nur die leere Keimdatei (seit 1.18) |
 | `00_INDEX\scripts\lib\gmail-senden.py` | Der Konfigurationsblock am Anfang zwischen `# --- KONFIGURATION` und `# --- ENDE KONFIGURATION` (dein Name, deine Adressen, Signatur, registrierte Routinen, erlaubte Domains, Wartezeit). Ein Update ersetzt alles ausserhalb des Blocks und lässt den Block stehen (seit 3.4) |
 | `00_INDEX\scripts\lib\mail-sperrbegriffe.txt` | Alles darin: deine Sperrliste für den Mailversand; das Grundgerüst liefert nur die Keimdatei mit Beispielen (seit 3.4) |
+| `00_INDEX\gesperrte-pfade.txt` | Alles darin: die Ordner und Dateien, die dein Agent nie lesen darf; das Grundgerüst liefert nur die Keimdatei mit Kommentar und Beispielen (seit 3.8) |
 
 ## C. Deins: wird nie angefasst
 

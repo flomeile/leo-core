@@ -27,6 +27,15 @@
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"PFAD-ZU-DEINEM-REPO\\00_INDEX\\scripts\\guard-mail.ps1\""
           }
         ]
+      },
+      {
+        "matcher": "Read|Grep|Glob|NotebookRead|Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"PFAD-ZU-DEINEM-REPO\\00_INDEX\\scripts\\guard-read.ps1\""
+          }
+        ]
       }
     ]
   }

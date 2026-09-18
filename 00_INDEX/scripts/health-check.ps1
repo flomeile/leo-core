@@ -887,6 +887,22 @@ if (-not (Test-Path $guardSkript)) {
     } else {
         Add-Check "OK" $cat "Mailversand-Sperre eingehaengt (guard-mail.ps1)."
     }
+    # Vierter Hook seit 3.8: die Lese-Sperre (AGENTS.md Abschnitt 18). Ohne sie wandert eine
+    # .env-Datei, ein Schluessel oder eine Kundenkonfiguration mit einem einzigen Leseaufruf
+    # in den Kontext und damit zum Modellanbieter.
+    $readGuardSkript = Join-Path $repo "00_INDEX\scripts\guard-read.ps1"
+    if (-not (Test-Path $readGuardSkript)) {
+        Add-Check "WARN" $cat "guard-read.ps1 fehlt. Die Lese-Sperre fuer Zugangsdaten und gesperrte Ordner aus AGENTS.md Abschnitt 18 ist damit nur eine Textregel."
+    } elseif ($guardSettingsText -notmatch "guard-read") {
+        Add-Check "WARN" $cat ".claude\settings.json haengt guard-read.ps1 nicht als PreToolUse-Hook ein. Zugangsdaten und gesperrte Ordner sind dann lesbar. Eintrag aus der Zielversion ergaenzen (Skill leo-mechanik-update, Kategorie B)."
+    } else {
+        $sperrliste = Join-Path $repo "00_INDEX\gesperrte-pfade.txt"
+        if (Test-Path $sperrliste) {
+            Add-Check "OK" $cat "Lese-Sperre eingehaengt (guard-read.ps1); gesperrte-pfade.txt vorhanden."
+        } else {
+            Add-Check "WARN" $cat "Lese-Sperre eingehaengt, aber 00_INDEX\gesperrte-pfade.txt fehlt: Es wirken nur die eingebauten Muster fuer Zugangsdaten, keine eigenen gesperrten Ordner. Keimdatei aus der Zielversion anlegen."
+        }
+    }
 }
 
 Write-Output "Portabilitaets-Checks erledigt."
