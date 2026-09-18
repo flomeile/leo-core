@@ -28,7 +28,7 @@ $gesperrt = if ($isWindowsHost) { 'C:\Kundenkonfigurationen' } else { '/srv/kund
 $gesperrtSlash = $gesperrt -replace '\\', '/'
 $gesperrtGitBash = if ($isWindowsHost) { '/c/Kundenkonfigurationen' } else { $gesperrt }
 $konfig = Join-Path ([System.IO.Path]::GetTempPath()) ('guard-read-tests-' + [System.Guid]::NewGuid().ToString('N') + '.txt')
-@("# Testliste der Regressionsreihe", "", $gesperrt, "~/gesperrt-privat") | Set-Content -LiteralPath $konfig -Encoding UTF8
+@("# Testliste der Regressionsreihe", "", $gesperrt, "~/gesperrt-privat", "keine") | Set-Content -LiteralPath $konfig -Encoding UTF8
 $env:LEO_GUARD_READ_KONFIG = $konfig
 
 $faelle = @(
@@ -57,6 +57,7 @@ $faelle = @(
     @{ n = "23 Bash Skript liest Token selbst";    erw = "PASS"; tool = "Bash"; cmd = "pwsh -File 00_INDEX/scripts/health-check.ps1" }
     @{ n = "24 Grep im Repo";                      erw = "PASS"; tool = "Grep"; path = "$repo\10_System" }
     @{ n = "25 Write bleibt Sache des anderen Hooks"; erw = "PASS"; tool = "Write"; file = "$profil\.env" }
+    @{ n = "26 Marker keine ist kein Pfad";         erw = "PASS"; tool = "Bash"; cmd = "echo keine Aenderung" }
 )
 
 function Ruf($skript, $fall, $exe) {

@@ -11,6 +11,11 @@
 # (.env, Schluesseldateien, .ssh, .aws, Token-Dateien) sind dort fest eingebaut und
 # muessen hier nicht stehen.
 #
+# Solange hier kein Eintrag steht, mahnt der Health-Check bei jedem Lauf. Gibt es bei dir
+# wirklich nichts zu sperren, schreib als einzige Zeile das Wort
+#   keine
+# dann ist die Mahnung erledigt und die eingebauten Muster wirken weiter.
+#
 # Diese Datei gehoert dir (Kern-Dateien.md, Kategorie B): Ein Update des Grundgeruests
 # ersetzt sie nie. Der Agent erweitert oder kuerzt sie nie von sich aus; ein Eintrag
 # kommt oder geht nur durch dich.

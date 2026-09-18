@@ -898,7 +898,14 @@ if (-not (Test-Path $guardSkript)) {
     } else {
         $sperrliste = Join-Path $repo "00_INDEX\gesperrte-pfade.txt"
         if (Test-Path $sperrliste) {
-            Add-Check "OK" $cat "Lese-Sperre eingehaengt (guard-read.ps1); gesperrte-pfade.txt vorhanden."
+            $eintraege = @(Get-Content -Path $sperrliste -Encoding UTF8 | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") })
+            if ($eintraege.Count -eq 0) {
+                Add-Check "WARN" $cat "Lese-Sperre eingehaengt, aber 00_INDEX\gesperrte-pfade.txt hat keinen Eintrag: Nur die eingebauten Muster fuer Zugangsdaten wirken, kein Kundenordner ist gesperrt. Trag die Ordner ein, deren Inhalt in keine Cloud-KI darf (Kundenkonfigurationen, Exporte unter NDA, Gesundheitsdaten), eine je Zeile; gibt es wirklich keine, schreib als einzige Zeile das Wort keine."
+            } elseif ($eintraege.Count -eq 1 -and ($eintraege[0] -ieq "keine" -or $eintraege[0] -ieq "none")) {
+                Add-Check "OK" $cat "Lese-Sperre eingehaengt (guard-read.ps1); Besitzer hat bestaetigt, dass es keine gesperrten Ordner gibt (Marker keine)."
+            } else {
+                Add-Check "OK" $cat "Lese-Sperre eingehaengt (guard-read.ps1); $($eintraege.Count) gesperrte(r) Pfad(e) eingetragen."
+            }
         } else {
             Add-Check "WARN" $cat "Lese-Sperre eingehaengt, aber 00_INDEX\gesperrte-pfade.txt fehlt: Es wirken nur die eingebauten Muster fuer Zugangsdaten, keine eigenen gesperrten Ordner. Keimdatei aus der Zielversion anlegen."
         }

@@ -3,7 +3,7 @@ name: leo-mechanik-update
 trigger: '"core update", "core aktualisieren", "neue core-version", "mechanik update", "grundgeruest aktualisieren", "starter update", "update ziehen", "neue version holen"'
 zweck: Verbesserungen am Grundgerüst übernehmen, ohne eigene Anpassungen und eigene Bauten zu beschädigen
 type: skill
-version: 1.17
+version: 1.18
 ---
 
 # Skill: Mechanik aktualisieren
@@ -96,7 +96,7 @@ git show <Zielversion>:ANLEITUNG.md
 
 **Der Diff ist kumulativ, und genau so ist er gemeint.** Er vergleicht den Zustand dieses Systems mit dem Zustand, der eingespielt werden soll, und überspringt dabei jede Zwischenversion. Das ist richtig und nicht ungenau: Springt ein System von 1.9 auf 2.6, zählt der Unterschied zwischen 1.9 und 2.6, nicht die sieben Schritte dazwischen. Eine Regel, die unterwegs eingeführt und wieder entfernt wurde, taucht deshalb gar nicht auf, und das ist korrekt, weil sie heute nicht gilt. Die Changelog-Zeilen liest du dagegen für **alle** übersprungenen Versionen, nicht nur für die Zielversion: Der Diff zeigt, was anders ist, die Zeilen sagen, warum. Sie stehen ohnehin alle in derselben Datei.
 
-Fasse `[NAME]` in drei bis fünf Sätzen zusammen, was die neue Version bringt und warum es ihn interessiert. Kommt er über mehrere Versionen, sag ihm das ausdrücklich und nenne die Spanne. Das ist keine Höflichkeit: Wer nicht weiss, was sich ändert, kann in Schritt 5 nicht entscheiden.
+Fasse `[NAME]` in drei bis fünf Sätzen zusammen, was die neue Version bringt und warum es ihn interessiert. Kommt er über mehrere Versionen, sag ihm das ausdrücklich und nenne die Spanne. Das ist keine Höflichkeit: Wer nicht weiss, was sich ändert, kann in Schritt 5 nicht entscheiden. Dieselben Versionszeilen sind nach dem Update die Grundlage der Release Note, die den Bericht eröffnet (Schritt 9, Punkt 1); lies sie deshalb ganz, nicht nur die neueste.
 
 ### 4b. Konflikt-Check gegen die persönliche Ebene
 
@@ -231,6 +231,8 @@ powershell -File 00_INDEX\scripts\health-check.ps1
 
 Meldet der Health-Check etwas Neues, das vorher nicht da war, gehört es in den Bericht.
 
+**Führt das Update über 3.8 und hat `00_INDEX\gesperrte-pfade.txt` keinen Eintrag** (der Health-Check meldet das als WARN), fragst du `[NAME]` noch in derselben Antwort, welche Ordner auf seinem Rechner in keine Cloud-KI dürfen (Kundenkonfigurationen, Exporte unter NDA, Gesundheitsdaten, alles unter Geheimhaltung), mit einem Beispielpfad, wie ein Eintrag aussieht. Trag seine Antwort selbst ein, eine Zeile je Pfad; sagt er, es gebe nichts, trag das Wort `keine` ein. Das ist die einzige Situation, in der das LLM diese Datei schreibt, und nur mit seinem Wort im selben Gespräch (AGENTS.md, Abschnitt 18). Ohne diese Frage bleibt die Lese-Sperre bei den eingebauten Mustern stehen, und genau die Ordner, für die sie gebaut ist, bleiben offen.
+
 ### 8. Stand fortschreiben und committen
 
 In `MEIN-SYSTEM.md`, Abschnitt 4: eingespielte Version und Datum auf den neuen Stand. Trägt der Nutzer Abweichungen an Kern-Dateien mit sich, ergänze Abschnitt 3 um das, was du in Schritt 5 gefunden hast.
@@ -265,8 +267,8 @@ Push nur, wenn ein `origin` existiert.
 
 Kurz und in dieser Reihenfolge:
 
-1. Von welcher auf welche Version, und ob dabei Versionen übersprungen wurden.
-2. Was die neue Version bringt (aus Schritt 4).
+1. **Die Release Note, zuoberst und in fester Form** (Vorgabe des Herausgebers, seit 3.9): je eingespielter Version, auch je übersprungener, ein Block mit genau drei Zeilen, aus der Versionszeile der `ANLEITUNG.md` verdichtet, nicht abgeschrieben: **Was sich ändert** (ein bis zwei Sätze, die Neuerung selbst, keine Dateiliste), **Was es dir bringt** (ein Satz aus der Sicht von `[NAME]`), **Was du tun musst** (der Satz aus der Versionszeile; steht dort "nichts", steht hier "nichts"). Bei mehr als drei Versionen in einem Sprung die drei jüngsten so, die älteren in je einer Zeile. Alltagssprache, keine Skript- oder Dateinamen ausser dort, wo `[NAME]` selbst eine Datei anfassen muss. Der Grund: Wer ein Update bekommt und nicht erfährt, was es ändert, kann es weder nutzen noch beurteilen; eine Versionszeile in einer Datei, die niemand öffnet, ist keine Meldung.
+2. Von welcher auf welche Version, und ob dabei Versionen übersprungen wurden.
 3. Was der Konflikt-Check ergeben hat (Schritt 4b): jeder Fund, wie er aufgelöst wurde, und was noch offen bei `[NAME]` liegt. Kein Fund heisst eine Zeile, nicht Schweigen.
 4. Was am Skill-Register geändert wurde (Schritt 5b): ergänzte Spalten, angeglichene Dateinamen, neu eingetragene Skills.
 5. Welche Dateien ersetzt wurden.

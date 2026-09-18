@@ -86,6 +86,9 @@ function Read-BlockedPaths([string]$konfig) {
     foreach ($line in Get-Content -LiteralPath $konfig -Encoding UTF8) {
         $l = $line.Trim()
         if ($l -eq '' -or $l.StartsWith('#')) { continue }
+        # 'keine' ist der Marker des Besitzers, dass es keine gesperrten Ordner gibt (Health-Check
+        # hoert dann auf zu mahnen). Als Pfad waere das Wort in jedem Satz ein Treffer.
+        if ($l -ieq 'keine' -or $l -ieq 'none') { continue }
         $n = (Normalize-Text $l).TrimEnd('/')
         if ($n -ne '') { $list += $n }
     }
