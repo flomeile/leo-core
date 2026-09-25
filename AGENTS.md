@@ -2,8 +2,8 @@
 titel: AGENTS.md (Master-Anweisung)
 zweck: Herstellerneutrale, zentrale Anweisung für jedes LLM, das auf diesem Repo arbeitet
 type: master-regeln
-version: 4.0
-letzte_aenderung: 2026-09-18
+version: 4.1
+letzte_aenderung: 2026-09-25
 ---
 
 # AGENTS.md: Master-Anweisung für Leo
@@ -97,6 +97,8 @@ Grundsatz: Nutze die nativen Werkzeuge deines Harness. PowerShell nur dort, wo e
 Zeitstempel nie raten, immer per Werkzeug holen (`Get-Date -Format "yyyy-MM-dd HH:mm"` oder natives Äquivalent).
 
 Fehlerausgabe in einer Bash-Shell immer mit `2>/dev/null` unterdrücken, nie mit `2>nul`. `nul` ist die Schreibweise von cmd.exe und PowerShell; in der Bash-Shell legt sie eine echte Datei namens `nul` im Repo-Root an, die PowerShell danach nicht mehr sehen oder löschen kann, weil der Name unter Windows ein reservierter Gerätename ist. Aufräumen geht dann nur über die Bash-Shell.
+
+**Ein fremdes Repo, das als Ordner statt per Klon ankommt, bekommt keinen Git-Befehl, bevor seine `.git\config` gelesen ist** (seit 4.1): Ein dort gesetztes `core.fsmonitor` oder ein anderer Schlüssel, der einen Befehl startet, läuft bei jedem Statusabruf mit, und mehrere Coding-Agenten fragen den Status beim Öffnen eines Ordners von selbst ab (Sicherheitsbefund "GitSpawn", September 2026). Eine globale Git-Einstellung hebt das nicht auf, weil die Einstellung im Projekt Vorrang hat. Fremde Repos kommen deshalb per `git clone`, nie als Ordnerkopie mit `.git`; die Anleitung dazu für den Menschen steht in `ANLEITUNG.md`, Teil 5, Schritt 0.4a.
 
 ## 4. Suchstrategie (bei jeder Wissensfrage, in dieser Reihenfolge)
 

@@ -2,8 +2,8 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 4.0
-stand: 2026-09-18
+version: 4.1
+stand: 2026-09-25
 ---
 
 # Kern-Dateien: was ein Update anfassen darf
