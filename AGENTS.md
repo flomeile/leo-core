@@ -2,8 +2,8 @@
 titel: AGENTS.md (Master-Anweisung)
 zweck: Herstellerneutrale, zentrale Anweisung für jedes LLM, das auf diesem Repo arbeitet
 type: master-regeln
-version: 4.1
-letzte_aenderung: 2026-09-25
+version: 4.2
+letzte_aenderung: 2026-10-04
 ---
 
 # AGENTS.md: Master-Anweisung für Leo
@@ -250,7 +250,7 @@ Daraus folgen vier Pflichten für jedes LLM, das hier arbeitet:
 - **Ein Pre-Commit-Hook blockiert Commits mit beschädigtem Inhalt:** Merge-Konflikt-Marker in einer gestageten `.md` oder ein zerstörtes `AUTO:...:BEGIN/END`-Paar in einer Indexdatei. Alles andere meldet er nur. Wird ein Commit blockiert, wird der Befund behoben und neu committet, nicht mit `--no-verify` überfahren; der Notausgang ist `[NAME]`s Entscheidung, nicht die des LLM. Der Hook liegt versioniert in `00_INDEX\githooks`, wirkt aber nur, wenn auf diesem Rechner einmalig `git config core.hooksPath 00_INDEX/githooks` gesetzt wurde; der Health-Check prüft das. Bewusst eng gehalten: Ein Hook, der zuschlägt, lässt auch das Obsidian-Backup scheitern, und ein Backup, das still nichts mehr sichert, ist schlimmer als eines, das zu viel einsammelt.
 - Rollback ohne Kommandozeile: Obsidian-Git-Plugin oder GitHub-Weboberfläche.
 - **Die Gegenrichtung gilt genauso: Vor dem Wiederherstellen, Rückgängigmachen oder "Reparieren" von etwas, das `[NAME]` von Hand entfernt oder geändert hat, wird gefragt.** Eine Löschung ohne Begleitnotiz ist kein Versehen, sondern zuerst einmal eine Entscheidung; die Erklärung dafür steht oft gar nicht im Repo, weil sie aus einer Regel folgt, die `[NAME]` im Kopf hat. Wiederherstellen ist nie dringend, die Datei liegt in Git; Fragen kostet eine Zeile.
-- Vor Löschen oder Überschreiben bestehender Wissensdateien: ankündigen und Bestätigung abwarten. Zwei Ausnahmen: (a) Rohquellen in `90_Inbox` nach einem Ingest-Auftrag; dort ist der Auftrag selbst die Löschfreigabe. (b) Das Fortschreiben von Wissensdateien in der Lernschleife des Wrap-Ups: Stammt die neue Information aus der Session von `[NAME]` selbst, ist das die Freigabe, die überholte Passage zu überschreiben (alte Fassung bleibt in Git und Log). Ganze Dateien löschen sowie `01_Basiskontext` brauchen auch dann die explizite Bestätigung.
+- Vor Löschen oder Überschreiben bestehender Wissensdateien: ankündigen und Bestätigung abwarten. Zwei Ausnahmen: (a) Rohquellen in `90_Inbox` nach einem Ingest-Auftrag; dort ist der Auftrag selbst die Freigabe, sie ins Belegarchiv zu verschieben (Abschnitt 5). Gelöscht wird nur, was keinen Belegwert hat. (b) Das Fortschreiben von Wissensdateien in der Lernschleife des Wrap-Ups: Stammt die neue Information aus der Session von `[NAME]` selbst, ist das die Freigabe, die überholte Passage zu überschreiben (alte Fassung bleibt in Git und Log). Ganze Dateien löschen sowie `01_Basiskontext` brauchen auch dann die explizite Bestätigung.
 
 ## 13. Kostenkontrolle
 
