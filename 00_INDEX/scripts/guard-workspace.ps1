@@ -90,6 +90,17 @@ function Test-PathWithin([string]$path, [string]$root) {
     return $p.StartsWith($r + [System.IO.Path]::DirectorySeparatorChar, $pathComparison)
 }
 
+# Relative Werkzeugziele gegen das gemeldete Arbeitsverzeichnis aufloesen.
+# Ein erlaubtes cwd allein erlaubt noch keinen Ausbruch ueber "../".
+function Resolve-TargetPath([string]$path, [string]$cwd) {
+    $absolute = Normalize-AbsolutePath $path
+    if ($absolute -or [string]::IsNullOrWhiteSpace($path)) { return $absolute }
+    $base = Normalize-AbsolutePath $cwd
+    if (-not $base) { return $null }
+    $relative = $path.Trim().Trim('"').Trim("'")
+    return Normalize-AbsolutePath ([System.IO.Path]::Combine($base, $relative))
+}
+
 # WICHTIG: Im Durchlass-Fall gibt dieser Hook NICHTS aus und beendet sich nur mit
 # Exitcode 0. Die Hook-Dokumentation kennt zwar einen Rueckgabewert "defer" fuer
 # "keine Entscheidung, normaler Berechtigungsweg", aber Claude Code hat damit
@@ -232,7 +243,7 @@ $ti   = $in.tool_input
 
 # --- 1) Dateiwerkzeuge: der Zielpfad steht direkt im Aufruf -------------------
 if ($tool -in @("Write", "Edit", "NotebookEdit", "MultiEdit")) {
-    $target = [string]$ti.file_path
+    $target = Resolve-TargetPath ([string]$ti.file_path) ([string]$in.cwd)
     if (-not (Test-Allowed $target)) {
         Write-Decision "deny" "Ausserhalb des Repos ($repo) wird nichts geschrieben. Blockierter Pfad: $target. Harte Regel, siehe AGENTS.md Abschnitt 18. Wenn das wirklich gewollt ist, gibt es zwei saubere Wege, und beide entscheidet [NAME]: die Datei von Hand an den Zielort legen, oder den Pfad dauerhaft in die Liste `$allowPatterns in 00_INDEX\scripts\guard-workspace.ps1 eintragen. Diese Liste erweiterst du nicht selbst, um an ein blockiertes Ziel zu kommen."
     }
@@ -246,6 +257,7 @@ if ($tool -in @("Write", "Edit", "NotebookEdit", "MultiEdit")) {
 if ($tool -in @("Bash", "PowerShell")) {
     $cmd = [string]$ti.command
     if ([string]::IsNullOrWhiteSpace($cmd)) { Write-Decision "durch" "" }
+    $quotedPattern = '"([^"\r\n]+)"|''([^''\r\n]+)'''
 
     # Geprueft werden nur schreibende Kommandos. Lesen ausserhalb ist erlaubt, und
     # ein Hook, der jede Suche blockiert, fuehrt nur dazu, dass die Sperre
@@ -261,7 +273,10 @@ if ($tool -in @("Bash", "PowerShell")) {
         '>>','\|\s*Out-File','\|\s*Set-Content','\|\s*Add-Content',
         '--print-to-pdf','--screenshot'
     )
-    $isWrite = $false
+    # Auch "printf x > ziel" schreibt. Ein > innerhalb einer zitierten
+    # Zeichenkette bleibt dagegen Text, etwa "printf 'a > b'".
+    $cmdUnquoted = [regex]::Replace($cmd, $quotedPattern, ' ')
+    $isWrite = $cmdUnquoted -match '>'
     foreach ($v in $writeVerbs) { if ($cmd -match $v) { $isWrite = $true; break } }
     if (-not $isWrite) { Write-Decision "durch" "" }
 
@@ -311,9 +326,10 @@ if ($tool -in @("Bash", "PowerShell")) {
         '\$\{?env:PROGRAMDATA\}?'      = $env:ProgramData
         '\$\{?env:SYSTEMROOT\}?'       = $env:SystemRoot
         '\$\{?env:WINDIR\}?'           = $env:windir
-        '\$\{?env:TEMP\}?'             = $tempPath
-        '\$\{?env:TMP\}?'              = $tempPath
-        '\$\{?env:TMPDIR\}?'           = $tempPath
+        # Genau den Variablennamen treffen: TMP darf nicht TMPDIR zerlegen.
+        '\$\{?env:TEMP(?![A-Za-z0-9_])\}?'   = $tempPath
+        '\$\{?env:TMP(?![A-Za-z0-9_])\}?'    = $tempPath
+        '\$\{?env:TMPDIR(?![A-Za-z0-9_])\}?' = $tempPath
         '\$\{?env:HOMEDRIVE\}?\$\{?env:HOMEPATH\}?' = $homePath
         '\$\{?HOME\}?(?![A-Za-z0-9_])'   = $homePath
         '\$\{?TMPDIR\}?(?![A-Za-z0-9_])' = $tempPath
@@ -348,12 +364,17 @@ if ($tool -in @("Bash", "PowerShell")) {
     # Backslashes und blockiert damit jeden Versuch, eine Hook-Konfiguration
     # zu schreiben.
     $found = @()
+    $parentPattern = if ($isWindowsHost) { '(?:^|[\\/])\.\.(?:[\\/]|$)' } else { '(?:^|/)\.\.(?:/|$)' }
     # Erster Durchgang: Pfade in Anfuehrungszeichen. Die muessen als GANZES
     # geprueft werden, sonst zerfaellt ein Pfad mit Leerzeichen am ersten
     # Leerzeichen, und die Pruefung urteilt ueber etwas, das so nie gemeint war.
-    foreach ($m in [regex]::Matches($cmdN, '"([^"\r\n]+)"|''([^''\r\n]+)''')) {
+    foreach ($m in [regex]::Matches($cmdN, $quotedPattern)) {
         $inhalt = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
         if (Normalize-AbsolutePath $inhalt) { $found += $inhalt }
+        elseif ($inhalt -match $parentPattern -and $inhalt -notmatch '^[A-Za-z][A-Za-z0-9+.-]*://') {
+            $aufgeloest = Resolve-TargetPath $inhalt $cwd
+            if ($aufgeloest) { $found += $aufgeloest }
+        }
     }
     # Zweiter Durchgang: unquotierte Pfade. Endet zwangslaeufig am Leerzeichen,
     # den Abschneidefall faengt Test-Allowed ab.
@@ -369,6 +390,18 @@ if ($tool -in @("Bash", "PowerShell")) {
     }
     foreach ($rx in $pathRegexes) {
         foreach ($m in [regex]::Matches($cmdN, $rx)) { $found += $m.Value }
+    }
+    # Auch unquotierte relative Pfade mit Elternsegmenten pruefen. Zitierte
+    # Argumente wurden oben als Ganzes geprueft; hier duerfen sie nicht nochmals
+    # am Leerzeichen zerfallen. URLs bleiben wie in der absoluten Suche frei.
+    $unquotedPaths = [regex]::Replace($cmdN, $quotedPattern, ' ')
+    foreach ($m in [regex]::Matches($unquotedPaths, '[^"''`;,|()<>\s]+')) {
+        $pfad = $m.Value
+        if ($pfad -match $parentPattern -and $pfad -notmatch '^[A-Za-z][A-Za-z0-9+.-]*://' -and
+            -not (Normalize-AbsolutePath $pfad)) {
+            $aufgeloest = Resolve-TargetPath $pfad $cwd
+            if ($aufgeloest) { $found += $aufgeloest }
+        }
     }
     foreach ($f in ($found | Select-Object -Unique)) {
         if (-not (Test-Allowed $f)) {
