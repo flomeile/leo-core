@@ -52,7 +52,7 @@ Für jeden Befund zuerst einordnen: bekannte, abgestimmte Ausnahme (im Bericht k
 
 ### 4. Inbox behandeln
 Für jede Datei in `90_Inbox` (ausser README.md): kurz anlesen und einordnen. Zwei Fälle:
-- **Braucht inhaltliche Verarbeitung** (Mails, PDFs, Scans, Rohmaterial, dessen Wissen in eine konsolidierte Notiz gehört): NICHT verschieben, NICHT eigenmächtig verarbeiten. Im Abschlussbericht den Skill `leo-inbox-ingest` ("ingest") vorschlagen, der die Datei verlustfrei in eine Wissensnotiz konsolidiert und die Rohquelle danach ins Belegarchiv zu legen, nicht zu löschen (Root-`AGENTS.md`, Abschnitt 5). Der Health Check verarbeitet keine Inhalte.
+- **Braucht inhaltliche Verarbeitung** (Mails, PDFs, Scans, Rohmaterial, dessen Wissen in eine konsolidierte Notiz gehört): NICHT verschieben, NICHT eigenmächtig verarbeiten. Im Abschlussbericht den Skill `leo-inbox-ingest` ("ingest") vorschlagen, der die Datei verlustfrei in eine Wissensnotiz konsolidiert und die Rohquelle danach ins Belegarchiv legt, nicht löscht (Root-`AGENTS.md`, Abschnitt 5). Der Health Check verarbeitet keine Inhalte.
 - **Passt unverändert als eigenständige `.md` in einen Themenordner** (z.B. importierte Deep-Research-Berichte): Zielordner und ggf. besseren Dateinamen vorschlagen. **Verschieben NUR mit Bestätigung**, das ist die einzige Rückfrage dieses Skills. Nach Bestätigung:
 ```powershell
 Move-Item -Path "C:\Leo\90_Inbox\<datei>" -Destination "C:\Leo\<zielordner>\<neuer-name>"

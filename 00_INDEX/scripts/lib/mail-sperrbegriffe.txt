@@ -9,7 +9,7 @@
 # Das ist ein zweites Netz gegen das Offensichtliche. Der eigentliche Schutz ist der Weg (Freigabe
 # im Fenster, kein Repo-Pfad als Text oder Anhang). Kein Personenname aus dem Geschäft gehört
 # hierher, weil er in einer legitimen Mail vorkommen darf; gesperrt sind Ordnermarker, Marker für
-# Internes und alles, was nie in eine Mail gehört (bei den meisten: Gesundheit, Behandlung, Innerstes).
+# Internes und alles, was nie in eine Mail gehört (bei den meisten: Gesundheit und Privates).
 # Ergänze die Namen deiner Themenordner und deine eigenen Marker.
 
 # Repo- und Ordnermarker: eine Mail, die sie enthält, zitiert das Second Brain
@@ -23,9 +23,9 @@ vertraulich
 confidential
 intern, nicht weitergeben
 
-# Behandlung und Gesundheit (Beispiele; an dein Leben anpassen)
+# Gesundheit (Beispiele; an dein Leben anpassen)
 Diagnose
 Medikament
-Therapeut
-Psychiater
-Psycholog
+Arztbericht
+Befund
+Krankheit
