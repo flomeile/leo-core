@@ -1060,6 +1060,19 @@ foreach ($f in $mdAll) {
         $t = $m.Groups[1].Value
         if ($t -match '^(https?|mailto):') { continue }
         $linkCount++
+        # Obsidian-URI (obsidian://open?vault=...&file=<Pfad>): das Ziel steht im Parameter file,
+        # vault-relativ und URL-kodiert. Bis 4.2 lief sie als relativer Dateipfad durch und
+        # meldete intakte Links als tot (seit 4.3).
+        if ($t -match '^obsidian://') {
+            $u = [uri]::UnescapeDataString($t)
+            if ($u -match '[?&]file=([^&#]+)') {
+                $p = $Matches[1] -replace '\\', '/'
+                if ($p -notmatch '\.md$') { $p += '.md' }
+                if ($relByLower.ContainsKey($p.ToLower())) { continue }
+            }
+            $deadLinks.Add("$rel -> ($t)")
+            continue
+        }
         $t = [uri]::UnescapeDataString(($t -split '#')[0])
         $combined = Join-Path (Split-Path $f.FullName -Parent) ($t -replace '/', '\')
         $norm = try { [System.IO.Path]::GetFullPath($combined) } catch { $null }

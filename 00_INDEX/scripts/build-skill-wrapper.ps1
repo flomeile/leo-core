@@ -53,7 +53,9 @@ $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 # leo-system-optimierung startet je Lauf mehrere kalte Modell-Aufrufe und gehoert
 # deshalb ebenso hierher (Befund 31.08.2026, gemeldet von einem Nutzer des
 # Grundgeruests und im Ursprungssystem bestaetigt: Die Liste war dort sogar leer).
-$noAutoInvoke = @("leo-mechanik-update", "leo-system-optimierung")
+# leo-inbox-ingest (seit 4.3) verschiebt Rohquellen ins Archiv und committet; er wird vorgeschlagen,
+# nicht ungefragt gestartet.
+$noAutoInvoke = @("leo-mechanik-update", "leo-system-optimierung", "leo-inbox-ingest")
 
 $targets = @(
     @{ Pfad = ".claude\skills";   Fuer = "Claude Code, Claude Desktop"; ClaudeFelder = $true },

@@ -53,7 +53,7 @@ Trigger-Wort nennen, das LLM schlägt in `02_Skills\Skill-Register.md` nach und 
 - **"wrap up"** am Ende einer substanziellen Session (Zusammenfassung, Lernschleife, Update, Push).
 - **"health check"** wann immer du unsicher bist, ob alles aktuell ist (prüft alles, behebt sicher Behebbares, Inbox, Push).
 
-Selten gebraucht: "neuer themenordner", "skill erstellen". Dazu vier Arbeits-Skills, die von selbst anspringen: Voice-Check und Faktencheck bei ausgehenden Texten, Notiz bei offenen Punkten, First Principles bei Grundsatzfragen. Weitere Skills baust du bei Bedarf über den Skill-Ersteller.
+Selten gebraucht: "neuer themenordner", "skill erstellen". Dazu vier Arbeits-Skills, die von selbst anspringen: Voice-Check und Faktencheck bei ausgehenden Texten, Notiz bei offenen Punkten, First Principles bei Grundsatzfragen. Für Rohmaterial in `90_Inbox` "ingest" (seit 4.3; verarbeitet es zu Wissensnotizen und legt die Originale ins Belegarchiv). Weitere Skills baust du bei Bedarf über den Skill-Ersteller.
 
 ## Session beenden (Wrap-Up)
 

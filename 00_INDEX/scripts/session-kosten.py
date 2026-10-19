@@ -30,14 +30,24 @@ from pathlib import Path
 from collections import defaultdict
 sys.stdout.reconfigure(encoding="utf-8")
 
-PREISE = {  # USD je Mio. Token: Eingabe, Cache-Lesen, Cache-Schreiben, Ausgabe. Stand 11.09.2026; bei Preisaenderung hier nachfuehren.
-    "claude-opus-5": (5.0, 0.50, 6.25, 25.0),
-    "claude-fable-5-1": (10.0, 0.25, 12.50, 50.0),
-    "claude-fable-5": (10.0, 1.00, 12.50, 50.0),
-    "claude-sonnet-5": (2.0, 0.20, 2.50, 10.0),
-    "claude-haiku-4-5-20251001": (1.0, 0.10, 1.25, 5.0),
+# USD je Mio. Token: Eingabe, Cache-Lesen, Cache-Schreiben, Ausgabe. Stand 19.10.2026 (Anthropic, Pricing);
+# bei Preisaenderung hier nachfuehren (Skill leo-system-optimierung, Schritt 6a).
+# Cache-Schreiben zum Preis des Stunden-Caches (doppelter Eingabepreis), weil Claude Code im Abo den
+# Stunden-Cache nutzt; wer ueber einen eigenen API-Schluessel mit 5-Minuten-Cache arbeitet (1.25-facher
+# Eingabepreis), liest die Zahl fuer Cache-Schreiben etwas zu hoch. Bis 4.2 stand hier der 5-Minuten-Preis,
+# und Opus 5.5 und Sonnet 5.5 fehlten: Sie liefen als unbekanntes Modell zum Opus-5-Preis (Cache-Lesen 0.50
+# statt 0.20 bzw. 0.10), der groesste Kostenposten erschien damit zwei- bis fuenfmal zu hoch.
+PREISE = {
+    "claude-opus-5-5": (4.0, 0.20, 8.0, 20.0),
+    "claude-opus-5": (5.0, 0.50, 10.0, 25.0),
+    "claude-fable-5-1": (10.0, 0.25, 20.0, 50.0),
+    "claude-fable-5": (10.0, 1.00, 20.0, 50.0),
+    "claude-sonnet-5-5": (2.0, 0.10, 4.0, 10.0),
+    "claude-sonnet-5": (2.0, 0.20, 4.0, 10.0),
+    "claude-haiku-5-5": (0.50, 0.05, 1.0, 2.50),  # Preisstufe fuer Prompts ueber 100'000 Token, der Normalfall einer Agent-Session
+    "claude-haiku-4-5-20251001": (1.0, 0.10, 2.0, 5.0),
 }
-STANDARD = PREISE["claude-opus-5"]  # unbekanntes Modell: zum Opus-Preis bewertet
+STANDARD = PREISE["claude-opus-5"]  # unbekanntes Modell: zum Opus-5-Preis bewertet (lieber zu hoch als zu tief)
 SCHWELLE_AUFRUFE, SCHWELLE_TAG_USD, KONTEXT_AB = 200, 300.0, 30
 KALTSTART_TOKEN = 50000
 
@@ -87,8 +97,15 @@ if basis.is_dir():
     for projekt in basis.glob("*"):
         if not projekt.is_dir():
             continue
-        for f in projekt.glob("*.jsonl"):
+        # Eine fortgesetzte Session (Resume, Fork) liegt als zweite Datei mit der kompletten Historie der
+        # ersten vor; ohne Entdopplung zaehlt jeder Modellaufruf doppelt (seit 4.3). Deshalb die Dateien
+        # nach Aenderungszeit aufsteigend lesen und Nachrichten-Ids, die eine fruehere Datei schon traegt,
+        # nur einmal zaehlen.
+        gesehen = set()
+        for f in sorted(projekt.glob("*.jsonl"), key=lambda x: x.stat().st_mtime):
             aufrufe, frage, titel, effort, start, entry = lies(f)
+            aufrufe = {k: v for k, v in aufrufe.items() if k not in gesehen}
+            gesehen.update(aufrufe.keys())
             if not aufrufe:
                 continue
             sub = list((projekt / f.stem).glob("**/*.jsonl"))

@@ -3,7 +3,7 @@ name: leo-system-health-check
 trigger: '"system health check", "health check", "system prüfen", "systemcheck", "ist alles gesund", "gesundheitscheck system", "alles aktuell", "system aktualisieren", "auf vordermann bringen", "index aktualisieren", "index neu bauen", "inbox aufraeumen", "ablage aufraeumen", "hygiene"'
 zweck: One-Button-Wartung des Gesamtsystems - prüft alles, behebt sicher Behebbares selbst (Index-Beschreibungen, stand-Daten, Register), behandelt die Inbox, schreibt den Health-Check-Zeitstempel und schliesst mit Commit + Push ab
 type: skill
-version: 1.9
+version: 1.10
 ---
 
 # Skill: System Health Check
@@ -52,7 +52,7 @@ Für jeden Befund zuerst einordnen: bekannte, abgestimmte Ausnahme (im Bericht k
 
 ### 4. Inbox behandeln
 Für jede Datei in `90_Inbox` (ausser README.md): kurz anlesen und einordnen. Zwei Fälle:
-- **Braucht inhaltliche Verarbeitung** (Mails, PDFs, Scans, Rohmaterial, dessen Wissen in eine konsolidierte Notiz gehört): NICHT verschieben, NICHT eigenmächtig verarbeiten. Im Abschlussbericht vorschlagen, die Datei verlustfrei in eine Wissensnotiz zu konsolidieren und die Rohquelle danach ins Belegarchiv zu legen, nicht zu löschen (Root-`AGENTS.md`, Abschnitt 5). Der Health Check verarbeitet keine Inhalte.
+- **Braucht inhaltliche Verarbeitung** (Mails, PDFs, Scans, Rohmaterial, dessen Wissen in eine konsolidierte Notiz gehört): NICHT verschieben, NICHT eigenmächtig verarbeiten. Im Abschlussbericht den Skill `leo-inbox-ingest` ("ingest") vorschlagen, der die Datei verlustfrei in eine Wissensnotiz konsolidiert und die Rohquelle danach ins Belegarchiv zu legen, nicht zu löschen (Root-`AGENTS.md`, Abschnitt 5). Der Health Check verarbeitet keine Inhalte.
 - **Passt unverändert als eigenständige `.md` in einen Themenordner** (z.B. importierte Deep-Research-Berichte): Zielordner und ggf. besseren Dateinamen vorschlagen. **Verschieben NUR mit Bestätigung**, das ist die einzige Rückfrage dieses Skills. Nach Bestätigung:
 ```powershell
 Move-Item -Path "C:\Leo\90_Inbox\<datei>" -Destination "C:\Leo\<zielordner>\<neuer-name>"
@@ -60,7 +60,7 @@ Move-Item -Path "C:\Leo\90_Inbox\<datei>" -Destination "C:\Leo\<zielordner>\<neu
 
 ### 5. Entscheidungsbedarf sammeln (nicht eigenmächtig handeln)
 
-**Jeder offene Befund wird so vorgelegt, dass ein "ja" genügt.** Nicht "die Datei X ist abgelaufen, was möchtest du tun?", sondern der fertig ausformulierte Zug: welche Datei, welche Aktion, welcher konkrete Wert oder Wortlaut, und was danach anders ist. Der Repo-Besitzer soll bestätigen, nicht die Lösung selbst ausarbeiten. Gibt es mehr als einen sinnvollen Weg, kommen maximal drei Varianten, davon eine begründet empfohlen und zuerst genannt. Formulierungsmuster: "Vorschlag: `gueltig_bis` in `<Datei>` auf 2026-09-30 verlängern, weil der Termin verschoben wurde. Ja?"
+**Jeder offene Befund wird so vorgelegt, dass ein "ja" genügt.** Nicht "die Datei X ist abgelaufen, was möchtest du tun?", sondern der fertig ausformulierte Zug: welche Datei, welche Aktion, welcher konkrete Wert oder Wortlaut, und was danach anders ist. Der Repo-Besitzer soll bestätigen, nicht die Lösung selbst ausarbeiten. **Der vorgeschlagene Zug ist Arbeit, die du bei einem Ja sofort selbst ausführst** (seit 4.3), nie "in einer eigenen Session" und nie als Aufgabe auf einer Liste des Besitzers; ein Befund, der als Aufgabe zurückkommt, gibt genau die Arbeit zurück, die delegiert war. Ist eine Sache zu gross für die laufende Session, sagt der Vorschlag das mit dem Aufwand, und der Besitzer entscheidet. Gibt es mehr als einen sinnvollen Weg, kommen maximal drei Varianten, davon eine begründet empfohlen und zuerst genannt. Formulierungsmuster: "Vorschlag: `gueltig_bis` in `<Datei>` auf 2026-09-30 verlängern, weil der Termin verschoben wurde. Ja?"
 
 Befunde, die eine Entscheidung brauchen, klar benennen und je einen konkreten Vorschlag machen, aber nicht selbst entscheiden:
 - **Abgelaufenes `gueltig_bis`** (Root-`AGENTS.md`, Abschnitt 7): Datei kurz anlesen und einen der drei Wege vorschlagen: erledigt (verbliebenes Dauerwissen in die zuständige Wissensdatei übernehmen, Datei löschen), verlängern (konkretes neues Datum nennen) oder als Historie behalten (`gueltig_bis` entfernen, damit die Datei aus der Prüfung fällt). Löschen und Übernehmen passieren erst nach einem Ja, das Feld selbst darf der Skill nicht eigenmächtig entfernen.

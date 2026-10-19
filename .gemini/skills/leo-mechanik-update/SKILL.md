@@ -1,6 +1,6 @@
 ---
 name: leo-mechanik-update
-description: 'NUR auf ausdrueckliche Anweisung ausfuehren, nie selbstaendig: dieser Skill hat Seiteneffekte, die sich nicht zurueckdrehen lassen. Trigger: "mechanik update", "grundgeruest aktualisieren", "starter update", "update ziehen", "neue version holen". Holt Verbesserungen am Grundgerüst von GitHub und arbeitet sie ein, ohne eigene Anpassungen und eigene Skills zu beschädigen'
+description: 'NUR auf ausdrueckliche Anweisung ausfuehren, nie selbstaendig: dieser Skill hat Seiteneffekte, die sich nicht zurueckdrehen lassen. Trigger: "core update", "core aktualisieren", "neue core-version", "mechanik update", "grundgeruest aktualisieren", "starter update", "update ziehen", "neue version holen". Holt Verbesserungen am Grundgerüst von GitHub und arbeitet sie ein, ohne eigene Anpassungen und eigene Skills zu beschädigen'
 ---
 
 # Leo Mechanik-Update

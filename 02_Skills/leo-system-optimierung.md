@@ -3,7 +3,7 @@ name: leo-system-optimierung
 trigger: '"system-optimierung", "system optimieren", "optimierungslauf", "pruefset fahren", "prüfset fahren", "messlauf", "regeltreue messen"'
 zweck: Misst mit kalten Prüfset-Läufen, ob das System seine eigenen Regeln einhält, leitet aus Durchfallern gezielte Regel- oder Mechanik-Fixes ab und misst nach; Rollback bei sinkender Quote
 type: skill
-version: 2
+version: 3
 ---
 
 # Skill: Leo System-Optimierung
@@ -25,11 +25,16 @@ Der wiederholbare Optimierungszyklus des Systems: Prüfset kalt fahren, Belege p
 `git fetch origin`, `git status -sb`, `git log -1`. Bei `behind`/`diverged`: stoppen und fragen. Offene eigene Arbeit als Checkpoint committen (nur eigene Pfade), damit der Rollback jederzeit möglich ist.
 
 ### 2. Prüfset kalt fahren
-Fälle und Messmechanik stehen in deinem Prüfset (Datei Pruefset.md in `10_System`). Jeder Fall ist ein eigener kalter Lauf:
+Fälle und Messmechanik stehen in deinem Prüfset (Datei Pruefset.md in `10_System`). Jeder Fall ist ein eigener kalter Lauf, **immer in der Wegwerf-Kopie, nie im echten Repo** (seit 4.3, Regel unten "Fiktiver Testinhalt"): zuerst `pwsh -NoProfile -File 00_INDEX\scripts\pruefkopie.ps1 -Modus anlegen` (flacher Klon des letzten Commits nach `<Repo> Artifacts\_Cache\pruefkopie`, ohne Remote, wenige Sekunden), dann je Fall mit diesem Arbeitsverzeichnis:
 
 ```powershell
+Set-Location -LiteralPath '<Repo> Artifacts\_Cache\pruefkopie'
 claude -p '<Eingabe im Wortlaut>' --permission-mode acceptEdits --output-format stream-json --verbose 2>&1 | Out-File "<scratchpad>\fall.jsonl" -Encoding utf8
 ```
+
+Beurteilt wird der Dateizustand in der Kopie; danach `pruefkopie.ps1 -Modus loeschen`. Offene, nicht committete Änderungen sind in der Kopie bewusst nicht dabei; committe vor dem Lauf, was gemessen werden soll. In der Kopie ist nur die Kopie selbst beschreibbar: Die Hooks laufen über `${CLAUDE_PROJECT_DIR}`, und `guard-workspace.ps1` leitet seinen Repo-Pfad aus dem eigenen Ort ab, also blockiert er das echte Repo, den Artefakte-Ordner und das Archiv. Ein Fall, der dorthin schreiben soll, misst deshalb nur die Entscheidung, nicht die Ablage selbst.
+
+**Zwei Prüfungen an der Messumgebung:** (1) Steht in einem JSONL sinngemäss "Ignoring ... permissions.allow entries ... this workspace has not been trusted", gilt in der Kopie deine Freigabeliste nicht, und Shell-Aufrufe, die im Alltag durchgehen, werden abgelehnt; die Messung ist dann strenger als der Alltag und verfälscht jeden Fall mit Shell-Aufrufen. Abhilfe ist die einmalige Bestätigung durch `[NAME]`: Kopie anlegen, darin einmal `claude` interaktiv starten und den Ordner als vertrauenswürdig bestätigen; die Bestätigung gilt je Pfad und überlebt das Löschen der Kopie. Nie selbst in die Konfigurationsdatei des Werkzeugs schreiben, es ist eine Sicherheitseinstellung. (2) Was `claude -p` unter Windows über die PowerShell-Pipeline nach `Out-File` schreibt, kann als UTF-8 in Codepage 850 gelesen ankommen (Umlaute als `Ã¤`); die Auswertung repariert dann jede Zeile mit `s.encode("cp850").decode("utf-8")` und gibt mit `PYTHONIOENCODING=utf-8` aus.
 
 Messhygiene (in der Prüfset-Datei gepflegt): Fantasienamen je Lauf wechseln, weil der Prüfling die Prüfset-Datei per Volltextsuche finden kann; Prompts mit Pfaden ausserhalb des Repos über eine Scratchpad-Datei übergeben (der eigene Guard-Hook blockiert sie sonst im Kommandotext); Fälle, die das Archiv lesen, mit `--add-dir`.
 
@@ -55,7 +60,7 @@ Nach gezielten Fixes: Delta-Lauf nur über die betroffenen Fälle. Nach einem um
 ### 6a. Modellstand des Systems prüfen (seit 3.3)
 Ein System veraltet, wenn die Welt sich weiterdreht und niemand nachsieht. Drei Prüfungen, jede mit Beleg:
 
-1. **Was das System fest eingetragen hat.** `10_System\Modellwahl.md` lesen (dort `gueltig_bis`), dazu per Grep prüfen, ob ein Skript oder eine Konfiguration ein Modell an der Modellwahl vorbei fest einträgt (`grep -rn "claude-[a-z]*-[0-9]" 00_INDEX/scripts .claude`); jede zweite Fundstelle für dieselbe Information wird auf einen Ort zusammengezogen (eine Information hat genau einen Ort, `AGENTS.md` Abschnitt 5).
+1. **Was das System fest eingetragen hat.** `10_System\Modellwahl.md` lesen (dort `gueltig_bis`), dazu per Grep prüfen, ob ein Skript oder eine Konfiguration ein Modell an der Modellwahl vorbei fest einträgt (`grep -rn "claude-[a-z]*-[0-9]" 00_INDEX/scripts .claude`); jede zweite Fundstelle für dieselbe Information wird auf einen Ort zusammengezogen (eine Information hat genau einen Ort, `AGENTS.md` Abschnitt 5). Die Preistabelle in `session-kosten.py` ist keine Modellwahl und bleibt. **Wo ein Skript oder eine Konfiguration ein Modell nennen muss, steht dort das Alias ohne Versionsnummer** (`sonnet`, `opus`, `haiku`; seit 4.3): Es löst auf das aktuelle Modell der Klasse auf und kann deshalb nie auf ein abgekündigtes zeigen. Eine volle Modell-ID an einer solchen Stelle ist ein Befund. Prüfe dabei auch, ob ein Modell, das das System verwendet, ein nahes Abkündigungsdatum hat und dann einen Lauf still lahmlegen würde.
 2. **Was der Anbieter heute hat.** Per Websuche die Modellübersicht und die Abkündigungsliste des Anbieters lesen und gegen den Eintrag halten: Gibt es ein neueres Modell derselben Klasse, ist das eingetragene abgekündigt oder mit Enddatum versehen, hat sich der Preis geändert (dann die Preistabelle in `00_INDEX\scripts\session-kosten.py` nachführen)? Die installierte CLI gegen die aktuelle Version prüft der Health-Check selbst (Kategorie `CLI`).
 3. **Der Befund, immer ausdrücklich.** "Geprüft am <Datum>, aktuell" ist ein Ergebnis und wird in `Modellwahl.md` mit Datum nachgeführt. Gibt es Neueres oder eine Abkündigung: nicht selbst umstellen, sondern als offenen Punkt mit Wiedervorlage verankern (Skill `leo-notiz`), mit Preis, Erscheinungsdatum, Quelle und dem einen Handgriff für den Wechsel. Ein Modellwechsel ändert Preis, Berechtigungen und Verhalten und bleibt die Entscheidung von `[NAME]`.
 
@@ -77,6 +82,7 @@ Prüfset-Datei: Ergebnis als Zahl, Lauf-Datum, `stand:` aktualisieren. Eigene Pf
 ## Regeln
 
 - Anti-Halluzination verschärft: Ein Fall gilt nur als gelaufen, wenn sein JSONL existiert; ein Urteil nennt immer den Beleg. Nie ein Ergebnis aus dem Gedächtnis der bauenden Session ableiten, die Läufe sind bewusst kalt.
+- **Fiktiver Testinhalt kommt nie ins echte Repo, auch nicht vorübergehend** (seit 4.3). Ein Prüffall arbeitet mit erfundenen Eingaben, und ein Prüfling, der sie für echt hält, schreibt sie als Aussage des Besitzers in eine Wissensdatei oder committet eine erfundene Notiz. Ein Rückbau danach genügt nicht, weil im Fenster dazwischen ein automatischer Sync, ein Vault-Backup oder eine parallele Session den Stand übernehmen kann. Deshalb laufen alle Prüffälle in der Wegwerf-Kopie aus `00_INDEX\scripts\pruefkopie.ps1` (Schritt 2), nie im echten Repo.
 - Kein Testartefakt überlebt den Lauf: Was ein Prüffall im Repo, im Archiv, im Memory-Pfad oder ausserhalb hinterlässt, wird noch im selben Schritt zurückgebaut und der Rückbau im Beleg vermerkt.
 - Der Guard-Hook und seine Ausnahmeliste werden für keinen Prüffall angefasst; blockiert er die Messung selbst, wird der Prompt per Datei übergeben, nie die Sperre gelockert.
 - Dieser Skill ändert Regeln, deshalb doppelt: Jede AGENTS.md-Änderung trägt Datum und Anlass, und die Nachmessung gehört zum selben Auftrag, nicht in eine spätere Session.

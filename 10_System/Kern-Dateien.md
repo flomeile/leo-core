@@ -2,8 +2,8 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 4.2
-stand: 2026-10-04
+version: 4.3
+stand: 2026-10-19
 ---
 
 # Kern-Dateien: was ein Update anfassen darf
@@ -30,6 +30,7 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `02_Skills\leo-faktencheck.md` | Arbeits-Skill: Tatsachenbehauptungen gegen Primärquellen prüfen (seit 2.3) |
 | `02_Skills\leo-notiz.md` | Arbeits-Skill: offene Punkte als Status-Block mit Wiedervorlage verankern (seit 2.3) |
 | `02_Skills\leo-first-principles.md` | Arbeits-Skill: Modelle und Prozesse von Grund auf neu denken (seit 2.3) |
+| `02_Skills\leo-inbox-ingest.md` | Arbeits-Skill: Rohquellen aus der Inbox verlustfrei zu Wissensnotizen verarbeiten und ins Belegarchiv legen; wird vorgeschlagen, nie ungefragt gestartet (seit 4.3) |
 | `10_System\Pruefset-Vorlage.md` | Vorlage für das eigene Prüfset; die daraus angelegte `Pruefset.md` gehört dir und wird nie ersetzt (seit 1.18) |
 | `02_Skills\README.md` | Erklärt, was ein Skill ist |
 | `00_INDEX\scripts\build-index-geruest.ps1` | Index-Automatik |
@@ -48,6 +49,7 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\lib\mail_text.py` | HTML-, Text- und Adresshilfen für das Sendeskript (seit 3.4) |
 | `00_INDEX\scripts\lib\google-sheets-fetch.py` | Holt ein Google Sheet als xlsx und Markdown-Tabelle in den Zwischenspeicher, für kopflose Läufe ohne Connector (seit 3.4) |
 | `10_System\Google-Anbindung.md` | Einmalige Einrichtung des Google-Zugangs (Cloud-Projekt, APIs, Nutzertyp, OAuth-Client) und Kurzfassung der Mailregeln (seit 3.4) |
+| `00_INDEX\scripts\pruefkopie.ps1` | Legt die Wegwerf-Kopie an, in der die kalten Prüfläufe laufen, damit erfundener Testinhalt nie ins echte Repo gelangt (Skill `leo-system-optimierung`, Schritt 2; seit 4.3) |
 | `00_INDEX\scripts\session-kosten.py` | Misst den Verbrauch aller lokalen Claude-Code-Sessions zu Listenpreisen und liefert dem Health-Check die Ausreisser (Abschnitt 13, seit 3.3); die Berichtsdatei, die dabei entsteht (`00_INDEX\session-kosten.md`), gehört dir |
 | `00_INDEX\scripts\weekly-diagnose.ps1` | Unbeaufsichtigte Wochendiagnose; bei jedem Lauf entsteht `10_System\health-check-report.txt`, und diese Berichtsdatei gehört dir (seit 1.19) |
 | `00_INDEX\githooks\pre-commit` | Schutz vor beschädigten Commits |
@@ -70,7 +72,7 @@ Diese Dateien sind Mechanik, tragen aber zwingend etwas von dir. Ein Update darf
 | `CLAUDE.md` | Die `@`-Importzeilen, die auf deine Basiskontext-Dateien zeigen |
 | `GEMINI.md` | dasselbe |
 | `.clinerules` | dasselbe, hier als textliche Leseanweisung statt als Import |
-| `.claude\settings.json` | Hängt die vier Sperren ein (Arbeitsbereich, seit 3.3 pauschales Stagen, seit 3.4 Mailversand, seit 3.8 Lesen von Zugangsdaten und gesperrten Pfaden) und bringt seit 3.8 Lese-Verbote für Schlüsseldateien unter `permissions.deny` mit. Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf (auch die mitgelieferten `permissions.deny`-Zeilen ergänzt ein Update nicht nachträglich, du übernimmst sie selbst); unter macOS/Linux ausserdem der ausgeschriebene `pwsh`-Pfad in den Hook-Befehlen (`ANLEITUNG.md`, Teil 5, Schritt 7a) |
+| `.claude\settings.json` | Hängt die vier Sperren ein (Arbeitsbereich, seit 3.3 pauschales Stagen, seit 3.4 Mailversand, seit 3.8 Lesen von Zugangsdaten und gesperrten Pfaden) und bringt seit 3.8 Lese-Verbote für Schlüsseldateien unter `permissions.deny` mit, seit 4.3 das Standardmodell `"model": "sonnet"` (`AGENTS.md`, Abschnitt 13; wer ein anderes will, setzt es in `.claude\settings.local.json`, die Vorrang hat und die kein Update anfasst). Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf (auch die mitgelieferten `permissions.deny`-Zeilen ergänzt ein Update nicht nachträglich, du übernimmst sie selbst); unter macOS/Linux ausserdem der ausgeschriebene `pwsh`-Pfad in den Hook-Befehlen (`ANLEITUNG.md`, Teil 5, Schritt 7a) |
 | `.codex\hooks.json` | Hängt dieselben Sperren in Codex ein (seit 3.2). Dein Anteil ist der ausgeschriebene Pfad zu deinem Repo, den ein Update nie durch den Platzhalter zurückersetzt, dazu eigene weitere Hooks |
 | `.github\copilot-instructions.md` | dasselbe |
 | `ANLEITUNG.md` | Nichts, solange du sie nicht ergänzt hast. Wenn doch, gilt sie als deine Datei |

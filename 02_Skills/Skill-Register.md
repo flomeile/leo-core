@@ -2,8 +2,8 @@
 titel: Skill-Register
 zweck: Zentrale Liste aller Skills mit Trigger-Wort und Dateipfad
 type: skill-register
-version: 4.2
-letzte_aenderung: 2026-10-04
+version: 4.3
+letzte_aenderung: 2026-10-19
 ---
 
 # Skill-Register
@@ -26,9 +26,10 @@ Namenskonvention: Alle Skill-Dateien tragen das Präfix `leo-`. Das macht sichtb
 | Leo Faktencheck | "faktencheck", "fakten prüfen", "fakten checken", "stimmt das", "verifizieren", "quellen prüfen", "belege prüfen" | 02_Skills/leo-faktencheck.md | Jede überprüfbare Tatsachenbehauptung in einem Text einzeln gegen Primärquellen (Websuche) prüfen, Urteil je Behauptung (bestätigt/veraltet/ungenau/nicht verifizierbar/falsch) mit Quelle, korrigierten Entwurf anbieten | ein ausgehender Text trägt Zahlen, Zitate, Namen, Preise, Rankings oder Superlative |
 | Leo Notiz | "notiere an geeigneter stelle", "an geeigneter stelle notieren", "notier das", "nicht vergessen", "merk dir das" | 02_Skills/leo-notiz.md | Einen offenen Punkt so im Repo verankern, dass er mechanisch wiederkommt statt im Chat zu sterben: zuständige Datei finden, gegen Bestehendes prüfen, Status-Block mit Owner, nächstem Zug und Wiedervorlage-Datum setzen | im Gespräch entsteht ein offener Punkt, eine Frist oder eine Zusage ohne Ort mit Datum, auch wenn niemand von Notieren spricht |
 | Leo First Principles | "first principles", "first-principles", "dekonstruiere das", "von grund auf neu denken", "fundamental hinterfragen" | 02_Skills/leo-first-principles.md | Ein bestehendes Modell, einen Prozess oder eine Branchenlösung auf fundamentale Wahrheiten dekonstruieren und von Null neu aufbauen (Dekonstruktion, Annahmen-Check, Neuaufbau, Implementierung), Abschluss immer mit konkretem erstem Zug | ein "das haben wir immer so gemacht", ein unerklärter Kosten- oder Zeitblock oder eine Make-or-Buy-Frage taucht auf |
+| Leo Inbox-Ingest | "ingest", "ingesten", "inbox verarbeiten", "verarbeite die inbox", "übernimm das ins repo" | 02_Skills/leo-inbox-ingest.md | Rohquellen aus 90_Inbox (PDF, Scans, Office-Dateien, Mails, Screenshots) ohne Informationsverlust und ohne Halluzination in konsolidierte Wissensnotizen überführen, offene Punkte gesammelt mit je drei Lösungsvorschlägen vorlegen, Rohquellen danach ins Belegarchiv verschieben | in 90_Inbox liegen unverarbeitete Dateien, oder der Besitzer liefert Rohmaterial mit Dauerwert (PDF, Mail, Screenshot, eingefügter Text); vorschlagen, nie ungefragt starten |
 
 ## Regel
 Wenn ein neuer Skill gebaut wird (via Skill-Ersteller), wird diese Tabelle ergänzt. Trigger-Worte müssen eindeutig bleiben. Neue Skill-Dateien tragen immer das Präfix `leo-`.
 
 ## Hinweis für den Aufbau
-Dies ist die Grundausstattung des Kerns: sechs Kern-Skills für die Mechanik plus vier Arbeits-Skills (Voice-Check, Faktencheck, Notiz, First Principles), die von selbst anspringen, wenn ihre Situation eintritt. Weitere Skills (z.B. ein Inbox-Ingest für Rohquellen oder ein Wochenbriefing) baust du dir bei Bedarf selbst über den Skill-Ersteller ("skill erstellen"). Der Ersteller-Skill trägt die Norm dafür.
+Dies ist die Grundausstattung des Kerns: sechs Kern-Skills für die Mechanik plus vier Arbeits-Skills (Voice-Check, Faktencheck, Notiz, First Principles), die von selbst anspringen, wenn ihre Situation eintritt, und seit 4.3 der Inbox-Ingest, der vorgeschlagen und nie ungefragt gestartet wird. Weitere Skills (z.B. ein Wochenbriefing) baust du dir bei Bedarf selbst über den Skill-Ersteller ("skill erstellen"). Der Ersteller-Skill trägt die Norm dafür.
