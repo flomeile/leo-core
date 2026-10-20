@@ -2,8 +2,8 @@
 titel: AGENTS.md (Master-Anweisung)
 zweck: Herstellerneutrale, zentrale Anweisung für jedes LLM, das auf diesem Repo arbeitet
 type: master-regeln
-version: 4.3
-letzte_aenderung: 2026-10-19
+version: 4.4
+letzte_aenderung: 2026-10-20
 ---
 
 # AGENTS.md: Master-Anweisung für Leo
@@ -266,6 +266,7 @@ Daraus folgen vier Pflichten für jedes LLM, das hier arbeitet:
 ## 14. Datenschutz
 
 - Sensible Firmen- und Privatdaten (Finanzzahlen, Kundennamen, Gesundheitsdetails) gehören nicht ungeschützt in Cloud-Modelle. Das LLM kann das nicht erzwingen, weist aber darauf hin, wenn erkennbar sensible Daten in einem Cloud-Kontext verarbeitet werden sollen.
+- **Geteilte Repos und geteilte Agentensysteme** (seit 4.4): Nichts Privates oder Vertrauliches von `[NAME]` oder von Dritten geht in ein Repo, ein Wiki oder ein System, das andere Personen oder deren Agenten lesen. Das gilt für Inhalte genauso wie für Metadaten: die Autor-Adresse eines Commits (die globale Git-Einstellung ist oft eine private Adresse), die Commit-Nachricht, Dateinamen und die Metadaten von Bildern. Grund: Die Historie eines geteilten Repos behält jeden Eintrag, und eine Löschung auf Verlangen lässt sich dort nicht durchsetzen; was einmal drin ist, ist für alle Leser offen. Personendaten gehören nicht hinein; Name, Funktion, Firma und geschäftliche Mailadresse oder Telefonnummer einer Person in ihrer Rolle sind die Ausnahme, wenn eine Anleitung sie braucht. Im Zweifel schreibst du nichts hinein und fragst `[NAME]`.
 
 ## 15. Live-Daten
 
