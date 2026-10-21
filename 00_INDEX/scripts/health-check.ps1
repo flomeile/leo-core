@@ -30,6 +30,12 @@ $results = New-Object System.Collections.Generic.List[PSCustomObject]
 # stand: oder tote Links geprueft. Identisch zu $excludeDirs in build-index-geruest.ps1
 # und zu is_fm_exempt() im pre-commit-Hook zu halten.
 $excludedDirPattern = '\\\.(git|obsidian|claude|agents|gemini|cursor|cline|opencode|github)\\'
+# Eingehaengte geteilte Repos (Ordner mit eigenem .git, Skill leo-repo-einhaengen, seit 4.5) gehoeren anderen und werden
+# nie als eigene Dateien geprueft; ihre Absicherung prueft die Kategorie "Eingehaengte Repos" weiter unten.
+. (Join-Path $PSScriptRoot 'lib\eingehaengt-ausschluss.ps1')
+$EingehaengteOrdner = @(Get-EingehaengteOrdner $repo)
+$ehMuster = Get-EingehaengtMuster
+if ($ehMuster) { $excludedDirPattern = '(?:' + $excludedDirPattern + '|' + $ehMuster + ')' }
 
 function Add-Check([string]$Level, [string]$Category, [string]$Message) {
     $results.Add([PSCustomObject]@{ Level = $Level; Category = $Category; Message = $Message })
@@ -297,7 +303,7 @@ foreach ($t in $themen) {
     if (-not (Test-Path $idx)) { continue }
 
     $onDisk = Get-ChildItem -Path $t.FullName -Recurse -File -Filter "*.md" |
-        Where-Object { $excludedMeta -notcontains $_.Name } |
+        Where-Object { $excludedMeta -notcontains $_.Name -and -not (Test-EingehaengtPfad $_.FullName) } |
         ForEach-Object { $_.FullName.Substring($t.FullName.Length + 1).Replace('\', '/') } |
         Where-Object {
             $rel = "$($t.Name)/$_"
@@ -812,7 +818,7 @@ if ($registerSlugs.Count -eq 0) {
 # einfach auf zu wirken. Zulaessig ist deshalb beides: BOM oder durchgehend ASCII.
 $psBad = @()
 foreach ($ps in (Get-ChildItem -Path $repo -Recurse -Filter "*.ps1" -File -ErrorAction SilentlyContinue |
-                 Where-Object { $_.FullName -notmatch '\\\.git\\' })) {
+                 Where-Object { $_.FullName -notmatch '\\\.git\\' -and -not (Test-EingehaengtPfad $_.FullName) })) {
     $bytes = [System.IO.File]::ReadAllBytes($ps.FullName)
     $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
     if ($hasBom) { continue }
@@ -1742,6 +1748,54 @@ if (Test-Path -LiteralPath $meinSystemPfad) {
     Add-Check "WARN" $cat "MEIN-SYSTEM.md fehlt im Root. Die persoenliche Ebene (Name, Pfade, eigene Regeln, eingespielte Version) hat damit keinen Ort."
 }
 Write-Output "Mein-System-Check erledigt."
+Write-Output ""
+
+
+# ---------------------------------------------------------------------------
+# EINGEHAENGTE REPOS (geteilte Repos als Unterordner, Skill leo-repo-einhaengen, seit 4.5)
+# ---------------------------------------------------------------------------
+# Ein eingehaengtes Repo ohne Sperrbegriff-Hook, nicht ignoriert oder mit privater Git-Adresse ist ein FAIL:
+# Was einmal in einem geteilten Repo steht, ist fuer alle Leser offen (AGENTS.md, Abschnitt 14). Typischer Fall:
+# Das Repo wurde von Hand geklont und das Einrichtungsskript lief nie.
+$cat = "Eingehaengte Repos"
+if ($EingehaengteOrdner.Count -gt 0) {
+    $ehListe = if ($env:LEO_WISSENSREPO_SPERRBEGRIFFE) { $env:LEO_WISSENSREPO_SPERRBEGRIFFE } else { Join-Path $PSScriptRoot 'lib\wissensrepo-sperrbegriffe.txt' }
+    $ehRe = $null
+    if (Test-Path -LiteralPath $ehListe) {
+        $ehBegr = @(Get-Content -LiteralPath $ehListe -Encoding UTF8 | ForEach-Object { $_.TrimEnd("`r") } | Where-Object { $_.Trim() -ne '' -and -not $_.StartsWith('#') })
+        if ($ehBegr.Count) { $ehRe = '(?i)(?<![\p{L}\p{N}])(?:' + (($ehBegr | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')' }
+    }
+    if (-not $ehRe) { Add-Check "FAIL" $cat "Sperrbegriff-Liste fehlt oder ist leer ($ehListe): Der Hook blockiert damit jeden Commit in eingehaengten Repos. Keimdatei aus dem Grundgeruest wiederherstellen und ergaenzen." }
+    foreach ($eh in $EingehaengteOrdner) {
+        $ehRel = $eh.Substring($repo.Length + 1).Replace('\', '/')
+        $ehBef = @()
+        $ehHooks = @('pre-commit', 'commit-msg', 'pre-push' | Where-Object {
+            $p = Join-Path $eh ".git\hooks\$_"
+            (Test-Path -LiteralPath $p) -and ((Get-Content -Raw -LiteralPath $p) -match 'eingehaengtes-repo-einrichten\.ps1')
+        })
+        if ($ehHooks.Count -lt 3) { $ehBef += "Sperrbegriff-Hook fehlt ($($ehHooks.Count) von 3)" }
+        git -C $repo check-ignore -q $ehRel 2>$null
+        if ($LASTEXITCODE -ne 0) { $ehBef += 'im eigenen Repo nicht ignoriert' }
+        if (git -C $repo ls-files -- $ehRel 2>$null) { $ehBef += 'im eigenen Repo versioniert' }
+        $ehMail = [string](git -C $eh config user.email 2>$null)
+        if (-not $ehMail) { $ehBef += 'keine Git-Adresse gesetzt' }
+        elseif ($ehRe -and $ehMail -match $ehRe) { $ehBef += "private Git-Adresse ($ehMail)" }
+        if ($ehBef.Count) {
+            Add-Check "FAIL" $cat ("{0}: {1}. Nicht darin arbeiten, bis behoben: pwsh -File 00_INDEX\scripts\eingehaengtes-repo-einrichten.ps1 -Ordner `"{0}`" -Email `"<geschaeftliche Adresse>`" (Skill leo-repo-einhaengen)." -f $ehRel, ($ehBef -join ', '))
+            continue
+        }
+        $ehAgents = Join-Path $eh 'AGENTS.md'
+        $ehText = if (Test-Path -LiteralPath $ehAgents) { Get-Content -Raw -LiteralPath $ehAgents -Encoding UTF8 } else { '' }
+        if ($ehText -notmatch '(?im)\b(Owner|Besitzer)\b\*{0,2}\s*:' -or $ehText -notmatch '(?im)\b(Mode|Modus)\b\*{0,2}\s*:') {
+            Add-Check "WARN" $cat "${ehRel}: Die AGENTS.md des Repos nennt keinen Owner oder keinen Modus. Dann gilt 'Zweige mit Freigabe' (AGENTS.md, Abschnitt 12); die fehlende Zeile beim Owner als Pull Request vorschlagen."
+        } else {
+            Add-Check "OK" $cat "${ehRel}: gesichert (Hooks 3 von 3, ignoriert, geschaeftliche Git-Adresse, Owner und Modus genannt)."
+        }
+    }
+} else {
+    Add-Check "OK" $cat "Keine eingehaengten Repos."
+}
+Write-Output "Eingehaengte-Repos-Check erledigt."
 Write-Output ""
 
 

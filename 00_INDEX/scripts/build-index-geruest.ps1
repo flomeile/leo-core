@@ -27,6 +27,10 @@ $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 # Skill-Zeiger darin (AGENTS.md Abschnitt 11a): Konfiguration, kein Wissen.
 $excludeDirs = @(".git", ".obsidian", ".claude", ".agents", ".gemini", ".cursor", ".cline", ".opencode", ".github")
 $metaNames = @("INDEX.md", "INDEX-Geruest.md", "_INDEX.md")
+# Eingehaengte geteilte Repos (Ordner mit eigenem .git, Skill leo-repo-einhaengen, seit 4.5) gehoeren anderen:
+# ihr Inhalt erscheint nie im eigenen Index.
+. (Join-Path $PSScriptRoot 'lib\eingehaengt-ausschluss.ps1')
+$EingehaengteOrdner = @(Get-EingehaengteOrdner $repo)
 $now = Get-Date -Format "yyyy-MM-dd HH:mm"
 
 # --- Hilfsfunktionen ---------------------------------------------------------
@@ -61,7 +65,7 @@ function Add-FileTree {
             $out.Add("$indent- $($f.Name)")
         }
     }
-    $dirs = Get-ChildItem -Path $dirPath -Directory | Where-Object { $excludeDirs -notcontains $_.Name } | Sort-Object Name
+    $dirs = Get-ChildItem -Path $dirPath -Directory | Where-Object { $excludeDirs -notcontains $_.Name -and -not (Test-EingehaengtPfad $_.FullName) } | Sort-Object Name
     foreach ($d in $dirs) {
         $out.Add("$indent- $($d.Name)\")
         Add-FileTree -dirPath $d.FullName -depth ($depth + 1) -out $out -withMeta $withMeta
@@ -71,9 +75,9 @@ function Add-FileTree {
 function Add-DirTree {
     # Haengt einen reinen Ordnerbaum (mit Anzahl .md-Dateien je Ordner, rekursiv gezaehlt) an $out an.
     param([string]$dirPath, [int]$depth, [System.Collections.Generic.List[string]]$out)
-    $dirs = Get-ChildItem -Path $dirPath -Directory | Where-Object { $excludeDirs -notcontains $_.Name } | Sort-Object Name
+    $dirs = Get-ChildItem -Path $dirPath -Directory | Where-Object { $excludeDirs -notcontains $_.Name -and -not (Test-EingehaengtPfad $_.FullName) } | Sort-Object Name
     foreach ($d in $dirs) {
-        $count = @(Get-ChildItem -Path $d.FullName -Recurse -File -Filter "*.md" | Where-Object { $metaNames -notcontains $_.Name }).Count
+        $count = @(Get-ChildItem -Path $d.FullName -Recurse -File -Filter "*.md" | Where-Object { $metaNames -notcontains $_.Name -and -not (Test-EingehaengtPfad $_.FullName) }).Count
         $indent = "  " * $depth
         $out.Add("$indent- $($d.Name)\  ($count Dateien)")
         Add-DirTree -dirPath $d.FullName -depth ($depth + 1) -out $out
@@ -112,7 +116,7 @@ function Set-AutoBlock([string]$file, [string]$blockName, [string[]]$bodyLines) 
 # --- 1) INDEX-Geruest.md -----------------------------------------------------
 
 $allFiles = @(Get-ChildItem -Path $repo -Recurse -File -Filter "*.md" |
-    Where-Object { $_.FullName -notmatch "\\\.(git|obsidian|claude)\\" -and $metaNames -notcontains $_.Name })
+    Where-Object { $_.FullName -notmatch "\\\.(git|obsidian|claude)\\" -and $metaNames -notcontains $_.Name -and -not (Test-EingehaengtPfad $_.FullName) })
 
 $g = New-Object System.Collections.Generic.List[string]
 $g.Add("---")

@@ -14,7 +14,7 @@ Im frischen Kern ist die Themenbereichs-Liste leer, bis du den ersten Themenordn
 
 ## Ordnerbaum (mechanisch aktuell)
 <!-- AUTO:BAUM:BEGIN -->
-Stand: 2026-10-20 08:46 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
+Stand: 2026-10-21 14:56 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
 
 - .codex\  (0 Dateien)
 - 00_INDEX\  (1 Dateien)
@@ -22,7 +22,7 @@ Stand: 2026-10-20 08:46 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unt
   - scripts\  (0 Dateien)
     - lib\  (0 Dateien)
 - 01_Basiskontext\  (4 Dateien)
-- 02_Skills\  (13 Dateien)
+- 02_Skills\  (14 Dateien)
 - 03_Sessionlogs\  (1 Dateien)
 - 04_Changelog\  (2 Dateien)
 - 10_System\  (11 Dateien)
@@ -67,6 +67,7 @@ Diese Liste zeigt nur Rolle und Pfade, KEINE Datei-Beschreibungen. Die eigentlic
 - **02_Skills\leo-notiz.md** — Verankert einen offenen Punkt so im Repo, dass er wiederkommt: zuständige Datei suchen, Duplikate und Widersprüche prüfen, Status-Block mit Owner, nächstem Zug und Wiedervorlage-Datum setzen, stand: und Index nachziehen.
 - **02_Skills\leo-first-principles.md** — Dekonstruiert ein Modell, einen Prozess oder eine Branchenlösung auf fundamentale Grundwahrheiten und baut von Null neu auf (Dekonstruktion, Annahmen-Check, Neuaufbau, Barrieren, Prototyp-Test), endet immer mit einem konkreten ersten Zug samt Zeithorizont.
 - **02_Skills\leo-inbox-ingest.md** — Verarbeitet Rohquellen aus 90_Inbox (PDF, Scans, Office-Dateien, Mails, URLs, eingefügte Texte) ohne Informationsverlust zu Wissensnotizen (Trigger "ingest"): vollständig lesen, gegen den Bestand abgleichen, zuordnen, konsolidieren, Verifikationspass an der Rohquelle, Kreuzprüfung von Zahlen, offene Fragen mit je drei Vorschlägen, Rohquelle danach ins Belegarchiv. Wird vorgeschlagen, nie ungefragt gestartet.
+- **02_Skills\leo-repo-einhaengen.md** — Hängt ein geteiltes Wissensrepo (Anleitungen, Regeln, Kontext eines Teams) als Ordner in einen Themenordner ein (Trigger "repo einhängen", "repo synchronisieren"): Owner-Weg mit Klon, Fork-Weg für die Rolle Read, Einrichtung mit Sperrbegriff-Hook und geschäftlicher Git-Adresse, Stand abgleichen, Änderungen nur per Pull Request, zusammengeführt wird nie vom Agenten.
 
 ### 03_Sessionlogs / 04_Changelog
 

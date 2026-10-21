@@ -1,0 +1,145 @@
+#!/bin/sh
+# ---------------------------------------------------------------------------
+# Sperrbegriff-Hook fuer eingehaengte Repos (seit Leo Core 4.5, Skill leo-repo-einhaengen)
+#
+# Zweck: Dein Assistent hat deinen persoenlichen Kontext geladen und schreibt in ein geteiltes Repo,
+# das andere Personen und deren Agenten lesen. Die Historie eines geteilten Repos vergisst nichts.
+# Dieser Hook ist eine von mehreren Sicherungen (Regel in AGENTS.md Abschnitt 14, Merge nur durch den
+# Owner des geteilten Repos, Pruefung jedes Pull Requests durch ihn) und blockiert ueber DEINE Liste
+# 00_INDEX/scripts/lib/wissensrepo-sperrbegriffe.txt. Die Liste gehoert dir und liegt nie im geteilten Repo.
+#
+# DREI AUFRUFARTEN (Argument 1), je eine Stub-Datei in .git/hooks des eingehaengten Repos, die
+# 00_INDEX/scripts/eingehaengtes-repo-einrichten.ps1 anlegt:
+#   commit  (pre-commit)  neu hinzugefuegte Zeilen, Dateinamen, Autor- und Committer-Adresse, Binaerdateien
+#   msg     (commit-msg)  die Commit-Nachricht (Argument 2: Datei mit der Nachricht)
+#   push    (pre-push)    ALLE noch nicht gepushten Commits: Diff (auch entfernte Zeilen, denn die Historie
+#                         behaelt sie), Nachrichten, Autoren, Dateinamen, Binaerdateien. Das faengt auch Commits,
+#                         die mit --no-verify oder in einem anderen Werkzeug entstanden sind.
+#
+# ZUSCHNITT: Bei einem Treffer wird BLOCKIERT, und der Hook schlaegt auch zu, wenn Werkzeug oder Liste fehlen
+# (fail closed). Ein Leak in ein geteiltes Repo ist nicht rueckholbar. Binaerdateien (Bilder, PDFs) sind nicht
+# pruefbar und werden blockiert, bis eine Person sie angesehen hat (sichtbare Namen, Bildmetadaten):
+# danach LEO_BINAER_GEPRUEFT=1 git commit / git push. Ein Assistent setzt das nie von sich aus.
+#
+# GESCHWINDIGKEIT: Die Liste wird einmal in eine Mustervorlage umgewandelt und mit je EINEM grep-Lauf gehalten.
+# Ein Lauf je Begriff waere unter Windows (Prozessstart) zu langsam.
+#
+# NOTAUSGANG: --no-verify. Das ist die Entscheidung des Besitzers, nie die des LLM; der Push-Hook faengt es trotzdem.
+#
+# Vergleich ohne Gross-/Kleinschreibung, am Wortanfang ("Lohn" trifft "Lohnband", nicht "belohnen").
+# ASCII-only mit Absicht (Konsolen mit unbekannter Codepage).
+# ---------------------------------------------------------------------------
+
+mode="${1:-commit}"
+case "$mode" in
+    commit|msg|push) ;;
+    *) echo "[Sperrbegriff-Hook] FEHLER: unbekannte Aufrufart '$mode'."; exit 1 ;;
+esac
+
+for tool in git grep sed tr mktemp dirname sort cut; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "[Sperrbegriff-Hook] FEHLER: '$tool' nicht gefunden, $mode blockiert."
+        exit 1
+    fi
+done
+
+list="${LEO_WISSENSREPO_SPERRBEGRIFFE:-}"
+if [ -z "$list" ]; then
+    here=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)
+    list="$here/../scripts/lib/wissensrepo-sperrbegriffe.txt"
+fi
+if [ ! -f "$list" ]; then
+    echo "[Sperrbegriff-Hook] FEHLER: Sperrbegriff-Liste nicht gefunden: $list"
+    echo "Blockiert, weil ohne Liste nichts geprueft wuerde."
+    exit 1
+fi
+
+tmp=$(mktemp) || exit 1
+trap 'rm -f "$tmp" "$tmp.pats" "$tmp.names" "$tmp.hits" "$tmp.ident" "$tmp.revs" "$tmp.bin"' EXIT
+
+# Liste -> Mustervorlage: Kommentare und Leerzeilen weg, Sonderzeichen maskieren, Wortanfang davor.
+sed -e 's/\r$//' -e '/^[[:space:]]*$/d' -e '/^#/d' \
+    -e 's,[][\.*^$()+?{}|/],\\&,g' -e 's,^,(^|[^[:alnum:]]),' "$list" > "$tmp.pats"
+if [ ! -s "$tmp.pats" ]; then
+    echo "[Sperrbegriff-Hook] FEHLER: Sperrbegriff-Liste ist leer: $list"
+    exit 1
+fi
+: > "$tmp.hits"
+
+# scan <datei> <bezeichnung>: Treffer samt Beispielzeilen in die Trefferdatei.
+# grep -a: Eine Datei mit ungueltigem UTF-8 (z.B. Latin-1) liesse grep sonst "Binary file matches" ausgeben
+# statt der Zeilen, und die Pruefung liefe ins Leere.
+scan() {
+    h=$(grep -a -i -E -o -f "$tmp.pats" "$1" 2>/dev/null | sed 's/^[^[:alnum:]]//' | sort -u)
+    if [ -n "$h" ]; then
+        echo "  $2: $(printf '%s' "$h" | tr '\n' ',' | sed 's/,$//; s/,/, /g')" >> "$tmp.hits"
+        grep -a -i -E -n -m3 -f "$tmp.pats" "$1" | cut -c1-110 | sed 's/^/    Zeile /' >> "$tmp.hits"
+    fi
+}
+
+: > "$tmp.bin"
+
+case "$mode" in
+commit)
+    # Hinzugefuegte Zeilen nur innerhalb der Hunks (nach @@), damit eine Inhaltszeile "++ ..." nicht als
+    # Dateikopf "+++ b/..." wegfaellt.
+    git -c core.quotePath=false diff --cached --no-color --no-ext-diff --no-textconv -U0 --diff-filter=ACMR 2>/dev/null \
+        | sed -n '/^diff --git /,/^@@/!{/^+/p;}' > "$tmp"
+    git -c core.quotePath=false diff --cached --name-only --diff-filter=ACMR 2>/dev/null > "$tmp.names"
+    { git var GIT_AUTHOR_IDENT; git var GIT_COMMITTER_IDENT; } > "$tmp.ident" 2>/dev/null
+    git -c core.quotePath=false diff --cached --numstat --diff-filter=ACMR 2>/dev/null \
+        | grep -a -E '^-[[:space:]]+-[[:space:]]' | sed 's/^-[[:space:]]*-[[:space:]]*//' > "$tmp.bin"
+    scan "$tmp" "Im Inhalt"
+    scan "$tmp.names" "Im Dateinamen"
+    scan "$tmp.ident" "In Autor- oder Committer-Adresse"
+    ;;
+msg)
+    if [ -z "$2" ] || [ ! -f "$2" ]; then
+        echo "[Sperrbegriff-Hook] FEHLER: Datei mit der Commit-Nachricht fehlt."
+        exit 1
+    fi
+    sed '/^#/d' "$2" > "$tmp"
+    scan "$tmp" "In der Commit-Nachricht"
+    ;;
+push)
+    zero=0000000000000000000000000000000000000000
+    : > "$tmp.revs"
+    while read -r lref lsha rref rsha; do
+        [ -z "$lsha" ] && continue
+        [ "$lsha" = "$zero" ] && continue
+        # Geprueft wird, was auf keinem bekannten Remote liegt. Commits, die schon im Original (upstream) stehen,
+        # sind dort ohnehin fuer alle lesbar; ohne diesen Ausschluss blockierte das Nachziehen des eigenen Forks
+        # an Inhalten anderer, die zufaellig einen Begriff der eigenen Liste tragen.
+        git rev-list "$lsha" --not --remotes >> "$tmp.revs" 2>/dev/null || git rev-list "$lsha" >> "$tmp.revs" 2>/dev/null
+    done
+    sort -u "$tmp.revs" -o "$tmp.revs"
+    if [ ! -s "$tmp.revs" ]; then exit 0; fi
+    git -c core.quotePath=false log --no-walk=unsorted --stdin -p --no-color --no-ext-diff --no-textconv -U0 \
+        --format='COMMIT %H%nAUTHOR %an <%ae>%nCOMMITTER %cn <%ce>%n%B' < "$tmp.revs" > "$tmp" 2>/dev/null
+    git -c core.quotePath=false log --no-walk=unsorted --stdin --name-only --format= < "$tmp.revs" > "$tmp.names" 2>/dev/null
+    git -c core.quotePath=false log --no-walk=unsorted --stdin --numstat --format= < "$tmp.revs" 2>/dev/null \
+        | grep -a -E '^-[[:space:]]+-[[:space:]]' | sed 's/^-[[:space:]]*-[[:space:]]*//' > "$tmp.bin"
+    scan "$tmp" "In den Commits (Inhalt, Nachrichten, Autoren)"
+    scan "$tmp.names" "In Dateinamen"
+    ;;
+esac
+
+binary=$(cat "$tmp.bin")
+if [ -n "$binary" ]; then
+    if [ "${LEO_BINAER_GEPRUEFT:-}" = "1" ]; then
+        echo "[Sperrbegriff-Hook] HINWEIS: Binaerdateien nicht maschinell geprueft, eine Person hat sie bestaetigt:"
+        printf '%s\n' "$binary" | sed 's/^/  /'
+    else
+        echo "  Binaerdateien sind nicht pruefbar (sichtbare Namen, Bildmetadaten):" >> "$tmp.hits"
+        printf '%s\n' "$binary" | sed 's/^/    /' >> "$tmp.hits"
+    fi
+fi
+
+if [ -s "$tmp.hits" ]; then
+    echo "[Sperrbegriff-Hook] $mode blockiert. Das darf nicht in ein geteiltes Repo:"
+    cat "$tmp.hits"
+    echo "Den Text aendern, die Datei weglassen oder den Besitzer fragen. Privates und Vertrauliches gehoert nie in ein geteiltes Repo."
+    echo "Binaerdatei von einer Person geprueft: LEO_BINAER_GEPRUEFT=1 vor den Befehl setzen. Umgehen nur auf Ansage des Besitzers: --no-verify."
+    exit 1
+fi
+exit 0

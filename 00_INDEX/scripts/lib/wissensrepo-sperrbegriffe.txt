@@ -1,0 +1,62 @@
+# Sperrbegriffe für eingehängte, geteilte Repos (Skill leo-repo-einhaengen, seit Leo Core 4.5).
+# Diese Datei gehört dir; das Grundgerüst liefert nur die Keimdatei, ein Update ersetzt sie nie
+# (10_System\Kern-Dateien.md, Kategorie B). Sie liegt nie im geteilten Repo, weil sie selbst heikle Begriffe nennt.
+#
+# Gelesen vom Hook 00_INDEX/githooks/eingehaengt-pre-commit (Commit, Commit-Nachricht, Push) und vom
+# Einrichtungsskript (prüft deine Git-Adresse). Ein Begriff je Zeile, Vergleich ohne Gross-/Kleinschreibung,
+# am Wortanfang ("Lohn" trifft "Lohnband", nicht "belohnen"). Ein Treffer blockiert.
+#
+# Das ist das zweite Netz gegen das Offensichtliche. Das erste ist die Regel (AGENTS.md, Abschnitt 14: nichts
+# Privates oder Vertrauliches in ein geteiltes Repo, auch nicht in Metadaten) und die Prüfung jedes Pull Requests
+# durch den Owner des geteilten Repos. Ergänze hier, was es bei dir gibt: die Namen deiner privaten Themenordner,
+# die Anbieter deiner privaten Mailadressen, Begriffe aus deinem Leben, die in keine Firmenanleitung gehören.
+# Meide Wörter, die in Anleitungen legitim vorkommen: Eine Liste, die ständig grundlos blockiert, wird umgangen.
+
+# Marker deines eigenen Systems: ein Text, der sie enthält, zitiert dein Second Brain
+01_Basiskontext
+03_Sessionlogs
+MEIN-SYSTEM.md
+Sessionlog
+Second Brain
+Belegarchiv
+
+# Private Mailanbieter: eine solche Adresse gehört nie als Autor oder Inhalt in ein geteiltes Repo
+gmail.com
+googlemail.com
+gmx.
+web.de
+outlook.com
+hotmail.
+icloud.com
+yahoo.
+proton.me
+protonmail.
+
+# Zugangsdaten
+-----BEGIN
+github_pat_
+ghp_
+sk-ant-
+api_key
+apikey
+client_secret
+passwort:
+password:
+password=
+
+# Vertraulichkeitsmarker
+vertraulich
+confidential
+nicht weitergeben
+
+# Personal und Persönliches (Beispiele; an dein Umfeld anpassen)
+Lohnabrechnung
+Gehaltsabrechnung
+Abmahnung
+Kündigungsgrund
+Arztzeugnis
+Arztbericht
+Krankschreibung
+Privatadresse
+Privatnummer
+Geburtsdatum

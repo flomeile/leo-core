@@ -2,8 +2,8 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 4.4
-stand: 2026-10-20
+version: 4.5
+stand: 2026-10-21
 ---
 
 # Kern-Dateien: was ein Update anfassen darf
@@ -31,6 +31,11 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `02_Skills\leo-notiz.md` | Arbeits-Skill: offene Punkte als Status-Block mit Wiedervorlage verankern (seit 2.3) |
 | `02_Skills\leo-first-principles.md` | Arbeits-Skill: Modelle und Prozesse von Grund auf neu denken (seit 2.3) |
 | `02_Skills\leo-inbox-ingest.md` | Arbeits-Skill: Rohquellen aus der Inbox verlustfrei zu Wissensnotizen verarbeiten und ins Belegarchiv legen; wird vorgeschlagen, nie ungefragt gestartet (seit 4.3) |
+| `02_Skills\leo-repo-einhaengen.md` | Arbeits-Skill: ein geteiltes Wissensrepo als Ordner einhängen (Owner klont, alle anderen forken), absichern, abgleichen, Änderungen per Pull Request vorschlagen (seit 4.5) |
+| `00_INDEX\scripts\eingehaengtes-repo-einrichten.ps1` | Richtet ein eingehängtes Repo ein: Eintrag in der `.gitignore`, geschäftliche Git-Identität, drei Hook-Stubs, Selbsttest (seit 4.5) |
+| `00_INDEX\githooks\eingehaengt-pre-commit` | Sperrbegriff-Hook für eingehängte Repos (Commit, Commit-Nachricht, Push), liest deine Liste `lib\wissensrepo-sperrbegriffe.txt`; wirkt nur in den eingehängten Repos, nicht in deinem eigenen (seit 4.5) |
+| `00_INDEX\scripts\lib\eingehaengt-ausschluss.ps1` | Findet eingehängte Repos, damit Index und Health-Check ihren Inhalt nie als deinen behandeln (seit 4.5) |
+| `00_INDEX\scripts\eingehaengt-hook-tests.ps1` | Regressionsreihe für Hook, Einrichtung und Ausschluss, 33 Fälle, Pflicht vor und nach jeder Änderung an einem der drei (seit 4.5) |
 | `10_System\Pruefset-Vorlage.md` | Vorlage für das eigene Prüfset; die daraus angelegte `Pruefset.md` gehört dir und wird nie ersetzt (seit 1.18) |
 | `02_Skills\README.md` | Erklärt, was ein Skill ist |
 | `00_INDEX\scripts\build-index-geruest.ps1` | Index-Automatik |
@@ -80,6 +85,7 @@ Diese Dateien sind Mechanik, tragen aber zwingend etwas von dir. Ein Update darf
 | `10_System\Detailregeln aus AGENTS.md.md` | Alle Präzedenzfälle und Langbegründungen darin; das Grundgerüst liefert nur die leere Keimdatei (seit 1.18) |
 | `00_INDEX\scripts\lib\gmail-senden.py` | Der Konfigurationsblock am Anfang zwischen `# --- KONFIGURATION` und `# --- ENDE KONFIGURATION` (dein Name, deine Adressen, Signatur, registrierte Routinen, erlaubte Domains, Wartezeit). Ein Update ersetzt alles ausserhalb des Blocks und lässt den Block stehen (seit 3.4) |
 | `00_INDEX\scripts\lib\mail-sperrbegriffe.txt` | Alles darin: deine Sperrliste für den Mailversand; das Grundgerüst liefert nur die Keimdatei mit Beispielen (seit 3.4) |
+| `00_INDEX\scripts\lib\wissensrepo-sperrbegriffe.txt` | Alles darin: deine Sperrliste für eingehängte, geteilte Repos; das Grundgerüst liefert nur die Keimdatei mit Beispielen (seit 4.5) |
 | `00_INDEX\gesperrte-pfade.txt` | Alles darin: die Ordner und Dateien, die dein Agent nie lesen darf; das Grundgerüst liefert nur die Keimdatei mit Kommentar und Beispielen (seit 3.8) |
 
 ## C. Deins: wird nie angefasst
