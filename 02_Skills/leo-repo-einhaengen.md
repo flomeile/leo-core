@@ -65,7 +65,9 @@ Ein **Wissensrepo** ist ein geteiltes Git-Repo, das mehrere Personen und ihre Ag
 - Ein Befund über das Wissensrepo (eine Anleitung weicht von der Wirklichkeit ab) wird als Pull Request vorgeschlagen, nicht still korrigiert und nicht nur im eigenen Repo notiert.
 - Der Hook ist das zweite Netz, nicht das erste: Er fängt Stichworte, keine heikle Aussage ohne Stichwort. Das erste Netz ist die Regel in Schritt 7 und die Prüfung jedes Pull Requests durch den Owner.
 - Bewusst ohne eigenen Hook für den Frischecheck: Ein Abgleich mit GitHub vor jedem Werkzeugaufruf wäre langsam und bräuchte Netz; die Regel in Schritt 1, der Pull Request und der Merge durch den Owner fangen einen veralteten Stand ab.
-- Nicht gesehen werden vom Hook: Kommentare und Issues auf GitHub, Bearbeitungen im GitHub-Web und Binärinhalte. Dort gilt Schritt 7 ohne mechanisches Netz.
+- Nicht gesehen werden vom Hook: Kommentare und Issues auf GitHub, Bearbeitungen im GitHub-Web, Binärinhalte und Merge-Commits, die GitHub selbst erzeugt. Dort gilt Schritt 7 ohne mechanisches Netz.
+- **Wer auf GitHub zusammenführt, stellt dort zuerst die Adresse privat:** GitHub, Profilbild, **Settings**, **Emails**, Häkchen bei **Keep my email addresses private** und bei **Block command line pushes that expose my email**. Ohne diese Einstellung trägt jeder Merge-Commit, den GitHub beim Zusammenführen eines Pull Requests erzeugt, die Hauptadresse des Kontos als Autor, oft eine private, und kein lokaler Hook kann das verhindern. Das betrifft den Owner, aber auch jeden, der im eigenen Fork über die Weboberfläche zusammenführt.
+- **Den eingehängten Ordner nie in einem Notiz-Werkzeug umbenennen oder verschieben** (etwa Obsidian mit automatischer Link-Aktualisierung): Das Werkzeug schreibt dabei Links in den Dateien des geteilten Repos um, oft auf Pfade deines eigenen Systems. Umbenennen nur über den Agenten (Ordner verschieben, Zeile in der `.gitignore` anpassen, Einrichtungsskript erneut laufen lassen) und danach `git -C "<Ordner>" status` prüfen: Auf `main` dürfen keine ungespeicherten Änderungen liegen. Der Health-Check warnt, wenn doch.
 
 ## Definition of Done
 

@@ -1791,6 +1791,13 @@ if ($EingehaengteOrdner.Count -gt 0) {
         } else {
             Add-Check "OK" $cat "${ehRel}: gesichert (Hooks 3 von 3, ignoriert, geschaeftliche Git-Adresse, Owner und Modus genannt)."
         }
+        # Gearbeitet wird auf Zweigen; ungespeicherte Aenderungen auf main stammen meist von einem Werkzeug, das Links
+        # umschreibt (Notiz-App beim Umbenennen des Ordners), und koennen Pfade des eigenen Systems ins geteilte Repo tragen.
+        $ehZweig = [string](git -C $eh branch --show-current 2>$null)
+        $ehOffen = @(git -C $eh status --porcelain 2>$null | Where-Object { $_ -notmatch '^\?\?' })
+        if ($ehZweig -in @('main', 'master') -and $ehOffen.Count -gt 0) {
+            Add-Check "WARN" $cat ("{0}: {1} ungespeicherte Aenderung(en) auf {2}. Nicht committen, bevor geprueft ist, woher sie stammen (oft schreibt eine Notiz-App beim Umbenennen Links um); fremde Aenderungen mit git -C `"{0}`" restore verwerfen, eigene auf einen Zweig nehmen." -f $ehRel, $ehOffen.Count, $ehZweig)
+        }
     }
 } else {
     Add-Check "OK" $cat "Keine eingehaengten Repos."
