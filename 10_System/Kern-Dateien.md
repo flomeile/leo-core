@@ -33,7 +33,7 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `02_Skills\leo-inbox-ingest.md` | Arbeits-Skill: Rohquellen aus der Inbox verlustfrei zu Wissensnotizen verarbeiten und ins Belegarchiv legen; wird vorgeschlagen, nie ungefragt gestartet (seit 4.3) |
 | `02_Skills\leo-repo-einhaengen.md` | Arbeits-Skill: ein geteiltes Wissensrepo als Ordner einhängen (Owner klont, alle anderen forken), absichern, abgleichen, Änderungen per Pull Request vorschlagen (seit 4.5) |
 | `00_INDEX\scripts\eingehaengtes-repo-einrichten.ps1` | Richtet ein eingehängtes Repo ein: Eintrag in der `.gitignore`, geschäftliche Git-Identität, drei Hook-Stubs, Selbsttest (seit 4.5) |
-| `00_INDEX\githooks\eingehaengt-pre-commit` | Sperrbegriff-Hook für eingehängte Repos (Commit, Commit-Nachricht, Push), liest deine Liste `lib\wissensrepo-sperrbegriffe.txt`; wirkt nur in den eingehängten Repos, nicht in deinem eigenen (seit 4.5) |
+| `00_INDEX\githooks\eingehaengt-pre-commit` | Sperrbegriff-Hook für eingehängte Repos (Commit, Commit-Nachricht, Push), liest deine Liste `00_INDEX\scripts\lib\wissensrepo-sperrbegriffe.txt`; wirkt nur in den eingehängten Repos, nicht in deinem eigenen (seit 4.5) |
 | `00_INDEX\scripts\lib\eingehaengt-ausschluss.ps1` | Findet eingehängte Repos, damit Index und Health-Check ihren Inhalt nie als deinen behandeln (seit 4.5) |
 | `00_INDEX\scripts\eingehaengt-hook-tests.ps1` | Regressionsreihe für Hook, Einrichtung und Ausschluss, 33 Fälle, Pflicht vor und nach jeder Änderung an einem der drei (seit 4.5) |
 | `10_System\Pruefset-Vorlage.md` | Vorlage für das eigene Prüfset; die daraus angelegte `Pruefset.md` gehört dir und wird nie ersetzt (seit 1.18) |
