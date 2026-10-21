@@ -113,6 +113,8 @@ Fehlerausgabe in einer Bash-Shell immer mit `2>/dev/null` unterdrücken, nie mit
 
 Der Index ist Beschleuniger, nicht Filter: Er gibt den semantischen Einstieg, die Synonym-Volltextsuche ist das Sicherheitsnetz gegen versteckte Informationen.
 
+**Eingehängte Repos gehören zur Suche** (seit 4.5): Ein geteiltes Wissensrepo, das als Ordner in einem Themenordner hängt (Skill `leo-repo-einhaengen`), wird bei jeder Frage zu seinem Thema genauso gelesen und durchsucht wie die eigenen Dateien. Der Index führt es mit seinen Dateien, als fremdes Repo markiert; Einstieg sind `README.md` und `AGENTS.md` darin, und die `AGENTS.md` des Repos gilt wie eine lokale Rolle. Die Volltextsuche findet es, weil das Einrichtungsskript den Ordner in `.ignore` freigibt; fehlt die Freigabe, wird mit dem Ordner als Suchpfad gesucht. Eine Antwort aus einem eingehängten Repo nennt die Quelle als solche ("laut dem geteilten Repo X"), weil sein Inhalt anderen gehört und sich ändert; vor einer Antwort, die auf seinem Stand beruht, wird er abgeglichen (Skill, Schritt "Stand abgleichen").
+
 ## 5. Ablageregeln
 
 - **Eine Information hat genau einen Ort.** Jede Aussage gehört in genau eine zuständige Datei; überall sonst steht ein Verweis, nie eine Kopie. Grund: Kopien driften auseinander, und dann tragen zwei Dateien zwei Wahrheiten, ohne dass erkennbar ist, welche die überholte ist. Die übrigen Regeln dieses Abschnitts sind Anwendungen davon, ebenso die Auto-Block-Pflicht für Strukturaussagen (Abschnitt 7) und das Verbot eines zweiten Gedächtnisses in externen Systemen (Abschnitt 16).

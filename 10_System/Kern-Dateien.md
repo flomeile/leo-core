@@ -34,7 +34,7 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `02_Skills\leo-repo-einhaengen.md` | Arbeits-Skill: ein geteiltes Wissensrepo als Ordner einhängen (Owner klont, alle anderen forken), absichern, abgleichen, Änderungen per Pull Request vorschlagen (seit 4.5) |
 | `00_INDEX\scripts\eingehaengtes-repo-einrichten.ps1` | Richtet ein eingehängtes Repo ein: Eintrag in der `.gitignore`, geschäftliche Git-Identität, drei Hook-Stubs, Selbsttest (seit 4.5) |
 | `00_INDEX\githooks\eingehaengt-pre-commit` | Sperrbegriff-Hook für eingehängte Repos (Commit, Commit-Nachricht, Push), liest deine Liste `00_INDEX\scripts\lib\wissensrepo-sperrbegriffe.txt`; wirkt nur in den eingehängten Repos, nicht in deinem eigenen (seit 4.5) |
-| `00_INDEX\scripts\lib\eingehaengt-ausschluss.ps1` | Findet eingehängte Repos, damit Index und Health-Check ihren Inhalt nie als deinen behandeln (seit 4.5) |
+| `00_INDEX\scripts\lib\eingehaengt-ausschluss.ps1` | Findet eingehängte Repos, damit der Index sie als fremdes Repo markiert und der Health-Check sie nach den Regeln eines geteilten Repos prüft (Stand gegen das Original, tote Links) statt nach deinen (seit 4.5) |
 | `00_INDEX\scripts\eingehaengt-hook-tests.ps1` | Regressionsreihe für Hook, Einrichtung und Ausschluss, 33 Fälle, Pflicht vor und nach jeder Änderung an einem der drei (seit 4.5) |
 | `10_System\Pruefset-Vorlage.md` | Vorlage für das eigene Prüfset; die daraus angelegte `Pruefset.md` gehört dir und wird nie ersetzt (seit 1.18) |
 | `02_Skills\README.md` | Erklärt, was ein Skill ist |
@@ -105,6 +105,7 @@ Alles andere. Ein Update liest diese Dateien höchstens, um zu prüfen, ob deine
 - `00_INDEX\lean-baseline.txt` (die Referenzgrössen, gegen die der Health-Check das Wachstum deines Pflichtkontexts misst. Sie beschreiben dein System, nicht das Grundgerüst, und der Check schreibt sie selbst fort. Löschen ist ungefährlich: Der nächste Lauf legt sie mit deinen heutigen Werten neu an)
 - Der Kostenbericht, der bei jedem Health-Check neu entsteht: `00_INDEX\session-kosten.md` (mechanisch erzeugt aus deinen Transkripten, deshalb deins; steht in der `.gitignore`, weil er die Titel aller Sessions deines Rechners trägt)
 - `03_Sessionlogs\*`, `04_Changelog\*`, `90_Inbox\*`
+- `.ignore` (seit 4.5): die Suchfreigaben für deine eingehängten Repos, angelegt vom Einrichtungsskript; das Grundgerüst liefert diese Datei nicht
 
 ## Wenn du doch eine Kern-Datei ändern willst
 

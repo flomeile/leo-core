@@ -10,7 +10,7 @@ version: 1.0
 
 Ein **Wissensrepo** ist ein geteiltes Git-Repo, das mehrere Personen und ihre Agenten nutzen, zum Beispiel die Arbeitsanleitungen eines Teams. Es hat genau einen **Owner**: Nur er führt Änderungen in `main` zusammen, alle anderen schlagen sie per Pull Request vor.
 
-**Eingehängt heisst:** Eine lokale Kopie des Wissensrepos liegt als Unterordner in einem Themenordner dieses Repos. Sie behält ihr eigenes Git. Dieses Repo ignoriert den Ordner (`.gitignore`), sein Inhalt gelangt nie in dein privates Repo, und Index und Health-Check behandeln ihn nicht als dein Wissen. Umgekehrt sichert ein Hook, dass nichts Privates oder Vertrauliches aus deinem System in das geteilte Repo gelangt (`AGENTS.md`, Abschnitt 14). Der Agent hat deinen Kontext zuerst geladen und liest dann die `AGENTS.md` des Wissensrepos wie die lokale `AGENTS.md` eines Themenordners (`AGENTS.md`, Abschnitt 2).
+**Eingehängt heisst:** Eine lokale Kopie des Wissensrepos liegt als Unterordner in einem Themenordner dieses Repos. Sie behält ihr eigenes Git. Dieses Repo ignoriert den Ordner (`.gitignore`), sein Inhalt gelangt nie in dein privates Repo. Gefunden wird er trotzdem wie jeder andere Ordner: Der Index führt ihn mit seinen Dateien, als fremdes Repo markiert, und die Suche findet ihn, weil das Einrichtungsskript ihn in `.ignore` freigibt (`AGENTS.md`, Abschnitt 4). Der Health-Check prüft ihn nach den Regeln eines geteilten Repos (gesichert, auffindbar, aktuell, ohne tote Links), nicht nach deinen eigenen (Frontmatter, kuratierte Beschreibungen). Umgekehrt sichert ein Hook, dass nichts Privates oder Vertrauliches aus deinem System in das geteilte Repo gelangt (`AGENTS.md`, Abschnitt 14). Der Agent hat deinen Kontext zuerst geladen und liest dann die `AGENTS.md` des Wissensrepos wie die lokale `AGENTS.md` eines Themenordners (`AGENTS.md`, Abschnitt 2).
 
 **Zwei Wege, je nach deiner Rolle auf GitHub:**
 - **Owner-Weg** (Rolle Admin oder Write): Du klonst das Repo selbst und arbeitest auf Zweigen darin.
@@ -44,10 +44,10 @@ Ein **Wissensrepo** ist ein geteiltes Git-Repo, das mehrere Personen und ihre Ag
    ```powershell
    pwsh -NoProfile -ExecutionPolicy Bypass -File "00_INDEX\scripts\eingehaengtes-repo-einrichten.ps1" -Ordner "<Themenordner>\<Ordnername>" -Email "<geschäftliche Adresse von [NAME]>" -Name "<Vor- und Nachname>"
    ```
-   Das Skript trägt den Ordner in deiner `.gitignore` ein, setzt im eingehängten Repo deine geschäftliche Adresse als Git-Identität (nie die globale, die oft privat ist), legt dort drei Hooks an (Commit, Commit-Nachricht, Push) und prüft, dass sie laufen und dass dein Repo den Ordner nicht versioniert. Es bricht ab, wenn die Adresse auf deiner Sperrliste steht, wenn ein eigener Hook im Repo liegt oder wenn ein `core.hooksPath` die Hooks übergehen würde. Bei einem Abbruch: Meldung an `[NAME]`, nichts umgehen.
+   Das Skript trägt den Ordner in deiner `.gitignore` ein, gibt ihn in `.ignore` für die Suche frei, setzt im eingehängten Repo deine geschäftliche Adresse als Git-Identität (nie die globale, die oft privat ist), legt dort drei Hooks an (Commit, Commit-Nachricht, Push) und prüft, dass sie laufen und dass dein Repo den Ordner nicht versioniert. Es bricht ab, wenn die Adresse auf deiner Sperrliste steht, wenn ein eigener Hook im Repo liegt oder wenn ein `core.hooksPath` die Hooks übergehen würde. Bei einem Abbruch: Meldung an `[NAME]`, nichts umgehen.
 6. **Sperrliste prüfen:** `00_INDEX\scripts\lib\wissensrepo-sperrbegriffe.txt` gehört dir. Beim ersten Einhängen schlägt der Agent `[NAME]` vor, sie um die eigenen privaten Themenordner, die Anbieter der eigenen privaten Mailadressen und Begriffe aus dem eigenen Leben zu ergänzen, die in keine Firmenanleitung gehören. Schreiben erst nach dem Ja.
 7. **Modus prüfen:** Die `AGENTS.md` des Wissensrepos nennt Owner und Modus. Fehlt die Modus-Zeile, gilt dort "Zweige mit Freigabe" (`AGENTS.md`, Abschnitt 12); die fehlende Zeile wird als Pull Request vorgeschlagen, nie still ergänzt.
-8. **Abschluss:** Health-Check laufen lassen; die Kategorie `Eingehaengte Repos` muss für diesen Ordner OK zeigen. `[NAME]` bekommt in zwei Sätzen, was jetzt geht: der Agent liest das Repo bei Fragen zum Thema, "repo synchronisieren" holt den neuen Stand, Änderungen schlägt der Agent als Pull Request vor.
+8. **Abschluss:** Index-Skript und Health-Check laufen lassen; der Index zeigt den Ordner als eingehängtes Repo, die Kategorie `Eingehaengte Repos` zeigt ihn als gesichert und ohne Rückstand. `[NAME]` bekommt in zwei Sätzen, was jetzt geht: der Agent liest das Repo bei Fragen zum Thema, "repo synchronisieren" holt den neuen Stand, Änderungen schlägt der Agent als Pull Request vor.
 
 ## Schritte: Arbeiten im eingehängten Repo (jedes Mal)
 
@@ -58,6 +58,11 @@ Ein **Wissensrepo** ist ein geteiltes Git-Repo, das mehrere Personen und ihre Ag
 5. **Sprache gegenüber `[NAME]`:** Synchronisieren, Speichern, Vorschlagen statt Git-Begriffe. Nach jeder grösseren Aufgabe im Repo daran erinnern, dass der Vorschlag erst nach dem Merge durch den Owner für alle gilt.
 6. **Rangfolge:** Fachliches und Format bestimmt das Wissensrepo, Stimme und Person bringt dein System; bei Widerspruch in der Sache gewinnt das Repo.
 7. **Nie hineinschreiben:** Privates und Vertrauliches von `[NAME]` oder Dritten, Kundendaten, Personendaten ausser Funktionskontakten (Name, Funktion, Firma, geschäftliche Adresse und Nummer), persönliche Meinungen über Personen, Inhalte aus deinem eigenen Repo (`AGENTS.md`, Abschnitt 14). Im Zweifel nichts hineinschreiben und `[NAME]` fragen.
+
+## Gesund und aktuell halten
+
+- **Aktuell:** Der Health-Check holt bei jedem Lauf den Stand des Originals und meldet, wenn dort neue Commits liegen; dann "repo synchronisieren" vorschlagen (im Nutzungsmodus `benutzen` selbst ausführen, es ist ein reiner Abgleich ohne Wirkung nach aussen ausser dem Nachziehen des eigenen Forks).
+- **Gesund:** Er meldet tote Links im geteilten Repo, ungespeicherte Änderungen auf `main`, eine fehlende Suchfreigabe und jede Lücke in der Absicherung. Fehler im Inhalt des geteilten Repos werden nie still im eigenen Klon behoben, sondern als Pull Request vorgeschlagen; für die inhaltliche Pflege ist der Owner zuständig.
 
 ## Regeln
 

@@ -32,12 +32,17 @@ function Versuch($datei, $text) {
 Write-Host "Einrichtung"
 & $ein -Ordner 'wissen' -Email 'test@example.org' -Name 'Test' -Leo $outer | Out-Null
 Check 'aeusseres .gitignore traegt den Ordner' ((Get-Content (Join-Path $outer '.gitignore') -Raw) -match '/wissen/')
+Check '.ignore gibt den Ordner fuer die Suche frei' ((Get-Content (Join-Path $outer '.ignore')) -contains '!/wissen/')
 Check 'Stub liegt im inneren Repo' (Test-Path (Join-Path $inner '.git\hooks\pre-commit'))
 $stubBytes = [IO.File]::ReadAllBytes((Join-Path $inner '.git\hooks\pre-commit'))
 Check 'Stub ohne BOM und ohne CR' (($stubBytes[0] -eq 0x23) -and ($stubBytes -notcontains 0x0D))
 Check 'aeusseres Repo sieht den inneren Ordner nicht' (-not (git -C $outer status --porcelain --untracked-files=all | Where-Object { $_ -match 'wissen' }))
 & $ein -Ordner 'wissen' -Email 'test@example.org' -Leo $outer | Out-Null
-Check 'zweiter Lauf ist idempotent (.gitignore nur einmal)' (([regex]::Matches((Get-Content (Join-Path $outer '.gitignore') -Raw), '/wissen/')).Count -eq 1)
+Check 'zweiter Lauf ist idempotent (.gitignore und .ignore nur einmal)' ((([regex]::Matches((Get-Content (Join-Path $outer '.gitignore') -Raw), '/wissen/')).Count -eq 1) -and (([regex]::Matches((Get-Content (Join-Path $outer '.ignore') -Raw), '!/wissen/')).Count -eq 1))
+[IO.File]::WriteAllText((Join-Path $inner 'link.md'), "[gut](link.md) [tot](fehlt.md) [extern](https://example.org) [anker](#x)`n")
+$toteLinks = @(& { . (Join-Path $PSScriptRoot 'lib\eingehaengt-ausschluss.ps1'); Get-EingehaengtToteLinks $inner })
+Check 'tote Links: genau der fehlende Verweis wird gemeldet' (($toteLinks.Count -eq 1) -and ($toteLinks[0] -match 'fehlt\.md'))
+Remove-Item (Join-Path $inner 'link.md')
 
 . (Join-Path $PSScriptRoot 'lib\eingehaengt-ausschluss.ps1')
 $EingehaengteOrdner = @(Get-EingehaengteOrdner $outer)

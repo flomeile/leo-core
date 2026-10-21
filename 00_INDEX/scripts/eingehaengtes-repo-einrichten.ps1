@@ -1,6 +1,7 @@
 # Richtet ein geteiltes Repo, das als verschachtelter Ordner in diesem Repo liegt, fuer die Arbeit mit dem Assistenten ein
 # (seit Leo Core 4.5, Skill leo-repo-einhaengen):
-#   (1) Ordner im aeusseren .gitignore eintragen, damit der Inhalt nie ins eigene, private Repo gelangt
+#   (1) Ordner im aeusseren .gitignore eintragen, damit der Inhalt nie ins eigene, private Repo gelangt, und in .ignore
+#       wieder fuer die Suche freigeben, damit der Agent das Wissen darin findet
 #   (2) im inneren Repo die Identitaet auf die geschaeftliche Adresse setzen (nie eine private, AGENTS.md Abschnitt 14)
 #   (3) im inneren Repo drei Stubs in .git/hooks anlegen: pre-commit, commit-msg, pre-push; sie rufen den Sperrbegriff-Hook
 #       00_INDEX/githooks/eingehaengt-pre-commit mit der eigenen Liste 00_INDEX/scripts/lib/wissensrepo-sperrbegriffe.txt
@@ -70,6 +71,23 @@ elseif ($zeilen -notcontains $zeile) {
     [IO.File]::WriteAllText($gi, $neu, (New-Object Text.UTF8Encoding $false))
     Write-Host "gitignore: $zeile eingetragen"
 } else { Write-Host "gitignore: $zeile stand schon drin" }
+
+# (1b) .ignore im eigenen Repo: gibt den Ordner fuer die Suche wieder frei. Suchwerkzeuge auf ripgrep-Basis (die Grep- und
+# Glob-Werkzeuge der Agenten) ueberspringen alles, was in der .gitignore steht; ohne diese Zeile faende der Agent das Wissen
+# im eingehaengten Repo nie. Git liest .ignore nicht, der Ordner bleibt fuer Git ignoriert.
+if (-not $Alleinstehend) {
+    $ig = Join-Path $leoRoot '.ignore'
+    $frei = "!/$rel/"
+    $igInhalt = if (Test-Path $ig) { [IO.File]::ReadAllText($ig) } else { '' }
+    if (($igInhalt -split "`r?`n") -notcontains $frei) {
+        $neuIg = $igInhalt
+        if ($neuIg -and -not $neuIg.EndsWith("`n")) { $neuIg += "`n" }
+        if (-not $igInhalt) { $neuIg += "# Suchfreigabe fuer eingehaengte Repos (Skill leo-repo-einhaengen): ripgrep liest diese Datei, Git nicht.`n" }
+        $neuIg += "$frei`n"
+        [IO.File]::WriteAllText($ig, $neuIg, (New-Object Text.UTF8Encoding $false))
+        Write-Host ".ignore: $frei eingetragen (Suche findet den Ordner)"
+    } else { Write-Host ".ignore: $frei stand schon drin" }
+}
 
 # (2) Identitaet nur lokal im inneren Repo
 git -C $inner config --local user.email $Email

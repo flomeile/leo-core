@@ -1754,6 +1754,9 @@ Write-Output ""
 # ---------------------------------------------------------------------------
 # EINGEHAENGTE REPOS (geteilte Repos als Unterordner, Skill leo-repo-einhaengen, seit 4.5)
 # ---------------------------------------------------------------------------
+# Drei Fragen je eingehaengtem Repo: gesichert (Hook, Ignorierung, Adresse), auffindbar (Suchfreigabe in .ignore),
+# aktuell und gesund (Rueckstand gegen das Original, tote Links). Inhaltlich gilt im geteilten Repo dessen eigene Regel;
+# die Pruefungen dieses Systems (Frontmatter, kuratierte Beschreibungen) laufen dort bewusst nicht.
 # Ein eingehaengtes Repo ohne Sperrbegriff-Hook, nicht ignoriert oder mit privater Git-Adresse ist ein FAIL:
 # Was einmal in einem geteilten Repo steht, ist fuer alle Leser offen (AGENTS.md, Abschnitt 14). Typischer Fall:
 # Das Repo wurde von Hand geklont und das Einrichtungsskript lief nie.
@@ -1798,6 +1801,17 @@ if ($EingehaengteOrdner.Count -gt 0) {
         if ($ehZweig -in @('main', 'master') -and $ehOffen.Count -gt 0) {
             Add-Check "WARN" $cat ("{0}: {1} ungespeicherte Aenderung(en) auf {2}. Nicht committen, bevor geprueft ist, woher sie stammen (oft schreibt eine Notiz-App beim Umbenennen Links um); fremde Aenderungen mit git -C `"{0}`" restore verwerfen, eigene auf einen Zweig nehmen." -f $ehRel, $ehOffen.Count, $ehZweig)
         }
+        # Auffindbar: Ohne Freigabe in .ignore findet die Suche (ripgrep) den Ordner nicht, weil er in der .gitignore steht.
+        $ehIgnore = Join-Path $repo '.ignore'
+        $ehFrei = (Test-Path -LiteralPath $ehIgnore) -and ((Get-Content -LiteralPath $ehIgnore -Encoding UTF8) -contains "!/$ehRel/")
+        if (-not $ehFrei) { Add-Check "WARN" $cat "${ehRel}: nicht fuer die Suche freigegeben (Zeile !/$ehRel/ fehlt in .ignore). Der Agent findet das Wissen darin nur ueber den Index. Behebung: Einrichtungsskript erneut laufen lassen." }
+        # Aktuell: Stand gegen das Original. Nachziehen ist Sache dieses Systems ("repo synchronisieren").
+        $ehRueck = Get-EingehaengtRueckstand $eh
+        if ($null -eq $ehRueck) { Add-Check "INFO" $cat "${ehRel}: Stand gegen das Original nicht abrufbar (kein Netz oder kein Remote)." }
+        elseif ($ehRueck -gt 0) { Add-Check "WARN" $cat "${ehRel}: $ehRueck neue(r) Commit(s) im Original. Nachziehen mit 'repo synchronisieren' (Skill leo-repo-einhaengen), sonst arbeitet der Agent mit veraltetem Wissen." }
+        # Gesund: tote Links im geteilten Repo. Behoben wird dort nur per Pull Request, nie still im eigenen Klon.
+        $ehTot = @(Get-EingehaengtToteLinks $eh)
+        if ($ehTot.Count) { Add-Check "WARN" $cat ("{0}: {1} tote(r) Link(s) im geteilten Repo, etwa {2}. Als Pull Request an den Owner vorschlagen." -f $ehRel, $ehTot.Count, (($ehTot | Select-Object -First 3) -join '; ')) }
     }
 } else {
     Add-Check "OK" $cat "Keine eingehaengten Repos."
