@@ -2,17 +2,17 @@
 titel: Index-Geruest (mechanisch erzeugt)
 zweck: Vollstaendige, deterministische Baumliste aller Markdown-Dateien im Repo
 type: index-geruest
-erzeugt: 2026-10-21 14:56
+erzeugt: 2026-10-21 15:41
 hinweis: Automatisch erzeugt. Nicht von Hand bearbeiten. Sicherheitsnetz und Delta-Quelle fuer die kuratierten Indizes.
 ---
 
 # Index-Geruest
 
-Mechanisch aus dem Dateisystem erzeugt am 2026-10-21 14:56. Volle Hierarchie, jede real existierende .md-Datei.
+Mechanisch aus dem Dateisystem erzeugt am 2026-10-21 15:41. Volle Hierarchie, jede real existierende .md-Datei.
 Format je Datei: Name | Basis-Beschreibung (erste Ueberschrift) | Groesse | geaendert.
 
-- AGENTS.md | AGENTS.md: Master-Anweisung für Leo | 100.5 KB | 2026-10-21
-- ANLEITUNG.md | Leo: Anleitung zum eigenen Second Brain | 99.2 KB | 2026-10-21
+- AGENTS.md | AGENTS.md: Master-Anweisung für Leo | 101.8 KB | 2026-10-21
+- ANLEITUNG.md | Leo: Anleitung zum eigenen Second Brain | 99.5 KB | 2026-10-21
 - CLAUDE.md | CLAUDE.md | 1.6 KB | 2026-08-27
 - GEMINI.md | GEMINI.md | 1.7 KB | 2026-08-26
 - MEIN-SYSTEM.md | Mein System | 7.3 KB | 2026-09-03
@@ -34,7 +34,7 @@ Format je Datei: Name | Basis-Beschreibung (erste Ueberschrift) | Groesse | geae
   - leo-inbox-ingest.md | Skill: Leo Inbox-Ingest | 29.1 KB | 2026-10-19
   - leo-mechanik-update.md | Skill: Mechanik aktualisieren | 33.2 KB | 2026-10-21
   - leo-notiz.md | Skill: Leo Notiz | 6.6 KB | 2026-09-13
-  - leo-repo-einhaengen.md | Skill: Leo Repo einhängen | 10.7 KB | 2026-10-21
+  - leo-repo-einhaengen.md | Skill: Leo Repo einhängen | 12.9 KB | 2026-10-21
   - leo-skill-ersteller.md | Skill: Leo Skill-Ersteller | 6.9 KB | 2026-09-07
   - leo-system-health-check.md | Skill: System Health Check | 16.2 KB | 2026-10-19
   - leo-system-optimierung.md | Skill: Leo System-Optimierung | 15.2 KB | 2026-10-19
@@ -53,7 +53,7 @@ Format je Datei: Name | Basis-Beschreibung (erste Ueberschrift) | Groesse | geae
   - Architektur.md | Architektur des KI-Systems | 4.6 KB | 2026-09-07
   - Detailregeln aus AGENTS.md.md | Detailregeln, ausgelagert aus der AGENTS.md | 1.2 KB | 2026-08-29
   - Google-Anbindung.md | Google-Anbindung: Gmail und Drive ohne Connector | 10.8 KB | 2026-09-15
-  - Kern-Dateien.md | Kern-Dateien: was ein Update anfassen darf | 15.5 KB | 2026-10-21
+  - Kern-Dateien.md | Kern-Dateien: was ein Update anfassen darf | 15.7 KB | 2026-10-21
   - Manual.md | Manual: So nutzt du dein KI-System | 5.1 KB | 2026-10-19
   - Modellwahl.md | Modellwahl (Stand: siehe `stand:` im Frontmatter) | 4.8 KB | 2026-10-19
   - Pruefset-Vorlage.md | Prüfset-Vorlage: Regeltreue-Messung | 15.9 KB | 2026-09-13
@@ -64,4 +64,4 @@ Format je Datei: Name | Basis-Beschreibung (erste Ueberschrift) | Groesse | geae
   - README.md | 90_Inbox | 0.8 KB | 2026-10-19
 
 ---
-Ende des Geruests. Anzahl Dateien: 97
+Ende des Geruests. Anzahl Dateien: 102
