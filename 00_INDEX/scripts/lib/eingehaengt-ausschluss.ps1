@@ -48,11 +48,11 @@ function Get-EingehaengtRueckstand {
 }
 
 # Tote relative Links in den Markdown-Dateien eines eingehaengten Repos (Ziel existiert nicht im Repo). Externe Adressen,
-# reine Anker und Mailadressen zaehlen nicht. Rueckgabe: Liste "datei -> ziel".
+# reine Anker und Mailadressen zaehlen nicht, Vorlagen-Ordner (templates, vorlagen) auch nicht: Dort sind Links Platzhalter. Rueckgabe: Liste "datei -> ziel".
 function Get-EingehaengtToteLinks {
     param([Parameter(Mandatory = $true)][string]$Ordner)
     $tot = New-Object System.Collections.Generic.List[string]
-    $dateien = @(Get-ChildItem -LiteralPath $Ordner -Recurse -File -Filter '*.md' -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\.git\\' })
+    $dateien = @(Get-ChildItem -LiteralPath $Ordner -Recurse -File -Filter '*.md' -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\\.git\\' -and $_.FullName -notmatch '\\(templates?|vorlagen?)\\' })
     foreach ($f in $dateien) {
         $text = [IO.File]::ReadAllText($f.FullName)
         foreach ($m in [regex]::Matches($text, '\]\(([^)\s]+)\)')) {

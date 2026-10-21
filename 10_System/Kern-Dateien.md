@@ -35,7 +35,7 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\eingehaengtes-repo-einrichten.ps1` | Richtet ein eingehängtes Repo ein: Eintrag in der `.gitignore`, geschäftliche Git-Identität, drei Hook-Stubs, Selbsttest (seit 4.5) |
 | `00_INDEX\githooks\eingehaengt-pre-commit` | Sperrbegriff-Hook für eingehängte Repos (Commit, Commit-Nachricht, Push), liest deine Liste `00_INDEX\scripts\lib\wissensrepo-sperrbegriffe.txt`; wirkt nur in den eingehängten Repos, nicht in deinem eigenen (seit 4.5) |
 | `00_INDEX\scripts\lib\eingehaengt-ausschluss.ps1` | Findet eingehängte Repos, damit der Index sie als fremdes Repo markiert und der Health-Check sie nach den Regeln eines geteilten Repos prüft (Stand gegen das Original, tote Links) statt nach deinen (seit 4.5) |
-| `00_INDEX\scripts\eingehaengt-hook-tests.ps1` | Regressionsreihe für Hook, Einrichtung und Ausschluss, 33 Fälle, Pflicht vor und nach jeder Änderung an einem der drei (seit 4.5) |
+| `00_INDEX\scripts\eingehaengt-hook-tests.ps1` | Regressionsreihe für Hook, Einrichtung, Suchfreigabe und Linkprüfung, 35 Fälle, Pflicht vor und nach jeder Änderung an einem der drei (seit 4.5) |
 | `10_System\Pruefset-Vorlage.md` | Vorlage für das eigene Prüfset; die daraus angelegte `Pruefset.md` gehört dir und wird nie ersetzt (seit 1.18) |
 | `02_Skills\README.md` | Erklärt, was ein Skill ist |
 | `00_INDEX\scripts\build-index-geruest.ps1` | Index-Automatik |
