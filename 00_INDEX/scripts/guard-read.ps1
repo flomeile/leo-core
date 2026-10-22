@@ -96,7 +96,8 @@ function Read-BlockedPaths([string]$konfig) {
 }
 
 try {
-    $raw = [Console]::In.ReadToEnd()
+    # Eingabe ausdruecklich als UTF-8 lesen: [Console]::In nimmt die OEM-Codepage, und aus einem Umlaut im Pfad werden zwei falsche Zeichen (Leo Core, Meldung #10).
+    $raw = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
     if ([string]::IsNullOrWhiteSpace($raw)) { exit 0 }
     $in = $raw | ConvertFrom-Json
     $tool = [string]$in.tool_name

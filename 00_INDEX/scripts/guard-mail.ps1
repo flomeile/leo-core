@@ -50,7 +50,8 @@ $grund = "Mailversand gesperrt: Mails aus einer Session gehen ausschliesslich ue
 
 try {
 
-$raw = [Console]::In.ReadToEnd()
+# Eingabe ausdruecklich als UTF-8 lesen: [Console]::In nimmt die OEM-Codepage, und aus einem Umlaut im Pfad werden zwei falsche Zeichen (Leo Core, Meldung #10).
+$raw = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
 if ([string]::IsNullOrWhiteSpace($raw)) { Write-Decision "defer" "" }
 $in = $raw | ConvertFrom-Json
 $tool = [string]$in.tool_name

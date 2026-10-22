@@ -27,8 +27,11 @@ if (-not $psExe) { "Kein passender PowerShell-Interpreter gefunden."; exit 1 }
 $gesperrt = if ($isWindowsHost) { 'C:\Kundenkonfigurationen' } else { '/srv/kundenkonfigurationen' }
 $gesperrtSlash = $gesperrt -replace '\\', '/'
 $gesperrtGitBash = if ($isWindowsHost) { '/c/Kundenkonfigurationen' } else { $gesperrt }
+# Ein Eintrag mit Umlaut; das Zeichen kommt aus dem Code, damit die Datei ASCII bleibt.
+$umlaut = 'Anh' + [char]0x00E4 + 'nge-Test'
+$gesperrtUmlaut = if ($isWindowsHost) { "C:\$umlaut" } else { "/srv/$umlaut" }
 $konfig = Join-Path ([System.IO.Path]::GetTempPath()) ('guard-read-tests-' + [System.Guid]::NewGuid().ToString('N') + '.txt')
-@("# Testliste der Regressionsreihe", "", $gesperrt, "~/gesperrt-privat", "keine") | Set-Content -LiteralPath $konfig -Encoding UTF8
+@("# Testliste der Regressionsreihe", "", $gesperrt, "~/gesperrt-privat", "keine", $gesperrtUmlaut) | Set-Content -LiteralPath $konfig -Encoding UTF8
 $env:LEO_GUARD_READ_KONFIG = $konfig
 
 $faelle = @(
@@ -58,6 +61,8 @@ $faelle = @(
     @{ n = "24 Grep im Repo";                      erw = "PASS"; tool = "Grep"; path = "$repo\10_System" }
     @{ n = "25 Write bleibt Sache des anderen Hooks"; erw = "PASS"; tool = "Write"; file = "$profil\.env" }
     @{ n = "26 Marker keine ist kein Pfad";         erw = "PASS"; tool = "Bash"; cmd = "echo keine Aenderung" }
+    @{ n = "27 Read gesperrt mit Umlaut";          erw = "DENY"; tool = "Read"; file = "$gesperrtUmlaut\a.txt" }
+    @{ n = "28 Bash gesperrt mit Umlaut";          erw = "DENY"; tool = "Bash"; cmd = "cat `"$gesperrtUmlaut/b.txt`"" }
 )
 
 function Ruf($skript, $fall, $exe) {
@@ -69,7 +74,21 @@ function Ruf($skript, $fall, $exe) {
         default      { @{ command = $fall.cmd } }
     }
     $json = @{ session_id = "test"; hook_event_name = "PreToolUse"; cwd = $repo; tool_name = $fall.tool; tool_input = $ti } | ConvertTo-Json -Depth 5 -Compress
-    $out = $json | & $exe -NoProfile -ExecutionPolicy Bypass -File $skript 2>&1 | Out-String
+    # Die Eingabe geht als UTF-8-Bytes an den Hook, so wie Claude Code sie schickt. Ein Pipe
+    # aus PowerShell kodiert je nach Version anders und verdeckt Fehler beim Lesen (Meldung #10).
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $exe
+    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$skript`""
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes($json)
+    $p.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
+    $p.StandardInput.Close()
+    $out = $p.StandardOutput.ReadToEnd() + $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
     if ($out -match '"permissionDecision"\s*:\s*"deny"') { return "DENY" }
     if ([string]::IsNullOrWhiteSpace($out)) { return "PASS" }
     return "FEHLER: " + ($out.Trim() -replace "`r?`n", " ")
