@@ -17,8 +17,11 @@ function Check([string]$name, [bool]$cond, [string]$info = '') {
 function G { param([Parameter(ValueFromRemainingArguments = $true)]$a) $ErrorActionPreference = 'Continue'; & git @a 2>&1 | Out-Null; if ($LASTEXITCODE -ne 0) { throw "git $a" } }
 function Lauf([string]$repo, [string]$hook = '', [string]$stand = (Join-Path $w 'stand.json')) {
     $ErrorActionPreference = 'Continue'
-    if ($hook) { $out = '{}' | & $Exe -NoProfile -ExecutionPolicy Bypass -File $skript -Repo $repo -Hook $hook -Stand $stand 2>&1 }
-    else { $out = & $Exe -NoProfile -ExecutionPolicy Bypass -File $skript -Repo $repo -Stand $stand 2>&1 }
+    # Ein leeres Argument laesst Windows PowerShell 5.1 beim Aufruf weg; -Stand deshalb nur, wenn gesetzt.
+    $argumente = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $skript, '-Repo', $repo)
+    if ($hook) { $argumente += @('-Hook', $hook) }
+    if ($stand) { $argumente += @('-Stand', $stand) }
+    if ($hook) { $out = '{}' | & $Exe @argumente 2>&1 } else { $out = & $Exe @argumente 2>&1 }
     return @{ text = (($out | ForEach-Object { "$_" }) -join "`n"); code = $LASTEXITCODE }
 }
 function Neu([string]$name) {
