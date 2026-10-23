@@ -10,3 +10,6 @@
 __pycache__/
 # Zeitstempel der Versionspruefung (version-check.ps1): aendert sich woechentlich, traegt keinen Inhalt
 10_System/version-check-last-run.txt
+
+# Zeitstempel der Pruefung eingehaengter Repos (eingehaengte-repos-aktuell.ps1): aendert sich je Session, traegt keinen Inhalt
+10_System/eingehaengte-repos-last-run.txt

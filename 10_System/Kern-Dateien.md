@@ -2,8 +2,8 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 4.6
-stand: 2026-10-21
+version: 4.7
+stand: 2026-10-23
 ---
 
 # Kern-Dateien: was ein Update anfassen darf
@@ -36,6 +36,8 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\githooks\eingehaengt-pre-commit` | Sperrbegriff-Hook für eingehängte Repos (Commit, Commit-Nachricht, Push), liest deine Liste `00_INDEX\scripts\lib\wissensrepo-sperrbegriffe.txt`; wirkt nur in den eingehängten Repos, nicht in deinem eigenen (seit 4.5) |
 | `00_INDEX\scripts\lib\eingehaengt-ausschluss.ps1` | Findet eingehängte Repos, damit der Index sie als fremdes Repo markiert und der Health-Check sie nach den Regeln eines geteilten Repos prüft (Stand gegen das Original, tote Links) statt nach deinen (seit 4.5) |
 | `00_INDEX\scripts\eingehaengt-hook-tests.ps1` | Regressionsreihe für Hook, Einrichtung, Suchfreigabe und Linkprüfung, 35 Fälle, Pflicht vor und nach jeder Änderung an einem der drei (seit 4.5) |
+| `00_INDEX\scripts\eingehaengte-repos-aktuell.ps1` | Prüft bei jedem Sessionstart und spätestens alle 24 Stunden, ob die eingehängten Repos aktuell sind: zieht `main` per Fast-Forward nach, sperrt bei lokalen Änderungen, auseinandergelaufenem Stand, fehlendem Netz oder fehlendem Original (`AGENTS.md`, Abschnitt 1, Grundpflege; seit 4.7). Der Zeitstempel `10_System\eingehaengte-repos-last-run.txt`, den es schreibt, gehört dir und steht in der `.gitignore` |
+| `00_INDEX\scripts\eingehaengte-repos-aktuell-tests.ps1` | Regressionsreihe dafür mit echten Git-Repos, 13 Fälle, unter `pwsh` und mit `-Exe powershell` zu fahren (seit 4.7) |
 | `10_System\Pruefset-Vorlage.md` | Vorlage für das eigene Prüfset; die daraus angelegte `Pruefset.md` gehört dir und wird nie ersetzt (seit 1.18) |
 | `02_Skills\README.md` | Erklärt, was ein Skill ist |
 | `00_INDEX\scripts\build-index-geruest.ps1` | Index-Automatik |
@@ -77,7 +79,7 @@ Diese Dateien sind Mechanik, tragen aber zwingend etwas von dir. Ein Update darf
 | `CLAUDE.md` | Die `@`-Importzeilen, die auf deine Basiskontext-Dateien zeigen |
 | `GEMINI.md` | dasselbe |
 | `.clinerules` | dasselbe, hier als textliche Leseanweisung statt als Import |
-| `.claude\settings.json` | Hängt die vier Sperren ein (Arbeitsbereich, seit 3.3 pauschales Stagen, seit 3.4 Mailversand, seit 3.8 Lesen von Zugangsdaten und gesperrten Pfaden) und bringt seit 3.8 Lese-Verbote für Schlüsseldateien unter `permissions.deny` mit, seit 4.3 das Standardmodell `"model": "sonnet"` (`AGENTS.md`, Abschnitt 13; wer ein anderes will, setzt es in `.claude\settings.local.json`, die Vorrang hat und die kein Update anfasst). Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf (auch die mitgelieferten `permissions.deny`-Zeilen ergänzt ein Update nicht nachträglich, du übernimmst sie selbst); unter macOS/Linux ausserdem der ausgeschriebene `pwsh`-Pfad in den Hook-Befehlen (`ANLEITUNG.md`, Teil 5, Schritt 7a) |
+| `.claude\settings.json` | Hängt die vier Sperren ein (Arbeitsbereich, seit 3.3 pauschales Stagen, seit 3.4 Mailversand, seit 3.8 Lesen von Zugangsdaten und gesperrten Pfaden), seit 4.7 unter `SessionStart` und `UserPromptSubmit` die Prüfung der eingehängten Repos, und bringt seit 3.8 Lese-Verbote für Schlüsseldateien unter `permissions.deny` mit, seit 4.3 das Standardmodell `"model": "sonnet"` (`AGENTS.md`, Abschnitt 13; wer ein anderes will, setzt es in `.claude\settings.local.json`, die Vorrang hat und die kein Update anfasst). Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf (auch die mitgelieferten `permissions.deny`-Zeilen ergänzt ein Update nicht nachträglich, du übernimmst sie selbst); unter macOS/Linux ausserdem der ausgeschriebene `pwsh`-Pfad in den Hook-Befehlen (`ANLEITUNG.md`, Teil 5, Schritt 7a) |
 | `.codex\hooks.json` | Hängt dieselben Sperren in Codex ein (seit 3.2). Dein Anteil ist der ausgeschriebene Pfad zu deinem Repo, den ein Update nie durch den Platzhalter zurückersetzt, dazu eigene weitere Hooks |
 | `.github\copilot-instructions.md` | dasselbe |
 | `ANLEITUNG.md` | Nichts, solange du sie nicht ergänzt hast. Wenn doch, gilt sie als deine Datei |
