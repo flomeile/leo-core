@@ -2,8 +2,8 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 4.7
-stand: 2026-10-23
+version: 4.8
+stand: 2026-10-28
 ---
 
 # Kern-Dateien: was ein Update anfassen darf
@@ -44,7 +44,7 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\health-check.ps1` | Prüfskript |
 | `00_INDEX\scripts\build-skill-wrapper.ps1` | Erzeugt die Skill-Zeiger für alle Werkzeuge (Abschnitt 11a) |
 | `00_INDEX\scripts\guard-workspace.ps1` | Arbeitsbereich-Sperre, blockiert Schreibzugriffe ausserhalb des Repos und erzeugte Ausgabeformate in Themenordnern (Abschnitte 5 und 18) |
-| `00_INDEX\scripts\guard-workspace-tests.ps1` | Regressionsreihe für die Arbeitsbereich-Sperre, Pflicht vor und nach jeder Änderung am Hook (seit 3.2; seit 3.3 mit eigener Reihe für macOS/Linux) |
+| `00_INDEX\scripts\guard-workspace-tests.ps1` | Regressionsreihe für die Arbeitsbereich-Sperre, Pflicht vor und nach jeder Änderung am Hook (seit 3.2; seit 3.3 mit eigener Reihe für macOS/Linux; seit 4.8 mit gemeinsamen Fällen für beide Plattformen und `-Exe powershell` für Windows PowerShell 5.1) |
 | `00_INDEX\scripts\guard-git.ps1` | Sperre gegen pauschales Stagen (`git add -A`, `--all`, `.`), als Hook wirksam in jedem Berechtigungsmodus (Abschnitt 12, seit 3.3) |
 | `00_INDEX\scripts\guard-git-tests.ps1` | Regressionsreihe für die Stagen-Sperre (seit 3.3) |
 | `00_INDEX\scripts\guard-mail.ps1` | Mailversand-Sperre: jede Mail aus einer Session geht nur über `lib\gmail-senden.py`, jeder andere Sendeweg ist blockiert (Abschnitt 16, seit 3.4) |
