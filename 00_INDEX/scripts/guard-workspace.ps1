@@ -269,17 +269,43 @@ if ($tool -in @("Bash", "PowerShell")) {
         'Export-Csv','Export-Clixml','Start-Process','Invoke-WebRequest.*-OutFile',
         'WriteAllText','WriteAllBytes','WriteAllLines','AppendAllText',
         '\bmkdir\b','\brmdir\b','\brm\b','\bmv\b','\bcp\b','\btouch\b','\btee\b','\bdel\b','\berase\b',
-        '\bgit\s+(add|commit|push|checkout|reset|clean|rm|mv|init|apply|restore|stash|tag)\b',
+        '\bgit\s+(add|commit|push|checkout|reset|clean|rm|mv|init|apply|restore|stash)\b',
+        # git tag schreibt nur, wenn ein Tag gesetzt oder geloescht wird; nacktes "git tag"
+        # und die Listenoptionen lesen nur. Galt jedes git tag als Schreiben, machte ein
+        # Auflisten jeden Lesepfad ausserhalb im selben Kommando zur Sperre (seit 4.8).
+        '\bgit\s+tag\s+(?!-l\b|--list\b|--sort\b|--points-at\b|--contains\b|--no-contains\b|--merged\b|--no-merged\b|--format\b|-n\d*\b|--column\b)\S',
         '\bnpm\s+(install|i|uninstall|link)\b','\bpip\s+install\b',
         '>>','\|\s*Out-File','\|\s*Set-Content','\|\s*Add-Content',
         '--print-to-pdf','--screenshot'
     )
-    # Auch "printf x > ziel" schreibt. Ein > innerhalb einer zitierten
-    # Zeichenkette bleibt dagegen Text, etwa "printf 'a > b'".
-    $cmdUnquoted = [regex]::Replace($cmd, $quotedPattern, ' ')
-    $isWrite = $cmdUnquoted -match '>'
+    $isWrite = $false
     foreach ($v in $writeVerbs) { if ($cmd -match $v) { $isWrite = $true; break } }
-    if (-not $isWrite) { Write-Decision "durch" "" }
+
+    # Einfache Umleitung der Standardausgabe in eine Datei (seit 4.8): "printf x > ziel"
+    # schreibt, ohne dass ein Schreibverb vorkommt. Ausgenommen sind Stream-Umleitungen
+    # (2>, 2>&1, >&2, *>), Wegwerfen (>/dev/null, >$null), Pfeile und Vergleiche in Code
+    # (->, =>, >=) und ein > in einer zitierten Zeichenkette ("printf 'a > b'"). Die
+    # erste Fassung zaehlte jedes > und sperrte damit jedes lesende Kommando mit
+    # 2>/dev/null und einem Pfad ausserhalb; das traefe fast jede Sitzung.
+    $umleitungRx = '(?<![>&=*-])(?<![02-9])>(?![>&=])\s*(?!/dev/null\b|\$null\b)("([^"\r\n]+)"|''([^''\r\n]+)''|([^\s"'';|&)<>]+))'
+    function Get-Umleitungsziele([string]$text) {
+        $zitate = [regex]::Matches($text, $quotedPattern)
+        foreach ($m in [regex]::Matches($text, $umleitungRx)) {
+            $imZitat = $false
+            foreach ($z in $zitate) {
+                if ($m.Index -gt $z.Index -and $m.Index -lt ($z.Index + $z.Length)) { $imZitat = $true; break }
+            }
+            if ($imZitat) { continue }
+            @($m.Groups[2].Value, $m.Groups[3].Value, $m.Groups[4].Value) | Where-Object { $_ } | Select-Object -First 1
+        }
+    }
+    # Ist die Umleitung das einzige Schreibmerkmal, wird nur ihr Ziel geprueft, nicht
+    # jeder Pfad im Kommando: Fremdes lesen und ins Repo umleiten bleibt erlaubt.
+    $nurUmleitung = $false
+    if (-not $isWrite) {
+        if (@(Get-Umleitungsziele $cmd).Count -gt 0) { $nurUmleitung = $true }
+        else { Write-Decision "durch" "" }
+    }
 
     # Arbeitsverzeichnis zaehlt mit: ein schreibendes Kommando mit relativen
     # Pfaden trifft sonst unbemerkt ein fremdes Verzeichnis.
@@ -402,6 +428,17 @@ if ($tool -in @("Bash", "PowerShell")) {
             -not (Normalize-AbsolutePath $pfad)) {
             $aufgeloest = Resolve-TargetPath $pfad $cwd
             if ($aufgeloest) { $found += $aufgeloest }
+        }
+    }
+    if ($nurUmleitung) {
+        $found = @()
+        foreach ($ziel in @(Get-Umleitungsziele $cmdN)) {
+            if (Normalize-AbsolutePath $ziel) { $found += $ziel }
+            elseif ($ziel -match $parentPattern) {
+                $aufgeloest = Resolve-TargetPath $ziel $cwd
+                if ($aufgeloest) { $found += $aufgeloest }
+            }
+            # Ein relatives Ziel ohne ".." landet im Arbeitsverzeichnis, das oben geprueft ist.
         }
     }
     foreach ($f in ($found | Select-Object -Unique)) {

@@ -21,8 +21,11 @@
 #
 # Bewusst ASCII-only, gleicher Grund wie beim Guard selbst: laeuft unter Windows
 # PowerShell 5.1 genauso wie unter PowerShell 7.
+#   ... -Exe powershell   faehrt den Guard unter Windows PowerShell 5.1, wie ihn die
+#                         mitgelieferte settings.json unter Windows startet
 param(
-    [string]$Skript = (Join-Path $PSScriptRoot 'guard-workspace.ps1')
+    [string]$Skript = (Join-Path $PSScriptRoot 'guard-workspace.ps1'),
+    [string]$Exe = ""
 )
 
 $isWindowsHost = [System.IO.Path]::DirectorySeparatorChar -eq '\'
@@ -39,7 +42,9 @@ if (-not $psExe -and -not $isWindowsHost) {
     $portablePwsh = Join-Path $PSHOME 'pwsh'
     if (Test-Path -LiteralPath $portablePwsh) { $psExe = $portablePwsh }
 }
+if ($Exe) { $psExe = (Get-Command $Exe -ErrorAction SilentlyContinue).Source }
 if (-not $psExe) { "Kein passender PowerShell-Interpreter gefunden."; exit 1 }
+$desktopDatei = Join-Path $desktop 'x.txt'
 
 $windowsFaelle = @(
     # Zur Laufzeit berechnete Ziele: der Fall, fuer den diese Reihe gebaut wurde.
@@ -109,6 +114,25 @@ $folgeFaelle = @(
     @{ n = "32 Einfaches > mit Ausbruch";  erw = "DENY"; tool = "Bash"; cmd = "printf x > ../outside/x.md" }
     @{ n = "33 Einfaches > nach dev-null"; erw = "PASS"; tool = "Bash"; cmd = "printf x > /dev/null" }
     @{ n = "34 > ist nur zitierter Text";  erw = "PASS"; tool = "Bash"; cmd = "printf 'a > b'"; cwd = $desktop }
+    # Seit 4.8: Lesen ausserhalb mit Stream-Umleitung ist kein Schreiben. Die erste
+    # Fassung von 30 bis 34 zaehlte jedes > und sperrte diese Faelle.
+    @{ n = "35 grep fremd 2>/dev/null";    erw = "PASS"; tool = "Bash"; cmd = "grep foo '$desktopDatei' 2>/dev/null" }
+    @{ n = "36 Get-Content fremd 2>`$null"; erw = "PASS"; tool = "PowerShell"; cmd = "Get-Content '$desktopDatei' 2>`$null" }
+    @{ n = "37 cat fremd 2>&1 | head";     erw = "PASS"; tool = "Bash"; cmd = "cat '$desktopDatei' 2>&1 | head" }
+    @{ n = "38 ls fremd 2>/dev/null";      erw = "PASS"; tool = "Bash"; cmd = "ls '$up' 2>/dev/null" }
+    @{ n = "39 git -C fremd log 2>&1";     erw = "PASS"; tool = "Bash"; cmd = "git -C '$up' log -1 2>&1" }
+    @{ n = "40 Pfeil -> im Heredoc";       erw = "PASS"; tool = "Bash"; cmd = "python3 - <<'PY'`ndef f() -> str:`n    return open('$desktopDatei').read()`nPY" }
+    @{ n = "41 >/dev/null und > `$null";    erw = "PASS"; tool = "Bash"; cmd = "grep x '$desktopDatei' >/dev/null 2>&1; Get-Content '$desktopDatei' > `$null" }
+    @{ n = "42 Vergleich >= im Code";      erw = "PASS"; tool = "Bash"; cmd = "python3 -c `"print(len(open('$desktopDatei').read()) >= 1)`"" }
+    @{ n = "43 fremd lesen, > Scratchpad"; erw = "PASS"; tool = "Bash"; cmd = "cat '$desktopDatei' > `"`$env:TEMP/claude/projekt/b.txt`"" }
+    @{ n = "44 > ohne Abstand ausserhalb"; erw = "DENY"; tool = "Bash"; cmd = "echo x >'$desktopDatei'" }
+    @{ n = "45 > Ziel mit Leerzeichen";    erw = "DENY"; tool = "Bash"; cmd = "echo x > '$(Join-Path $up 'Eigene Dateien')/x.txt'" }
+    @{ n = "46 > absolut ins Repo";        erw = "PASS"; tool = "Bash"; cmd = "echo x > '$(Join-Path $repo '90_Inbox')/x.md'" }
+    @{ n = "47 1> ausserhalb";             erw = "DENY"; tool = "Bash"; cmd = "echo x 1> '$desktopDatei'" }
+    # Seit 4.8: git tag auflisten ist Lesen, setzen bleibt Schreiben.
+    @{ n = "48 git tag auflisten + Lesen"; erw = "PASS"; tool = "Bash"; cmd = "ls '$up' 2>/dev/null; git tag --sort=-creatordate | head -3" }
+    @{ n = "49 git tag nackt + Lesen";     erw = "PASS"; tool = "Bash"; cmd = "cat '$desktopDatei'; git tag" }
+    @{ n = "50 git tag setzen ausserhalb"; erw = "DENY"; tool = "Bash"; cmd = "cd '$(Join-Path $up 'fremd')' && git tag v1.0" }
 )
 $faelle = @(if ($isWindowsHost) { $windowsFaelle } else { $posixFaelle }) + $folgeFaelle
 

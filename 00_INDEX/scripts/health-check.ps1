@@ -916,6 +916,20 @@ if (-not (Test-Path $guardSkript)) {
             Add-Check "WARN" $cat "Lese-Sperre eingehaengt, aber 00_INDEX\gesperrte-pfade.txt fehlt: Es wirken nur die eingebauten Muster fuer Zugangsdaten, keine eigenen gesperrten Ordner. Keimdatei aus der Zielversion anlegen."
         }
     }
+    # Seit 4.8: die Frischepruefung eingehaengter Repos (AGENTS.md Abschnitt 4, seit 4.7).
+    # Fehlen die beiden Hooks, arbeitet eine Session auf einem veralteten Stand, ohne dass
+    # es jemand merkt; das Update ersetzt Skripte, die settings.json aber nur auf Vorlage.
+    $repoFrischeSkript = Join-Path $repo "00_INDEX\scripts\eingehaengte-repos-aktuell.ps1"
+    if (Test-Path $repoFrischeSkript) {
+        $fehlendeEreignisse = @('SessionStart', 'UserPromptSubmit') | Where-Object {
+            $guardSettingsText -notmatch ('eingehaengte-repos-aktuell\.ps1.{0,12}-Hook\s+' + $_)
+        }
+        if ($fehlendeEreignisse) {
+            Add-Check "WARN" $cat (".claude\settings.json haengt eingehaengte-repos-aktuell.ps1 nicht fuer " + ($fehlendeEreignisse -join ' und ') + " ein. Eingehaengte Repos werden dann zu Beginn einer Session nicht auf den neuesten Stand geprueft. Eintrag aus der Zielversion ergaenzen (Skill leo-mechanik-update, Kategorie B).")
+        } else {
+            Add-Check "OK" $cat "Frischepruefung eingehaengter Repos eingehaengt (SessionStart und UserPromptSubmit)."
+        }
+    }
 }
 
 Write-Output "Portabilitaets-Checks erledigt."
