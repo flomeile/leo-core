@@ -2,7 +2,7 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 4.8
+version: 4.9
 stand: 2026-10-28
 ---
 
@@ -49,6 +49,9 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\guard-git-tests.ps1` | Regressionsreihe für die Stagen-Sperre (seit 3.3) |
 | `00_INDEX\scripts\guard-mail.ps1` | Mailversand-Sperre: jede Mail aus einer Session geht nur über `lib\gmail-senden.py`, jeder andere Sendeweg ist blockiert (Abschnitt 16, seit 3.4) |
 | `00_INDEX\scripts\guard-mail-tests.ps1` | Regressionsreihe für die Mailversand-Sperre (seit 3.4) |
+| `00_INDEX\scripts\pruef-frontmatter.ps1` | Frontmatter-Prüfung nach jedem Schreiben: gibt ungültiges YAML im Frontmatter einer geschriebenen `.md` sofort zur Reparatur zurück und erinnert an `stand:`, wenn das Datum vor heute liegt (Abschnitte 5 und 7, seit 4.9) |
+| `00_INDEX\scripts\lib\frontmatter-pruefung.ps1` | Die Prüfregeln für Frontmatter, gemeinsam für den Hook und den Health-Check (Kategorie `Frontmatter`), damit beide dasselbe melden (seit 4.9) |
+| `00_INDEX\scripts\pruef-frontmatter-tests.ps1` | Regressionsreihe für Hook und Prüfregeln, 25 Fälle, unter `pwsh` und mit `-Exe powershell` zu fahren (seit 4.9) |
 | `00_INDEX\scripts\guard-read.ps1` | Lese-Sperre: blockiert das Lesen von Zugangsdaten (`.env`, Schlüssel, `.ssh`, `.aws`, Token-Dateien) und der gesperrten Pfade aus `00_INDEX\gesperrte-pfade.txt` in Read, Grep, Glob und den Shell-Werkzeugen (Abschnitt 18, seit 3.8) |
 | `00_INDEX\scripts\guard-read-tests.ps1` | Regressionsreihe für die Lese-Sperre, 28 Fälle, davon zwei mit Umlaut (seit 3.8) |
 | `00_INDEX\scripts\version-check.ps1` | Versionsprüfung ohne Modell: eingespielte Version gegen den neuesten Tag auf GitHub, eine Zeile Ausgabe; die Grundpflege in `AGENTS.md`, Abschnitt 1 ruft es zu Sessionbeginn, wenn der letzte Lauf über sieben Tage zurückliegt (seit 4.0). Der Zeitstempel `10_System\version-check-last-run.txt`, den es schreibt, gehört dir und steht in der `.gitignore` |
@@ -79,7 +82,7 @@ Diese Dateien sind Mechanik, tragen aber zwingend etwas von dir. Ein Update darf
 | `CLAUDE.md` | Die `@`-Importzeilen, die auf deine Basiskontext-Dateien zeigen |
 | `GEMINI.md` | dasselbe |
 | `.clinerules` | dasselbe, hier als textliche Leseanweisung statt als Import |
-| `.claude\settings.json` | Hängt die vier Sperren ein (Arbeitsbereich, seit 3.3 pauschales Stagen, seit 3.4 Mailversand, seit 3.8 Lesen von Zugangsdaten und gesperrten Pfaden), seit 4.7 unter `SessionStart` und `UserPromptSubmit` die Prüfung der eingehängten Repos, und bringt seit 3.8 Lese-Verbote für Schlüsseldateien unter `permissions.deny` mit, seit 4.3 das Standardmodell `"model": "sonnet"` (`AGENTS.md`, Abschnitt 13; wer ein anderes will, setzt es in `.claude\settings.local.json`, die Vorrang hat und die kein Update anfasst). Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf (auch die mitgelieferten `permissions.deny`-Zeilen ergänzt ein Update nicht nachträglich, du übernimmst sie selbst); unter macOS/Linux ausserdem der ausgeschriebene `pwsh`-Pfad in den Hook-Befehlen (`ANLEITUNG.md`, Teil 5, Schritt 7a) |
+| `.claude\settings.json` | Hängt die vier Sperren ein (Arbeitsbereich, seit 3.3 pauschales Stagen, seit 3.4 Mailversand, seit 3.8 Lesen von Zugangsdaten und gesperrten Pfaden), seit 4.7 unter `SessionStart` und `UserPromptSubmit` die Prüfung der eingehängten Repos, seit 4.9 unter `PostToolUse` die Frontmatter-Prüfung nach jedem Schreiben, und bringt seit 3.8 Lese-Verbote für Schlüsseldateien unter `permissions.deny` mit, seit 4.3 das Standardmodell `"model": "sonnet"` (`AGENTS.md`, Abschnitt 13; wer ein anderes will, setzt es in `.claude\settings.local.json`, die Vorrang hat und die kein Update anfasst). Dein Anteil sind eigene Berechtigungen und weitere Hooks, die ein Update nicht anfassen darf (auch die mitgelieferten `permissions.deny`-Zeilen ergänzt ein Update nicht nachträglich, du übernimmst sie selbst); unter macOS/Linux ausserdem der ausgeschriebene `pwsh`-Pfad in den Hook-Befehlen (`ANLEITUNG.md`, Teil 5, Schritt 7a) |
 | `.codex\hooks.json` | Hängt dieselben Sperren in Codex ein (seit 3.2). Dein Anteil ist der ausgeschriebene Pfad zu deinem Repo, den ein Update nie durch den Platzhalter zurückersetzt, dazu eigene weitere Hooks |
 | `.github\copilot-instructions.md` | dasselbe |
 | `ANLEITUNG.md` | Nichts, solange du sie nicht ergänzt hast. Wenn doch, gilt sie als deine Datei |

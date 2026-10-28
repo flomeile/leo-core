@@ -930,6 +930,17 @@ if (-not (Test-Path $guardSkript)) {
             Add-Check "OK" $cat "Frischepruefung eingehaengter Repos eingehaengt (SessionStart und UserPromptSubmit)."
         }
     }
+    # Seit 4.9: die Frontmatter-Pruefung nach jedem Schreiben (AGENTS.md Abschnitte 5 und 7).
+    # Fehlt der Eintrag, faellt ein ungueltiger Wert erst beim naechsten Health-Check auf, und
+    # niemand erinnert an stand:. Das Update ersetzt das Skript, die settings.json nur auf Vorlage.
+    $fmHookSkript = Join-Path $repo "00_INDEX\scripts\pruef-frontmatter.ps1"
+    if (Test-Path $fmHookSkript) {
+        if ($guardSettingsText -notmatch '(?s)"PostToolUse".*pruef-frontmatter\.ps1') {
+            Add-Check "WARN" $cat ".claude\settings.json haengt pruef-frontmatter.ps1 nicht als PostToolUse-Hook ein. Ungueltiges Frontmatter faellt dann erst beim naechsten Health-Check auf, und niemand erinnert an stand:. Eintrag aus der Zielversion ergaenzen (Skill leo-mechanik-update, Kategorie B)."
+        } else {
+            Add-Check "OK" $cat "Frontmatter-Pruefung nach jedem Schreiben eingehaengt (PostToolUse, pruef-frontmatter.ps1)."
+        }
+    }
 }
 
 Write-Output "Portabilitaets-Checks erledigt."
@@ -1573,36 +1584,34 @@ if ($umlautTells) {
 }
 
 # ---------------------------------------------------------------------------
-# FRONTMATTER-WERTE: unzitierter Doppelpunkt mit Leerzeichen
+# FRONTMATTER-WERTE: ungueltiges YAML
 # ---------------------------------------------------------------------------
-# Ein unzitierter Wert mit "Doppelpunkt plus Leerzeichen" (oder Doppelpunkt am
-# Zeilenende) macht den YAML-Block ungueltig, und der Fehler ist im Editor fast
-# unsichtbar. Zitierte Werte ("titel: \"X: Y\""), Zeiten (17:10), 1:1 und URLs
-# sind gueltig und schlagen nicht an. Im Ursprungssystem am 30.08.2026 am
-# Gesamtbestand kalibriert: 0 Fehltreffer ueber alle Werte mit Doppelpunkt.
+# Ein einziges falsches Zeichen in einem Wert macht den YAML-Block ungueltig, und
+# der Fehler ist im Editor fast unsichtbar. Seit 4.9 mit den gemeinsamen Regeln aus
+# lib\frontmatter-pruefung.ps1, denselben wie im Hook pruef-frontmatter.ps1, der jede
+# geschriebene .md sofort prueft: Doppelpunkt mit Leerzeichen, ' #', Steuerzeichen
+# wie ` am Wertanfang, Backslash in "...", offene Anfuehrungszeichen, doppelte
+# Schluessel, Tabulatoren, ungeschlossener Block. Uhrzeiten (07:45), 1:1 und URLs
+# bleiben gueltig. Geprueft wird der ganze Block, nicht nur der Dateikopf. Der Hook
+# sieht nur, was ein Modell schreibt; dieser Check sieht auch, was von Hand im
+# Editor oder aus einem anderen Werkzeug entstanden ist.
 $cat = "Frontmatter"
-$fmDoppelpunkt = @()
+. (Join-Path (Join-Path $PSScriptRoot 'lib') 'frontmatter-pruefung.ps1')
+$fmBefunde = @()
 foreach ($f in $mdAll) {
     $rel = $f.FullName.Substring($repo.Length + 1) -replace '\\', '/'
-    $kopf = Get-Content -Path $f.FullName -TotalCount 25 -Encoding UTF8 -ErrorAction SilentlyContinue
-    if (-not $kopf -or $kopf[0].Trim() -ne '---') { continue }
-    for ($i = 1; $i -lt $kopf.Count; $i++) {
-        if ($kopf[$i].Trim() -eq '---') { break }
-        if ($kopf[$i] -match '^([a-zA-Z_-]+):\s+(.*)$') {
-            $fmSchluessel = $Matches[1]
-            $wert = $Matches[2].Trim()
-            if ($wert -match '^["'']') { continue }
-            if ($wert -match ':(\s|$)') { $fmDoppelpunkt += "$rel (${fmSchluessel}:)" }
-        }
+    try { $fmZeilen = [IO.File]::ReadAllLines($f.FullName, [Text.Encoding]::UTF8) } catch { continue }
+    foreach ($b in (Test-LeoFrontmatter $fmZeilen)) {
+        $fmBefunde += "$rel (Zeile $($b.Zeile)$(if ($b.Schluessel) { ", $($b.Schluessel):" }) $($b.Problem))"
     }
 }
-if ($fmDoppelpunkt.Count -gt 0) {
-    $sampleDP = ($fmDoppelpunkt | Select-Object -First 8) -join ' | '
-    Add-Check "WARN" $cat "$($fmDoppelpunkt.Count) Datei(en) mit unzitiertem Doppelpunkt in einem Frontmatter-Wert; der Block ist damit ungueltiges YAML. Wert umformulieren (Doppelpunkt raus) oder in Anfuehrungszeichen setzen. Treffer: $sampleDP"
+if ($fmBefunde.Count -gt 0) {
+    $sampleDP = ($fmBefunde | Select-Object -First 8) -join ' | '
+    Add-Check "WARN" $cat "$($fmBefunde.Count) ungueltige Stelle(n) im Frontmatter; der Block ist damit kein gueltiges YAML, und der Editor zeigt die Eigenschaften als fehlerhaft (AGENTS.md Abschnitt 5). Wert in einfache Anfuehrungszeichen setzen oder umformulieren. Treffer: $sampleDP"
 } else {
-    Add-Check "OK" $cat "Kein Frontmatter-Wert bricht seinen Block durch einen unzitierten Doppelpunkt (Zeiten, 1:1 und URLs ohne Leerzeichen danach sind gueltig und ausgenommen)."
+    Add-Check "OK" $cat "Kein Frontmatter bricht YAML (Doppelpunkt, ' #', Steuerzeichen am Wertanfang, Backslash in Anfuehrungszeichen, doppelte Schluessel; Uhrzeiten, 1:1 und URLs sind gueltig)."
 }
-Write-Output "Doppelpunkt-Check erledigt."
+Write-Output "Frontmatter-YAML-Check erledigt."
 Write-Output ""
 
 # ---------------------------------------------------------------------------
