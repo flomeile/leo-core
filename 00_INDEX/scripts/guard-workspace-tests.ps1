@@ -89,7 +89,28 @@ $posixFaelle = @(
     @{ n = "16 HOME geschweift";           erw = "DENY"; tool = "Bash"; cmd = "touch `"`${HOME}/Desktop/x.txt`"" }
 )
 
-$faelle = if ($isWindowsHost) { $windowsFaelle } else { $posixFaelle }
+# Gemeinsame Folgefaelle: Temp-Variablen duerfen einander nicht als Praefix
+# treffen; relative Ziele und einfache Umleitungen brauchen dieselbe Grenze
+# wie absolute Ziele. Die Kommandos sind nur Hook-Eingaben, sie laufen nicht.
+$folgeFaelle = @(
+    @{ n = "19 env:TMPDIR Scratchpad";     erw = "PASS"; tool = "PowerShell"; cmd = 'Set-Content "$env:TMPDIR/claude/projekt/x.txt" -Value x' }
+    @{ n = "20 env:TEMP Scratchpad";       erw = "PASS"; tool = "PowerShell"; cmd = 'Set-Content "$env:TEMP/claude/projekt/x.txt" -Value x' }
+    @{ n = "21 env:TMP Scratchpad";        erw = "PASS"; tool = "PowerShell"; cmd = 'Set-Content "$env:TMP/claude/projekt/x.txt" -Value x' }
+    @{ n = "22 Write relativer Ausbruch";  erw = "DENY"; tool = "Write"; file = "../outside/x.md" }
+    @{ n = "23 Edit relativer Ausbruch";   erw = "DENY"; tool = "Edit"; file = "../outside/x.md" }
+    @{ n = "24 Write relativ im Repo";     erw = "PASS"; tool = "Write"; file = "90_Inbox/x.md" }
+    @{ n = "25 Shell relativer Ausbruch";  erw = "DENY"; tool = "Bash"; cmd = "touch ../outside/x.md" }
+    @{ n = "26 Shell Punkt-Punkt im Repo"; erw = "PASS"; tool = "Bash"; cmd = "touch notes/../90_Inbox/x.md" }
+    @{ n = "27 Shell tiefer Ausbruch";     erw = "DENY"; tool = "Bash"; cmd = "touch notes/../../outside/x.md" }
+    @{ n = "28 Ausbruch mit Leerzeichen";  erw = "DENY"; tool = "Bash"; cmd = 'touch "../outside dir/x.md"' }
+    @{ n = "29 Relativ mit Leerzeichen";   erw = "PASS"; tool = "Bash"; cmd = 'touch "notes/../90_Inbox/file with spaces.md"' }
+    @{ n = "30 Einfaches > ausserhalb";    erw = "DENY"; tool = "Bash"; cmd = "printf x > $desktop/x.md" }
+    @{ n = "31 Einfaches > im Repo";       erw = "PASS"; tool = "Bash"; cmd = "printf x > 90_Inbox/x.md" }
+    @{ n = "32 Einfaches > mit Ausbruch";  erw = "DENY"; tool = "Bash"; cmd = "printf x > ../outside/x.md" }
+    @{ n = "33 Einfaches > nach dev-null"; erw = "PASS"; tool = "Bash"; cmd = "printf x > /dev/null" }
+    @{ n = "34 > ist nur zitierter Text";  erw = "PASS"; tool = "Bash"; cmd = "printf 'a > b'"; cwd = $desktop }
+)
+$faelle = @(if ($isWindowsHost) { $windowsFaelle } else { $posixFaelle }) + $folgeFaelle
 
 function Ruf($skript, $fall, $exe, $cwd) {
     $ti = if ($fall.tool -in @("Write","Edit")) { @{ file_path = $fall.file } } else { @{ command = $fall.cmd } }
