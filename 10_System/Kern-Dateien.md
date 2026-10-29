@@ -2,8 +2,8 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 4.9
-stand: 2026-10-28
+version: 4.10
+stand: 2026-10-29
 ---
 
 # Kern-Dateien: was ein Update anfassen darf
@@ -57,6 +57,8 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\version-check.ps1` | Versionsprüfung ohne Modell: eingespielte Version gegen den neuesten Tag auf GitHub, eine Zeile Ausgabe; die Grundpflege in `AGENTS.md`, Abschnitt 1 ruft es zu Sessionbeginn, wenn der letzte Lauf über sieben Tage zurückliegt (seit 4.0). Der Zeitstempel `10_System\version-check-last-run.txt`, den es schreibt, gehört dir und steht in der `.gitignore` |
 | `00_INDEX\scripts\lib\google_zugang.py` | Gemeinsame Google-Anmeldung (OAuth, Token im Benutzerprofil, eine Scope-Liste) für alle Skripte der Google-Anbindung (seit 3.4) |
 | `00_INDEX\scripts\lib\mail_text.py` | HTML-, Text- und Adresshilfen für das Sendeskript (seit 3.4) |
+| `00_INDEX\scripts\lib\mail_sperrmuster.py` | Muster für das Mail-Sperrnetz: Zugangsdaten sperren hart, Karten-, AHV- und IBAN-Nummern werden markiert (Abschnitt 16, seit 4.10) |
+| `00_INDEX\scripts\lib\mail-sperrmuster-tests.py` | Regressionsreihe dafür, 25 Fälle, Pflicht vor und nach jeder Änderung an den Mustern (seit 4.10) |
 | `00_INDEX\scripts\lib\google-sheets-fetch.py` | Holt ein Google Sheet als xlsx und Markdown-Tabelle in den Zwischenspeicher, für kopflose Läufe ohne Connector (seit 3.4) |
 | `10_System\Google-Anbindung.md` | Einmalige Einrichtung des Google-Zugangs (Cloud-Projekt, APIs, Nutzertyp, OAuth-Client) und Kurzfassung der Mailregeln (seit 3.4) |
 | `00_INDEX\scripts\pruefkopie.ps1` | Legt die Wegwerf-Kopie an, in der die kalten Prüfläufe laufen, damit erfundener Testinhalt nie ins echte Repo gelangt (Skill `leo-system-optimierung`, Schritt 2; seit 4.3) |

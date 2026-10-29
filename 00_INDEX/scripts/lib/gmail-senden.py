@@ -38,6 +38,10 @@ Inhalt nicht sicher erkennbar ist, sichert dieses Skript den Weg):
   7. Sperrbegriffe (mail-sperrbegriffe.txt im selben Ordner, deine Liste) sind ein zweites Netz:
      im Fenster rot markiert, Sendeknopf erst nach dem Häkchen "Geprüft, trotzdem senden"; eine
      Routine bricht ab.
+  7a. Muster aus mail_sperrmuster.py im selben Ordner (seit 4.10): Zugangsdaten (API-Schlüssel,
+     Tokens, private Schlüssel) sperren hart, auch mit Häkchen; Kennnummern (Kartennummer,
+     AHV-Nummer, IBAN, 40 Hex-Zeichen) wie Regel 7. Eine Routine bricht bei beiden ab und
+     nennt nur Ort und Art, nie den Wert.
 
 Aufrufe:
   python gmail-senden.py --auth
@@ -111,6 +115,7 @@ if str(_LIB) not in sys.path:                     # robust auch beim Laden aus e
     sys.path.insert(0, str(_LIB))
 from mail_text import (nur_text, html_zu_text, sichtbar_html, dekodiere,          # AGENTS.md Abschnitt 5: eine Funktion, ein Ort
                        parse_adressen, adresse_gueltig, nur_adresse, anzeige, header_wert)
+from mail_sperrmuster import finde_zugangsdaten, finde_kennnummern, formatiere_ohne_fund   # Regel 7a
 import google_zugang
 SCRIPTS = HIER.parent.parent                      # 00_INDEX\scripts
 REPO = SCRIPTS.parent.parent                      # das Repo
@@ -160,9 +165,8 @@ def lade_sperrbegriffe():
     return [z.strip() for z in zeilen if z.strip() and not z.strip().startswith("#")]
 
 
-def finde_sperrbegriffe(betreff, html, anhaenge):
-    """Regel 7: Treffer der Sperrliste in Betreff, Text, Anhangnamen und Textanhängen."""
-    begriffe = lade_sperrbegriffe()
+def pruefmaterial(betreff, html, anhaenge):
+    """Was Regel 7 und 7a prüfen: Betreff, Text, Anhangnamen und Textanhänge, als [(wo, text)]."""
     material = [("Betreff", betreff), ("Text", nur_text(html))]
     for a in anhaenge or []:
         p = pathlib.Path(a)
@@ -172,6 +176,13 @@ def finde_sperrbegriffe(betreff, html, anhaenge):
                 material.append(("Anhang %s" % p.name, p.read_text(encoding="utf-8", errors="ignore")))
             except OSError:
                 pass
+    return material
+
+
+def finde_sperrbegriffe(betreff, html, anhaenge):
+    """Regel 7: Treffer der Sperrliste in Betreff, Text, Anhangnamen und Textanhängen."""
+    begriffe = lade_sperrbegriffe()
+    material = pruefmaterial(betreff, html, anhaenge)
     treffer = []
     muster = [(b, re.compile((r"\b" if b[0].isalnum() else "") + re.escape(b), re.IGNORECASE)) for b in begriffe]
     for wo, text in material:
@@ -362,6 +373,11 @@ def sende(msg):
     treffer = finde_sperrbegriffe(msg.get("Subject", ""), html, [])
     if treffer:
         raise Abgelehnt("Sperrbegriff im Routinelauf, Mail nicht gesendet: " + "; ".join(treffer))
+    material = pruefmaterial(msg.get("Subject", ""), html, [])
+    muster_treffer = finde_zugangsdaten(material) + finde_kennnummern(material)
+    if muster_treffer:   # Regel 7a; Meldung ohne den Wert selbst
+        raise Abgelehnt("Zugangsdaten oder Kennnummer im Routinelauf, Mail nicht gesendet: "
+                        + "; ".join(formatiere_ohne_fund(muster_treffer)))
     return _sende_roh(msg)
 
 
@@ -637,9 +653,13 @@ def freigabe_im_fenster(an, cc_liste, betreff, html, anhaenge, sprache, wartezei
         return an_var.get().strip(), cc_neu, betreff_var.get().strip(), html_neu, anh_neu, text
 
     def gruende_fuer(an_neu, cc_neu, betreff_neu, html_neu, anh_neu):
+        """Gibt (g, hart): g braucht das Häkchen, hart (Regel 7a, Zugangsdaten) sperrt auch mit Häkchen."""
         g = ["Empfänger %s: nur mit deinem ausdrücklichen Go" % h for h in freigabepflichtig_unter([an_neu] + cc_neu)]
         g += finde_sperrbegriffe(betreff_neu, html_neu, anh_neu)
-        return g
+        material = pruefmaterial(betreff_neu, html_neu, anh_neu)
+        g += ["%s (%s): %s" % (wo, art, fund) for wo, art, fund in finde_kennnummern(material)]
+        hart = ["%s (%s): %s" % (wo, art, fund) for wo, art, fund in finde_zugangsdaten(material)]
+        return g, hart
 
     def markiere(treffer):
         box.tag_remove("treffer", "1.0", "end")
@@ -664,15 +684,19 @@ def freigabe_im_fenster(an, cc_liste, betreff, html, anhaenge, sprache, wartezei
 
     def pruefe_und_zeige():
         an_neu, cc_neu, betreff_neu, html_neu, anh_neu, _ = aktueller_stand()
-        g = gruende_fuer(an_neu, cc_neu, betreff_neu, html_neu, anh_neu)
-        markiere([x for x in g if ": " in x and not x.startswith("Empfänger")])
-        if g:
+        g, hart = gruende_fuer(an_neu, cc_neu, betreff_neu, html_neu, anh_neu)
+        markiere([x for x in g + hart if ": " in x and not x.startswith("Empfänger")])
+        if hart:
+            haken.pack_forget()
+            achtung_var.set("Gesperrt: Zugangsdaten in der Mail (" + "; ".join(hart) + "). Das geht auch mit Häkchen nicht hinaus; "
+                            "Stelle löschen oder Anhang abwählen." + (" Ausserdem: " + "; ".join(g) if g else ""))
+        elif g:
             achtung_var.set("Achtung: " + "; ".join(g) + ". Senden erst nach dem Häkchen unten.")
             haken.pack(side="left", padx=(12, 0))
         else:
             achtung_var.set("")
             haken.pack_forget()
-        return g
+        return g, hart
 
     def im_browser():
         an_neu, cc_neu, betreff_neu, html_neu, anh_neu, _ = aktueller_stand()
@@ -699,7 +723,8 @@ def freigabe_im_fenster(an, cc_liste, betreff, html, anhaenge, sprache, wartezei
         if not betreff_neu or not text.strip():
             achtung_var.set("Achtung: Betreff und Text dürfen nicht leer sein.")
             return
-        if pruefe_und_zeige() and not geprueft.get():
+        g, hart = pruefe_und_zeige()
+        if hart or (g and not geprueft.get()):
             return
         uebernehmen("senden")
 
