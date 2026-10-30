@@ -133,6 +133,10 @@ $folgeFaelle = @(
     @{ n = "48 git tag auflisten + Lesen"; erw = "PASS"; tool = "Bash"; cmd = "ls '$up' 2>/dev/null; git tag --sort=-creatordate | head -3" }
     @{ n = "49 git tag nackt + Lesen";     erw = "PASS"; tool = "Bash"; cmd = "cat '$desktopDatei'; git tag" }
     @{ n = "50 git tag setzen ausserhalb"; erw = "DENY"; tool = "Bash"; cmd = "cd '$(Join-Path $up 'fremd')' && git tag v1.0" }
+    # Seit 4.11: Verkettung nach git tag und zitiertes /dev/null (Rueckmeldung aus PR #9).
+    @{ n = "51 git tag && Lesen fremd";    erw = "PASS"; tool = "Bash"; cmd = "git tag && cat '$desktopDatei'" }
+    @{ n = "52 >`"/dev/null`" cwd fremd";   erw = "PASS"; tool = "Bash"; cmd = "cat x >`"/dev/null`""; cwd = $desktop }
+    @{ n = "53 > zitiertes Ziel fremd";    erw = "DENY"; tool = "Bash"; cmd = "printf x >`"$desktopDatei`"" }
 )
 $faelle = @(if ($isWindowsHost) { $windowsFaelle } else { $posixFaelle }) + $folgeFaelle
 

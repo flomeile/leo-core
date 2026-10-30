@@ -273,7 +273,8 @@ if ($tool -in @("Bash", "PowerShell")) {
         # git tag schreibt nur, wenn ein Tag gesetzt oder geloescht wird; nacktes "git tag"
         # und die Listenoptionen lesen nur. Galt jedes git tag als Schreiben, machte ein
         # Auflisten jeden Lesepfad ausserhalb im selben Kommando zur Sperre (seit 4.8).
-        '\bgit\s+tag\s+(?!-l\b|--list\b|--sort\b|--points-at\b|--contains\b|--no-contains\b|--merged\b|--no-merged\b|--format\b|-n\d*\b|--column\b)\S',
+        # Ein Verkettungszeichen danach ("git tag && ...") ist kein Tag-Name (seit 4.11).
+        '\bgit\s+tag\s+(?!-l\b|--list\b|--sort\b|--points-at\b|--contains\b|--no-contains\b|--merged\b|--no-merged\b|--format\b|-n\d*\b|--column\b)[^\s&|;)]',
         '\bnpm\s+(install|i|uninstall|link)\b','\bpip\s+install\b',
         '>>','\|\s*Out-File','\|\s*Set-Content','\|\s*Add-Content',
         '--print-to-pdf','--screenshot'
@@ -287,7 +288,8 @@ if ($tool -in @("Bash", "PowerShell")) {
     # (->, =>, >=) und ein > in einer zitierten Zeichenkette ("printf 'a > b'"). Die
     # erste Fassung zaehlte jedes > und sperrte damit jedes lesende Kommando mit
     # 2>/dev/null und einem Pfad ausserhalb; das traefe fast jede Sitzung.
-    $umleitungRx = '(?<![>&=*-])(?<![02-9])>(?![>&=])\s*(?!/dev/null\b|\$null\b)("([^"\r\n]+)"|''([^''\r\n]+)''|([^\s"'';|&)<>]+))'
+    # Seit 4.11 gilt das Wegwerfen auch zitiert (>"/dev/null").
+    $umleitungRx = '(?<![>&=*-])(?<![02-9])>(?![>&=])\s*(?![''"]?/dev/null\b|\$null\b)("([^"\r\n]+)"|''([^''\r\n]+)''|([^\s"'';|&)<>]+))'
     function Get-Umleitungsziele([string]$text) {
         $zitate = [regex]::Matches($text, $quotedPattern)
         foreach ($m in [regex]::Matches($text, $umleitungRx)) {
