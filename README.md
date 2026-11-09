@@ -8,8 +8,13 @@ type: readme
 
 Harness-unabhängiges Wissenssystem. Alles Wissen liegt als Markdown in thematischen Ordnern; jedes LLM mit Datei- und Werkzeug-Zugriff kann darauf arbeiten.
 
-Dies ist **Leo Core**, Version 4.11: das leere Grundgerüst mit der kompletten Mechanik, aber ohne Inhalte. Du füllst es mit deinen eigenen Themen. Bis Version 2.6 hiess dieses Repo `leo-starter`; "Starter" beschrieb den ersten Tag, "Core" beschreibt, was es geworden ist: ein laufend aktualisierter Kern, den die abgeleiteten Systeme ziehen (Skill `leo-mechanik-update`) und an den sie Verbesserungen zurückschicken. Die Kernschicht, die ein Update ersetzt, steht in `10_System\Kern-Dateien.md`; alles Persönliche bleibt stehen.
+Dies ist **Leo Core**, Version 5.0: das leere Grundgerüst mit der kompletten Mechanik, aber ohne Inhalte. Du füllst es mit deinen eigenen Themen. Bis Version 2.6 hiess dieses Repo `leo-starter`; "Starter" beschrieb den ersten Tag, "Core" beschreibt, was es geworden ist: ein laufend aktualisierter Kern, den die abgeleiteten Systeme ziehen (Skill `leo-mechanik-update`) und an den sie Verbesserungen zurückschicken. Die Kernschicht, die ein Update ersetzt, steht in `10_System\Kern-Dateien.md`; alles Persönliche bleibt stehen.
 
+## Ab Werk zu: was dein Agent auf deinem Rechner sieht
+
+**Seit 5.0 liest und schreibt dein Agent nur in seinem Arbeitsbereich:** im eigenen Repo, in den Ordnern `<Repo> Archiv` und `<Repo> Artifacts` daneben und im Scratchpad seines Werkzeugs. Alles andere auf deinem Rechner ist für ihn zu, bis du es selbst freigibst; Zugangsdaten (`.env`-Dateien, Schlüssel, `.ssh`, `.aws`, Token-Dateien) bleiben immer zu. Der Grund: Was dein Agent liest, geht an den Anbieter des Sprachmodells, und was er ausserhalb des Repos verändert, kann Git nicht zurückholen.
+
+**Freigeben kannst nur du**, mit dem Befehl `00_INDEX\scripts\freigeben.ps1` in deinem eigenen PowerShell-Fenster, und jedes Mal entscheidest du, ob dein Agent dort nur lesen oder auch schreiben darf. Dein Agent kann das nicht, auch nicht auf deine Bitte hin; braucht er einen Ordner, erklärt er dir den Grund und gibt dir den fertigen Befehl. **Ehrlich zur Grenze:** Die Sperre besteht aus Hooks, die vor jedem Schritt des Agenten prüfen. Sie fangen das Versehen zuverlässig ab, aber nicht die Absicht; wer sie gezielt umgehen will, kommt vorbei. **Auf macOS und Linux wirkt die Sperre in 5.0 nur nach einem Handgriff:** PowerShell 7 installieren und die Hook-Befehle umschreiben (`ANLEITUNG.md`, Teil 5, Schritt 7a). Ohne ihn startet kein Hook, und dann sperrt nichts; erst die nächste Version macht das ohne Handgriff und hält die Sperre zu, wenn ein Hook nicht startet. Getestet ist 5.0 nur unter Windows; Rückmeldungen vom Mac sind als Issue oder Pull Request willkommen. Was gegen Absicht hilft und wie die Freigabe genau geht, steht in `ANLEITUNG.md`, Teil 5, Schritt 7c.
 
 ## Zwei Regeln für den Betrieb
 

@@ -893,27 +893,35 @@ if (-not (Test-Path $guardSkript)) {
     } else {
         Add-Check "OK" $cat "Mailversand-Sperre eingehaengt (guard-mail.ps1)."
     }
-    # Vierter Hook seit 3.8: die Lese-Sperre (AGENTS.md Abschnitt 18). Ohne sie wandert eine
-    # .env-Datei, ein Schluessel oder eine Kundenkonfiguration mit einem einzigen Leseaufruf
-    # in den Kontext und damit zum Modellanbieter.
+    # Vierter Hook seit 3.8, seit 5.0 die Lese-Haelfte der Standardsperre (AGENTS.md Abschnitt 18):
+    # Ausserhalb des Arbeitsbereichs ist Lesen zu, bis der Besitzer mit freigeben.ps1 freigibt.
+    # Ohne den Hook wandert jede Datei auf dem Rechner mit einem einzigen Leseaufruf in den
+    # Kontext und damit zum Modellanbieter.
     $readGuardSkript = Join-Path $repo "00_INDEX\scripts\guard-read.ps1"
+    $sperrLib = Join-Path $repo "00_INDEX\scripts\lib\arbeitsbereich.ps1"
     if (-not (Test-Path $readGuardSkript)) {
-        Add-Check "WARN" $cat "guard-read.ps1 fehlt. Die Lese-Sperre fuer Zugangsdaten und gesperrte Ordner aus AGENTS.md Abschnitt 18 ist damit nur eine Textregel."
+        Add-Check "FAIL" $cat "guard-read.ps1 fehlt. Die Standardsperre fuer das Lesen aus AGENTS.md Abschnitt 18 ist damit nur eine Textregel."
     } elseif ($guardSettingsText -notmatch "guard-read") {
-        Add-Check "WARN" $cat ".claude\settings.json haengt guard-read.ps1 nicht als PreToolUse-Hook ein. Zugangsdaten und gesperrte Ordner sind dann lesbar. Eintrag aus der Zielversion ergaenzen (Skill leo-mechanik-update, Kategorie B)."
+        Add-Check "FAIL" $cat ".claude\settings.json haengt guard-read.ps1 nicht als PreToolUse-Hook ein. Dein Agent kann dann alles auf diesem Rechner lesen. Eintrag aus der Zielversion ergaenzen (Skill leo-mechanik-update, Kategorie B)."
+    } elseif (-not (Test-Path $sperrLib)) {
+        Add-Check "FAIL" $cat "00_INDEX\scripts\lib\arbeitsbereich.ps1 fehlt. Ohne diese gemeinsame Logik lassen guard-read.ps1 und guard-workspace.ps1 alles durch, ohne einen Fehler zu zeigen. Datei aus der Zielversion holen (Skill leo-mechanik-update)."
     } else {
-        $sperrliste = Join-Path $repo "00_INDEX\gesperrte-pfade.txt"
-        if (Test-Path $sperrliste) {
-            $eintraege = @(Get-Content -Path $sperrliste -Encoding UTF8 | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" -and -not $_.StartsWith("#") })
-            if ($eintraege.Count -eq 0) {
-                Add-Check "WARN" $cat "Lese-Sperre eingehaengt, aber 00_INDEX\gesperrte-pfade.txt hat keinen Eintrag: Nur die eingebauten Muster fuer Zugangsdaten wirken, kein Kundenordner ist gesperrt. Trag die Ordner ein, deren Inhalt in keine Cloud-KI darf (Kundenkonfigurationen, Exporte unter NDA, Gesundheitsdaten), eine je Zeile; gibt es wirklich keine, schreib als einzige Zeile das Wort keine."
-            } elseif ($eintraege.Count -eq 1 -and ($eintraege[0] -ieq "keine" -or $eintraege[0] -ieq "none")) {
-                Add-Check "OK" $cat "Lese-Sperre eingehaengt (guard-read.ps1); Besitzer hat bestaetigt, dass es keine gesperrten Ordner gibt (Marker keine)."
-            } else {
-                Add-Check "OK" $cat "Lese-Sperre eingehaengt (guard-read.ps1); $($eintraege.Count) gesperrte(r) Pfad(e) eingetragen."
-            }
+        # Selbsttest seit 5.0: Ein Lesezugriff auf eine erfundene Datei im Benutzerordner muss
+        # blockiert werden. Ein Fehler in Hook oder Bibliothek liesse ihn still durch, weil die
+        # Hooks bei einem eigenen Fehler durchlassen, statt den Betrieb anzuhalten.
+        $sperrStand = & { param($l, $r) . $l; $ab = Get-Arbeitsbereich $r; @{ frei = @($ab.freigaben); sperren = @($ab.sperren); weit = @($ab.freigaben | Where-Object { Test-ZuWeit $_ }) } } $sperrLib $repo
+        $probeBasis = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+        $probe = Join-Path $probeBasis ("leo-sperrprobe-" + [System.Guid]::NewGuid().ToString('N') + ".txt")
+        $probeJson = @{ tool_name = 'Read'; cwd = $repo; tool_input = @{ file_path = $probe } } | ConvertTo-Json -Compress -Depth 5
+        $probeExe = if ($guardIsWindows) { 'powershell' } else { 'pwsh' }
+        $probeAntwort = $probeJson | & $probeExe -NoProfile -ExecutionPolicy Bypass -File $readGuardSkript 2>&1 | Out-String
+        if ($probeAntwort -notmatch '"permissionDecision"\s*:\s*"deny"') {
+            Add-Check "FAIL" $cat "Selbsttest der Standardsperre: Ein Lesezugriff ausserhalb des Arbeitsbereichs ging durch. Hook oder lib\arbeitsbereich.ps1 sind beschaedigt; die Regressionsreihe 00_INDEX\scripts\guard-read-tests.ps1 zeigt, wo."
         } else {
-            Add-Check "WARN" $cat "Lese-Sperre eingehaengt, aber 00_INDEX\gesperrte-pfade.txt fehlt: Es wirken nur die eingebauten Muster fuer Zugangsdaten, keine eigenen gesperrten Ordner. Keimdatei aus der Zielversion anlegen."
+            Add-Check "OK" $cat ("Standardsperre eingehaengt und im Selbsttest wirksam: Ausserhalb von Repo, Archiv, Artifacts und Scratchpad ist Lesen und Schreiben zu. " + $sperrStand.frei.Count + " Freigabe(n) in freigegebene-pfade.txt, " + $sperrStand.sperren.Count + " Sperre(n) in gesperrte-pfade.txt.")
+            foreach ($w in $sperrStand.weit) {
+                Add-Check "WARN" $cat "Freigabe sehr weit: $w (Laufwerkswurzel, Benutzerordner oder Ordner aller Benutzer). Damit ist die Standardsperre praktisch aufgehoben. Zuruecknehmen mit freigeben.ps1 `"$w`" -Entziehen und nur den gebrauchten Ordner freigeben; der Agent fuehrt den Befehl nicht aus, nur der Besitzer."
+            }
         }
     }
     # Seit 4.8: die Frischepruefung eingehaengter Repos (AGENTS.md Abschnitt 4, seit 4.7).

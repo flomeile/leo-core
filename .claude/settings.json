@@ -86,7 +86,13 @@
       "Read(**/id_ed25519*)",
       "Read(~/.ssh/**)",
       "Read(~/.aws/**)",
-      "Read(~/.gnupg/**)"
+      "Read(~/.gnupg/**)",
+      "Read(~/.azure/**)",
+      "Read(~/.kube/**)",
+      "Read(**/*.kdbx)",
+      "Read(**/*.ppk)",
+      "Edit(**/00_INDEX/freigegebene-pfade.txt)",
+      "Edit(**/00_INDEX/gesperrte-pfade.txt)"
     ]
   }
 }

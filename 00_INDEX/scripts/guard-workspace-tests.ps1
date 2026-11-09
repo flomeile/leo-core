@@ -138,13 +138,89 @@ $folgeFaelle = @(
     @{ n = "52 >`"/dev/null`" cwd fremd";   erw = "PASS"; tool = "Bash"; cmd = "cat x >`"/dev/null`""; cwd = $desktop }
     @{ n = "53 > zitiertes Ziel fremd";    erw = "DENY"; tool = "Bash"; cmd = "printf x >`"$desktopDatei`"" }
 )
-$faelle = @(if ($isWindowsHost) { $windowsFaelle } else { $posixFaelle }) + $folgeFaelle
+# Seit 5.0: Freigaben des Besitzers, Unter-Sperren, die Freigabelisten und freigeben.ps1.
+# Die Freigabe traegt Umlaut und Leerzeichen; die Reihe reicht dem Hook eigene Testlisten
+# ueber LEO_GUARD_FREIGABE_KONFIG und LEO_GUARD_READ_KONFIG, die echten bleiben unberuehrt.
+$utf8 = New-Object System.Text.UTF8Encoding($false)
+$frei = Join-Path (Join-Path $up ("Projekte " + [char]0x00C4)) 'Verein'
+$freiUnter = Join-Path $frei 'Mitglieder'
+$freiNurLesen = Join-Path (Join-Path $up ("Projekte " + [char]0x00C4)) "Nur Lesen"
+$id = [System.Guid]::NewGuid().ToString('N')
+$tmpDir = [System.IO.Path]::GetTempPath().TrimEnd('\', '/')
+$freiKonfig = Join-Path $tmpDir ("guard-workspace-tests-frei-$id.txt")
+$sperrKonfig = Join-Path $tmpDir ("guard-workspace-tests-sperre-$id.txt")
+[System.IO.File]::WriteAllLines($freiKonfig, [string[]]@("# Testliste", ("lesen-und-schreiben: " + $frei), ("lesen: " + $freiNurLesen)), $utf8)
+[System.IO.File]::WriteAllLines($sperrKonfig, [string[]]@("# Testliste", $freiUnter), $utf8)
+$fg = Join-Path (Join-Path '00_INDEX' 'scripts') 'freigeben.ps1'
+$freigabeFaelle = @(
+    @{ n = "54 Write in Freigabe";         erw = "PASS"; tool = "Write"; file = (Join-Path $frei 'protokoll.md') }
+    @{ n = "55 Set-Content in Freigabe";   erw = "PASS"; tool = "PowerShell"; cmd = "Set-Content -LiteralPath `"$(Join-Path $frei 'a b.md')`" -Value x" }
+    @{ n = "56 Write in Unter-Sperre";     erw = "DENY"; tool = "Write"; file = (Join-Path $freiUnter 'liste.md'); muss = "-Entsperren" }
+    @{ n = "57 Write Freigabeliste";       erw = "DENY"; tool = "Write"; file = (Join-Path (Join-Path $repo '00_INDEX') 'freigegebene-pfade.txt') }
+    @{ n = "58 Edit Sperrliste";           erw = "DENY"; tool = "Edit"; file = (Join-Path (Join-Path $repo '00_INDEX') 'gesperrte-pfade.txt') }
+    @{ n = "59 Add-Content Freigabeliste"; erw = "DENY"; tool = "PowerShell"; cmd = "Add-Content 00_INDEX/freigegebene-pfade.txt 'C:\x'" }
+    @{ n = "60 >> in Freigabeliste";       erw = "DENY"; tool = "Bash"; cmd = "echo /x >> 00_INDEX/freigegebene-pfade.txt" }
+    @{ n = "61 > in Sperrliste";           erw = "DENY"; tool = "Bash"; cmd = "printf '' > 00_INDEX/gesperrte-pfade.txt" }
+    @{ n = "62 git checkout Freigabeliste"; erw = "DENY"; tool = "Bash"; cmd = "git checkout v5.0 -- 00_INDEX/freigegebene-pfade.txt" }
+    @{ n = "63 git add Sperrliste";        erw = "DENY"; tool = "Bash"; cmd = "git add 00_INDEX/gesperrte-pfade.txt" }
+    @{ n = "64 Freigabeliste lesen";       erw = "PASS"; tool = "PowerShell"; cmd = "Get-Content 00_INDEX/freigegebene-pfade.txt" }
+    @{ n = "65 git log Freigabeliste";     erw = "PASS"; tool = "Bash"; cmd = "git log --oneline -- 00_INDEX/freigegebene-pfade.txt" }
+    @{ n = "66 Liste lesen, dann touch";   erw = "PASS"; tool = "Bash"; cmd = "cat 00_INDEX/gesperrte-pfade.txt; touch 90_Inbox/x.md" }
+    @{ n = "67 freigeben.ps1 per -File";   erw = "DENY"; tool = "PowerShell"; cmd = "powershell -NoProfile -File $fg `"C:\x`""; muss = "nur [NAME] selbst" }
+    @{ n = "68 freigeben.ps1 per &";       erw = "DENY"; tool = "PowerShell"; cmd = "& .\$fg 'C:\x'" }
+    @{ n = "69 freigeben.ps1 per pwsh -c"; erw = "DENY"; tool = "Bash"; cmd = "pwsh -c `"& './00_INDEX/scripts/freigeben.ps1' 'C:\x'`"" }
+    @{ n = "70 freigeben.ps1 2. Segment";  erw = "DENY"; tool = "PowerShell"; cmd = "Get-Content x.md; .\$fg 'C:\y'" }
+    @{ n = "71 freigeben.ps1 lesen";       erw = "PASS"; tool = "Bash"; cmd = "cat 00_INDEX/scripts/freigeben.ps1" }
+    @{ n = "72 freigeben.ps1 git checkout"; erw = "PASS"; tool = "Bash"; cmd = "git checkout v5.0 -- 00_INDEX/scripts/freigeben.ps1" }
+    @{ n = "73 freigeben.ps1 git add+commit"; erw = "PASS"; tool = "Bash"; cmd = "git add 00_INDEX/scripts/freigeben.ps1 && git commit -m x -- 00_INDEX/scripts/freigeben.ps1" }
+    @{ n = "74 Write ausserhalb mit Befehl"; erw = "DENY"; tool = "Write"; file = "$desktop\x.md"; muss = "freigeben.ps1`" `"$desktop`"" }
+    @{ n = "75 Praefix-Falle neben Freigabe"; erw = "DENY"; tool = "Write"; file = (Join-Path ($frei + '-alt') 'x.md') }
+    # Seit 5.0: Eine Freigabe nur zum Lesen oeffnet das Schreiben nicht.
+    @{ n = "78 Write in Lese-Freigabe";    erw = "DENY"; tool = "Write"; file = (Join-Path $freiNurLesen 'x.md'); muss = "nur zum Lesen" }
+    @{ n = "79 Shell in Lese-Freigabe";    erw = "DENY"; tool = "PowerShell"; cmd = "Set-Content -LiteralPath `"$(Join-Path $freiNurLesen 'y.md')`" -Value x" }
+    @{ n = "81 Umlaut in der Meldung heil"; erw = "DENY"; tool = "Write"; file = (Join-Path $freiNurLesen 'z.md'); muss = $freiNurLesen }
+    @{ n = "80 Lese-Freigabe nur lesen";   erw = "PASS"; tool = "PowerShell"; cmd = "Get-Content -LiteralPath `"$(Join-Path $freiNurLesen 'y.md')`"" }
+)
+if ($isWindowsHost) {
+    $freigabeFaelle += @(
+        @{ n = "76 touch /tmp/claude";     erw = "PASS"; tool = "Bash"; cmd = "touch /tmp/claude/projekt/x.txt" }
+        @{ n = "77 touch /tmp fremd";      erw = "DENY"; tool = "Bash"; cmd = "touch /tmp/fremd/x.txt" }
+    )
+}
+$faelle = @(if ($isWindowsHost) { $windowsFaelle } else { $posixFaelle }) + $folgeFaelle + $freigabeFaelle
 
 function Ruf($skript, $fall, $exe, $cwd) {
     $ti = if ($fall.tool -in @("Write","Edit")) { @{ file_path = $fall.file } } else { @{ command = $fall.cmd } }
     $json = @{ session_id = "test"; hook_event_name = "PreToolUse"; cwd = $cwd; tool_name = $fall.tool; tool_input = $ti } | ConvertTo-Json -Depth 5 -Compress
-    $out = $json | & $exe -NoProfile -ExecutionPolicy Bypass -File $skript 2>&1 | Out-String
-    if ($out -match '"permissionDecision"\s*:\s*"deny"') { return "DENY" }
+    # Seit 5.0 als UTF-8-Bytes ueber ProcessStartInfo statt per Pipe: Ein Pipe kodiert je nach
+    # Version anders, und die Faelle mit Umlaut im Pfad wuerden unter 5.1 am Treiber scheitern
+    # statt am Hook. Dazu die Testlisten und LEO_GUARD_DEBUG, damit ein abgefangener
+    # Hook-Fehler als FEHLER erscheint und nicht als PASS.
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $exe
+    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$skript`""
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardInput = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = $utf8
+    $psi.EnvironmentVariables['LEO_GUARD_FREIGABE_KONFIG'] = $freiKonfig
+    $psi.EnvironmentVariables['LEO_GUARD_READ_KONFIG'] = $sperrKonfig
+    $psi.EnvironmentVariables['LEO_GUARD_DEBUG'] = '1'
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $bytes = $utf8.GetBytes($json)
+    $p.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
+    $p.StandardInput.Close()
+    $out = $p.StandardOutput.ReadToEnd() + $p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+    if ($out -match '"permissionDecision"\s*:\s*"deny"') {
+        if ($fall.ContainsKey('muss')) {
+            $grund = ''
+            try { $grund = [string](($out | ConvertFrom-Json).hookSpecificOutput.permissionDecisionReason) } catch { }
+            if ($grund.IndexOf($fall.muss, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) { return "DENY ohne '" + $fall.muss + "'" }
+        }
+        return "DENY"
+    }
     if ([string]::IsNullOrWhiteSpace($out)) { return "PASS" }
     return "FEHLER: " + ($out.Trim() -replace "`r?`n", " ")
 }
@@ -163,6 +239,7 @@ foreach ($f in $faelle) {
     if ($ist -ne $f.erw) { $fehler++ }
     "{0,-30} {1,-6} {2,-8} {3}" -f $f.n, $f.erw, $ist, $ok
 }
+Remove-Item -LiteralPath $freiKonfig, $sperrKonfig -ErrorAction SilentlyContinue
 ""
 if ($fehler -eq 0) { "ALLE $($faelle.Count) FAELLE BESTANDEN"; exit 0 }
 else { "$fehler VON $($faelle.Count) FAELLEN ABWEICHEND"; exit 1 }

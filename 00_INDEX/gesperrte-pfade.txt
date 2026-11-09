@@ -1,26 +1,22 @@
 # gesperrte-pfade.txt
-# Ordner und Dateien, die der Agent NIE lesen darf, weil ihr Inhalt nach deinen
-# Datenregeln in keine Cloud-KI gehoert (Kundenkonfigurationen, Exporte unter NDA,
-# Gesundheitsdaten, alles, was ein Kunde dir anvertraut hat).
+# Ordner und Dateien, die der Agent NIE lesen oder schreiben darf, auch wenn ein Ordner
+# darueber in freigegebene-pfade.txt freigegeben ist. Seit 5.0 ist ausserhalb des Repos
+# ohnehin alles zu (Standardsperre, AGENTS.md Abschnitt 18); diese Liste brauchst du nur, um
+# innerhalb einer Freigabe einen Unterordner wieder zu sperren, etwa die Ausweiskopien in
+# einem sonst freigegebenen Reiseordner. Ein Eintrag hier gilt auch im Repo selbst.
 #
 # Eine Angabe je Zeile, absolut. ~ steht fuer dein Benutzerprofil. Zeilen mit # sind
 # Kommentar. Gross/Klein spielt unter Windows keine Rolle. Ein Eintrag sperrt den Pfad
 # und alles darunter.
 #
-# Durchgesetzt von 00_INDEX\scripts\guard-read.ps1 (AGENTS.md, Abschnitt 18). Zugangsdaten
-# (.env, Schluesseldateien, .ssh, .aws, Token-Dateien) sind dort fest eingebaut und
-# muessen hier nicht stehen.
-#
-# Solange hier kein Eintrag steht, mahnt der Health-Check bei jedem Lauf. Gibt es bei dir
-# wirklich nichts zu sperren, schreib als einzige Zeile das Wort
-#   keine
-# dann ist die Mahnung erledigt und die eingebauten Muster wirken weiter.
+# Pflege mit 00_INDEX\scripts\freigeben.ps1 "<Pfad>" -Sperren (aufheben mit -Entsperren), in
+# deinem eigenen PowerShell-Fenster. Dein Agent kann diese Datei lesen, aber nicht schreiben.
+# Zugangsdaten (.env, Schluesseldateien, .ssh, .aws, Token-Dateien) sind in guard-read.ps1 fest
+# eingebaut und muessen hier nicht stehen.
 #
 # Diese Datei gehoert dir (Kern-Dateien.md, Kategorie B): Ein Update des Grundgeruests
-# ersetzt sie nie. Der Agent erweitert oder kuerzt sie nie von sich aus; ein Eintrag
-# kommt oder geht nur durch dich.
+# ersetzt sie nie.
 #
 # Beispiele (auskommentiert):
-# C:\Kunden
-# ~\Projekte\Kunde-A\config
-# /Users/DEIN-NAME/Kunden
+# C:\Reisen\Ausweiskopien
+# ~\Dokumente\Verein\Mitgliederliste

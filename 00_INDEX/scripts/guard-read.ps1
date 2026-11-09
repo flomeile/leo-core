@@ -1,43 +1,41 @@
 # guard-read.ps1
-# Zweck: PreToolUse-Hook. Blockiert das LESEN von Zugangsdaten und von Ordnern, die der
-# Besitzer als gesperrt eingetragen hat, in jedem Lese- und Shell-Werkzeug.
+# Zweck: PreToolUse-Hook. Die Lese-Haelfte der Standardsperre (AGENTS.md Abschnitt 18, seit 5.0):
+# Der Agent liest ab Werk nur im eigenen Repo, in "<Repo> Archiv", "<Repo> Artifacts" und im
+# Scratchpad. Alles andere ist zu, bis der Besitzer es mit 00_INDEX\scripts\freigeben.ps1 in
+# 00_INDEX\freigegebene-pfade.txt eintraegt. Zugangsdaten bleiben immer zu, auch in einer Freigabe.
 #
-# WARUM ES DAS GIBT (seit 3.8): Die Arbeitsbereich-Sperre (guard-workspace.ps1) schuetzt,
-# wohin der Agent SCHREIBT. Was er LIEST, war bisher frei, und das ist fuer fast alles
-# richtig (AGENTS.md, Abschnitt 18: ein Diagnoseblick in eine fremde Datei soll keine
-# Rueckfrage kosten). Zwei Sorten Dateien sind die Ausnahme, weil ihr Inhalt mit dem
-# Lesen in den Kontext und damit zum Modellanbieter wandert:
-#   (1) Zugangsdaten: .env-Dateien, private Schluessel, Zertifikatsdateien, SSH- und
-#       Cloud-Credentials, Token-Dateien. Ein Schluessel, der einmal im Kontext war,
-#       gilt als kompromittiert.
-#   (2) Gesperrte Ordner des Besitzers: alles, was nach seinen Datenregeln in keine
-#       Cloud-KI darf (Kundenkonfigurationen, Exporte unter NDA, Gesundheitsdaten).
-#       Welche das sind, weiss nur er; er traegt sie in 00_INDEX\gesperrte-pfade.txt ein.
-# Ohne diesen Hook reicht ein "schau dir mal den Ordner X an", und die Datei ist beim
-# Anbieter, ohne dass jemand etwas abgetippt hat. Eine Textregel allein faengt das nicht;
-# dieser Hook entscheidet vor dem Werkzeugaufruf und ohne das Modell.
+# WARUM ES DAS GIBT: Was der Agent liest, wandert in den Kontext und damit zum Modellanbieter.
+# Bis 4.11 war Lesen frei und gesperrt nur, was der Besitzer in gesperrte-pfade.txt eintrug. Das
+# setzt voraus, dass jeder Besitzer weiss, welche Ordner auf seinem Rechner heikel sind, und daran
+# denkt, sie einzutragen; bei mehreren Besitzern stand die Liste leer. Seit 5.0 gilt deshalb das
+# Umgekehrte: zu ab Werk, offen nur, was der Besitzer selbst freigibt. Der Agent oeffnet nie
+# selbst; er erklaert die Sperre und gibt den fertigen Befehl aus (Meldung unten).
 #
-# WAS ER PRUEFT: Read, Grep, Glob und NotebookRead (deren Pfad-Eingabe) sowie Bash und
-# PowerShell (den Befehlstext). Gegen zwei Listen: die eingebauten Muster fuer
-# Zugangsdaten unten, und die Pfade aus 00_INDEX\gesperrte-pfade.txt (eine je Zeile,
-# absolut, ~ erlaubt; Zeilen mit # sind Kommentar). Ein Treffer blockiert mit Begruendung.
-# Alles andere laeuft durch, ohne Ausgabe (stiller Exitcode 0).
+# DREI STUFEN, in dieser Reihenfolge:
+#   (1) Zugangsdaten (.env, Schluessel- und Zertifikatsdateien, .ssh, .aws, Token-Dateien):
+#       immer gesperrt, auch im Repo und in einer Freigabe. Es gibt keinen Befehl dafuer.
+#   (2) gesperrte-pfade.txt: sperrt einen Pfad und alles darunter, auch innerhalb einer Freigabe.
+#   (3) Arbeitsbereich: eingebaute Zonen plus freigegebene-pfade.txt; alles andere ist gesperrt.
+# Die Zonen, die Listen und die Pfaderkennung stehen in lib\arbeitsbereich.ps1, gemeinsam mit
+# guard-workspace.ps1 (Schreiben), damit Lesen und Schreiben ueber dieselben Pfade urteilen.
+#
+# WAS ER PRUEFT: Read und NotebookRead (Dateipfad), Grep und Glob (Suchpfad, ohne Angabe das
+# Arbeitsverzeichnis; bei Glob dazu ein absoluter Anfang des Musters), Bash und PowerShell (jeder
+# absolute Pfad im Befehlstext, Variablen wie $env:USERPROFILE und die Tilde aufgeloest, relative
+# Pfade mit .., und das Arbeitsverzeichnis selbst).
 #
 # WAS ER NICHT KANN: Er sieht nur den Text des Aufrufs. Wer einen Pfad aus Teilstuecken
-# zusammensetzt oder ein Skript startet, das die Datei selbst oeffnet, kommt an ihm
-# vorbei. Diese Sperre ist gegen das Versehen gebaut, nicht gegen die Umgehung (dieselbe
-# Grenze wie bei guard-workspace.ps1). Skripte im Repo, die ihre Token selbst aus dem
-# Benutzerprofil lesen, sieht er deshalb nicht und soll er auch nicht sehen.
+# zusammensetzt oder ein Skript startet, das die Datei selbst oeffnet, kommt an ihm vorbei. Die
+# Sperre ist gegen das Versehen gebaut, nicht gegen die Absicht; was gegen Absicht hilft (ein
+# eigenes Windows-Konto mit Dateirechten, verwaltete Einstellungen), steht in ANLEITUNG.md.
+# Skripte im Repo, die ihre Token selbst aus dem Benutzerprofil lesen, sieht er deshalb nicht und
+# soll er auch nicht sehen. Connectoren (MCP) fallen nicht unter diese Sperre.
 #
-# EINRICHTUNG: Eingehaengt in .claude\settings.json (und .codex\hooks.json), Ereignis
-# PreToolUse, Matcher Read|Grep|Glob|NotebookRead|Bash|PowerShell. Beide Dateien liegen im
-# Paket bei. Die Datei gesperrte-pfade.txt gehoert dem Besitzer (Kern-Dateien.md, Kategorie
-# B); fehlt sie, wirken nur die eingebauten Muster.
+# EINRICHTUNG: Eingehaengt in .claude\settings.json und .codex\hooks.json, Ereignis PreToolUse,
+# Matcher Read|Grep|Glob|NotebookRead|Bash|PowerShell.
 # Eingabe: JSON auf stdin. Ausgabe: JSON nur beim Blockieren, Exitcode immer 0.
 # ASCII-only mit BOM, damit es unter Windows PowerShell 5.1 und PowerShell 7 gleich laeuft.
-# Regressionsreihe: guard-read-tests.ps1 im selben Ordner, Pflicht vor und nach jeder
-# Aenderung an diesem Skript. Die Reihe legt ihre Testliste ueber die Umgebungsvariable
-# LEO_GUARD_READ_KONFIG daneben; im Betrieb ist die Variable nicht gesetzt.
+# Regressionsreihe: guard-read-tests.ps1 im selben Ordner, Pflicht vor und nach jeder Aenderung.
 
 $ErrorActionPreference = "Stop"
 
@@ -49,7 +47,10 @@ function Write-Deny([string]$reason) {
             permissionDecisionReason = $reason
         }
     }
-    $out | ConvertTo-Json -Depth 5 -Compress
+    # Als UTF-8-Bytes schreiben: Die Konsole nimmt sonst die OEM-Codepage, und ein Umlaut im
+    # Pfad kommt beim Agenten verstuemmelt an (gemessen im Ende-zu-Ende-Lauf zu 5.0).
+    $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes(($out | ConvertTo-Json -Depth 5 -Compress))
+    $s = [Console]::OpenStandardOutput(); $s.Write($bytes, 0, $bytes.Length); $s.Flush()
     exit 0
 }
 
@@ -66,12 +67,11 @@ $credentialPatterns = @(
 )
 
 function Normalize-Text([string]$s) {
-    # Beide Pfadwelten auf eine Form: Backslash zu Slash, Git-Bash /c/... zu C:/...,
-    # ~ zum Benutzerprofil. Gross/Klein spielt unter Windows keine Rolle.
+    # Beide Pfadwelten auf eine Form fuer die Textsuche nach gesperrten Pfaden: Backslash zu
+    # Slash, Git-Bash /c/... zu C:/..., ~ und $HOME zum Benutzerprofil.
     $t = $s -replace '\\', '/'
-    $profil = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
-    if ($profil) {
-        $h = $profil -replace '\\', '/'
+    if ($homePath) {
+        $h = $homePath -replace '\\', '/'
         $t = $t -replace '(?<![A-Za-z0-9_])~(?=/|$)', $h
         $t = $t -replace '\$\{?HOME\}?(?![A-Za-z0-9_])', $h
         $t = $t -replace '\$env:USERPROFILE(?![A-Za-z0-9_])', $h
@@ -80,61 +80,89 @@ function Normalize-Text([string]$s) {
     return $t
 }
 
-function Read-BlockedPaths([string]$konfig) {
-    $list = @()
-    if (-not (Test-Path -LiteralPath $konfig)) { return $list }
-    foreach ($line in Get-Content -LiteralPath $konfig -Encoding UTF8) {
-        $l = $line.Trim()
-        if ($l -eq '' -or $l.StartsWith('#')) { continue }
-        # 'keine' ist der Marker des Besitzers, dass es keine gesperrten Ordner gibt (Health-Check
-        # hoert dann auf zu mahnen). Als Pfad waere das Wort in jedem Satz ein Treffer.
-        if ($l -ieq 'keine' -or $l -ieq 'none') { continue }
-        $n = (Normalize-Text $l).TrimEnd('/')
-        if ($n -ne '') { $list += $n }
-    }
-    return $list
-}
-
 try {
+    . (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
+
     # Eingabe ausdruecklich als UTF-8 lesen: [Console]::In nimmt die OEM-Codepage, und aus einem Umlaut im Pfad werden zwei falsche Zeichen (Leo Core, Meldung #10).
     $raw = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
     if ([string]::IsNullOrWhiteSpace($raw)) { exit 0 }
     $in = $raw | ConvertFrom-Json
     $tool = [string]$in.tool_name
+    $cwd = [string]$in.cwd
+    $ti = $in.tool_input
 
     $text = $null
+    $pfade = @()
+    $istShell = $false
     switch ($tool) {
-        "Read"         { $text = [string]$in.tool_input.file_path }
-        "NotebookRead" { $text = [string]$in.tool_input.notebook_path }
-        "Grep"         { $text = [string]$in.tool_input.path }
-        "Glob"         { $text = [string]$in.tool_input.path }
-        "Bash"         { $text = [string]$in.tool_input.command }
-        "PowerShell"   { $text = [string]$in.tool_input.command }
+        "Read"         { $text = [string]$ti.file_path; $pfade = @(Resolve-TargetPath $text $cwd) }
+        "NotebookRead" { $text = [string]$ti.notebook_path; $pfade = @(Resolve-TargetPath $text $cwd) }
+        { $_ -in @("Grep", "Glob") } {
+            $text = [string]$ti.path
+            if ([string]::IsNullOrWhiteSpace($text)) { $pfade = @(Normalize-AbsolutePath $cwd) }
+            else { $pfade = @(Resolve-TargetPath $text $cwd) }
+            if ($tool -eq "Glob") {
+                # Ein Muster kann selbst absolut sein (C:/Users/x/**/*.md). Geprueft wird sein
+                # fester Anfang bis zum ersten Platzhalter.
+                $basis = ([string]$ti.pattern -split '[*?\[{]')[0]
+                $nb = Normalize-AbsolutePath $basis
+                if ($nb) { $pfade = @($nb) }
+            }
+        }
+        { $_ -in @("Bash", "PowerShell") } { $text = [string]$ti.command; $istShell = $true }
         default        { exit 0 }
     }
-    if ([string]::IsNullOrWhiteSpace($text)) { exit 0 }
+    if ([string]::IsNullOrWhiteSpace($text) -and $pfade.Count -eq 0) { exit 0 }
 
-    # (1) Zugangsdaten, eingebaut.
-    foreach ($p in $credentialPatterns) {
-        if ($text -match $p.re) {
-            Write-Deny ("Lesen gesperrt: " + $p.was + " im Aufruf. Zugangsdaten gehoeren nie in den Kontext eines Modells; was einmal drin war, gilt als kompromittiert (AGENTS.md Abschnitt 18). Wenn ein Skript den Wert braucht, liest das Skript ihn selbst aus dem Benutzerprofil.")
+    $ab = Get-Arbeitsbereich (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+
+    # (1) Zugangsdaten, eingebaut, gelten ueberall.
+    if (-not [string]::IsNullOrWhiteSpace($text)) {
+        foreach ($p in $credentialPatterns) {
+            if ($text -match $p.re) {
+                Write-Deny ("Lesen gesperrt: " + $p.was + " im Aufruf. Zugangsdaten gehoeren nie in den Kontext eines Modells; was einmal drin war, gilt als kompromittiert (AGENTS.md Abschnitt 18). Diese Sperre gilt ueberall, auch im Repo und in einem freigegebenen Ordner, und kein Befehl hebt sie auf. Sag [NAME] das in einem Satz. Braucht ein Skript den Wert, liest das Skript ihn selbst aus dem Benutzerprofil; nenne hoechstens den Namen der Variable, nie ihren Wert.")
+            }
         }
     }
 
-    # (2) Gesperrte Pfade des Besitzers.
-    $konfig = if ($env:LEO_GUARD_READ_KONFIG) { $env:LEO_GUARD_READ_KONFIG } else { Join-Path (Split-Path -Parent $PSScriptRoot) 'gesperrte-pfade.txt' }
-    $blocked = Read-BlockedPaths $konfig
-    if ($blocked.Count -gt 0) {
+    if ($istShell) {
+        $cmdN = Expand-BekannteVariablen $text
+        $pfade = @(Get-AbsolutePfade $cmdN $cwd)
+        # Das Arbeitsverzeichnis zaehlt mit: "ls" oder "cat x" liest dort, ohne einen Pfad zu nennen.
+        if (-not [string]::IsNullOrWhiteSpace($cwd)) { $pfade += $cwd }
+    }
+
+    # (2) Gesperrte Pfade: zuerst als Text (faengt jede Erwaehnung, auch in Code), dann je Pfad.
+    if ($ab.sperren.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($text)) {
         $norm = Normalize-Text $text
-        $cmp = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { [System.StringComparison]::OrdinalIgnoreCase } else { [System.StringComparison]::Ordinal }
-        foreach ($b in $blocked) {
-            if ($norm.IndexOf($b, $cmp) -ge 0) {
-                Write-Deny ("Lesen gesperrt: '" + $b + "' steht in 00_INDEX/gesperrte-pfade.txt. Was dort liegt, darf nach den Datenregeln des Besitzers in keine Cloud-KI (AGENTS.md Abschnitt 18). Wird es wirklich gebraucht, entscheidet der Besitzer im Einzelfall und nimmt den Pfad selbst aus der Liste.")
+        $cmp = if ($isWindowsHost) { 'IgnoreCase' } else { 'None' }
+        foreach ($b in $ab.sperren) {
+            $bn = ($b -replace '\\', '/').TrimEnd('/')
+            # Nur ganze Pfadteile: C:/Kunden sperrt nicht C:/Kunden-alt.
+            if ([regex]::IsMatch($norm, ([regex]::Escape($bn) + '(?=$|[/\s"'';|&)<>,`])'), $cmp)) {
+                Write-Deny (Get-SperrHinweis "Lesen" $b $ab)
             }
+        }
+    }
+    foreach ($p in $pfade) {
+        if (-not $p) { continue }
+        if (Get-Sperre $p $ab) { Write-Deny (Get-SperrHinweis "Lesen" (Normalize-AbsolutePath $p) $ab) }
+    }
+
+    # (3) Arbeitsbereich: eingebaute Zonen und Freigaben, alles andere zu.
+    foreach ($p in ($pfade | Select-Object -Unique)) {
+        if (-not $p) { continue }
+        if (-not (Test-LesenErlaubt $p $ab)) {
+            $n = Normalize-AbsolutePath $p
+            if (-not $n) { $n = $p }
+            Write-Deny (Get-SperrHinweis "Lesen" $n $ab)
         }
     }
     exit 0
 } catch {
-    # Ein Fehler im Hook darf den Betrieb nicht anhalten: still durchlassen.
+    # Ein Fehler im Hook darf den Betrieb nicht anhalten: still durchlassen. Dass die Sperre
+    # wirkt, misst die Regressionsreihe und meldet der Health-Check, nicht dieser Zweig.
+    # Die Reihe setzt LEO_GUARD_DEBUG, damit ein abgefangener Fehler dort nicht als PASS durchgeht.
+    if ($env:LEO_GUARD_DEBUG) { "HOOK-FEHLER: " + $_.Exception.Message + " (Zeile " + $_.InvocationInfo.ScriptLineNumber + ")" }
     exit 0
 }

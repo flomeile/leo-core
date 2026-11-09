@@ -1,0 +1,17 @@
+# freigegebene-pfade.txt
+# Ordner ausserhalb des Repos, die du deinem Agenten geoeffnet hast. Ab Werk steht hier
+# nichts: Dein Agent arbeitet nur im eigenen Repo, in "<Repo> Archiv", "<Repo> Artifacts"
+# und im Scratchpad (AGENTS.md, Abschnitt 18).
+#
+# Jede Zeile traegt vorn die Stufe, die du gewaehlt hast:
+#   lesen: <Pfad>                 dein Agent darf dort nur lesen
+#   lesen-und-schreiben: <Pfad>   dein Agent darf dort auch aendern, anlegen und loeschen
+# Ein Eintrag gilt fuer den Pfad und alles darunter.
+#
+# Diese Datei pflegst nur du, mit 00_INDEX\scripts\freigeben.ps1 in deinem eigenen
+# PowerShell-Fenster (Aufruf ohne Pfad zeigt den Stand und die Befehle). Dein Agent kann sie
+# lesen, aber weder schreiben noch den Befehl ausfuehren; beides blockieren die Hooks.
+# Einen Unterordner sperrst du mit freigeben.ps1 "<Pfad>" -Sperren wieder.
+# Zugangsdaten (.env, Schluessel, .ssh, .aws, Token-Dateien) bleiben immer gesperrt.
+#
+# Diese Datei gehoert dir (Kern-Dateien.md, Kategorie B): Ein Update ersetzt sie nie.

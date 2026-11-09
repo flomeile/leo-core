@@ -1,5 +1,7 @@
 ﻿# guard-workspace.ps1
-# Zweck: PreToolUse-Hook. Blockiert jeden SCHREIBENDEN Zugriff ausserhalb des Repos.
+# Zweck: PreToolUse-Hook. Die Schreib-Haelfte der Standardsperre (AGENTS.md Abschnitt 18):
+# blockiert jeden SCHREIBENDEN Zugriff ausserhalb des Arbeitsbereichs, dazu jeden Versuch des
+# Agenten, die Freigaben selbst zu aendern.
 #
 # WARUM ES DAS GIBT:
 # Der Agent arbeitet an einem Second Brain, nicht am Dateisystem. Alles, was er
@@ -11,15 +13,21 @@
 # Werkzeugaufruf und entscheidet ohne das Modell. Die Regel selbst steht in der
 # AGENTS.md, Abschnitt 18; dieses Skript ist nur ihre Durchsetzung.
 #
-# WAS ER NICHT TUT: Lesen bleibt frei. Der Schaden entsteht beim Veraendern, und
-# ein Diagnoseblick in eine fremde Datei soll keine Rueckfrage kosten.
+# ARBEITSBEREICH (seit 5.0 gemeinsam mit guard-read.ps1, Logik in lib\arbeitsbereich.ps1):
+# das Repo, "<Repo> Archiv", "<Repo> Artifacts", das Scratchpad, dazu der Memory-Pfad des
+# Werkzeugs (nur zum Loeschen nach der Migration ins Repo) und alles, was der Besitzer in
+# 00_INDEX\freigegebene-pfade.txt freigegeben hat, ausser was darin in gesperrte-pfade.txt steht.
+# Das LESEN prueft guard-read.ps1.
+#
+# DIE FREIGABEN GEHOEREN DEM BESITZER (seit 5.0). Der Agent schreibt weder
+# freigegebene-pfade.txt noch gesperrte-pfade.txt und fuehrt freigeben.ps1 nie aus; beides
+# blockiert dieser Hook. Bis 4.11 stand hier eine Liste $allowPatterns zum Erweitern von Hand;
+# die eingebauten Zonen stehen weiter darin, eigene Orte kommen nur noch ueber freigeben.ps1.
 #
 # GRENZE, DIE MAN KENNEN MUSS: Dieser Hook liegt IM Repo, weil dort das ganze
-# System liegt (AGENTS.md Abschnitt 11: kein Systembestandteil ausserhalb).
-# Ein Agent mit Schreibrecht auf das Repo koennte ihn also selbst entschaerfen.
-# Genau das verbietet AGENTS.md Abschnitt 18 ausdruecklich: Die Ausnahmeliste
-# unten zu erweitern, um an ein blockiertes Ziel zu kommen, ist die Umgehung der
-# Regel und nicht ihre Anwendung.
+# System liegt (AGENTS.md Abschnitt 11). Ein Agent mit Schreibrecht auf das Repo
+# koennte ihn also selbst entschaerfen. Genau das verbietet AGENTS.md Abschnitt 18
+# ausdruecklich. Die Sperre ist gegen das Versehen gebaut, nicht gegen die Absicht.
 #
 # EINRICHTUNG: Der Hook wirkt nur, wenn er in .claude\settings.json unter
 # hooks.PreToolUse eingehaengt ist. Die Datei liegt im Paket bei. Ohne sie ist
@@ -28,9 +36,6 @@
 # POSIX-Pfade verwenden, siehe ANLEITUNG.md. Fehlt der Interpreter, blockiert der
 # Hook nichts.
 #
-# ANPASSEN: Brauchst du dauerhaft einen weiteren Ort ausserhalb des Repos, traegst
-# DU ihn unten in $allowPatterns ein, nicht der Agent nebenbei.
-#
 # Eingabe: JSON auf stdin. Ausgabe: JSON auf stdout NUR beim Blockieren.
 #
 # Bewusst ASCII-only geschrieben und trotzdem mit BOM gespeichert: Dieses Skript
@@ -38,68 +43,6 @@
 # genauso starten wie unter PowerShell 7.
 
 $ErrorActionPreference = "Stop"
-
-$isWindowsHost = [System.IO.Path]::DirectorySeparatorChar -eq '\'
-$pathComparison = if ($isWindowsHost) {
-    [System.StringComparison]::OrdinalIgnoreCase
-} else {
-    [System.StringComparison]::Ordinal
-}
-$pathSeparators = [char[]]@('\', '/')
-$homePath = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
-# Ohne Trenner am Ende: GetTempPath liefert ihn mit, und ein Ersatz von $env:TEMP in
-# einem Kommandotext ergibt sonst "...\Temp\\claude\...", was die UNC-Suche unten als
-# Netzwerkpfad \\claude\... liest und blockiert (Regression, gefunden 13.09.2026 in der
-# Windows-Reihe der macOS-Fassung).
-$tempPath = [System.IO.Path]::GetTempPath().TrimEnd($pathSeparators)
-
-function Normalize-AbsolutePath([string]$path) {
-    if ([string]::IsNullOrWhiteSpace($path)) { return $null }
-    $p = $path.Trim().Trim('"').Trim("'")
-
-    if ($homePath) {
-        if ($p -eq '~') { $p = $homePath }
-        elseif ($p -match '^~[\\/]') { $p = Join-Path $homePath $p.Substring(2) }
-    }
-
-    # Git-Bash-Schreibweise /c/Repo/... nur unter Windows umformen. Auf POSIX ist
-    # derselbe Text bereits ein regulaerer absoluter Pfad.
-    if ($isWindowsHost -and $p -match '^/([a-zA-Z])/(.*)$') {
-        $p = $matches[1].ToUpper() + ":\" + ($matches[2] -replace '/', '\')
-    }
-    if ($isWindowsHost) { $p = $p -replace '/', '\' }
-
-    # Absolut heisst hier: unter Windows ein Laufwerk oder ein UNC-Pfad, auf POSIX ein
-    # fuehrender Schraegstrich. IsPathRooted allein reicht nicht: Unter Windows gilt
-    # ihm auch "\n" oder "\dev\null" als verwurzelt (aktuelles Laufwerk), und damit
-    # wurde jeder Kommandotext mit einer Escape-Sequenz in Anfuehrungszeichen
-    # blockiert (printf "\n" >> x.md). Gefunden 13.09.2026, gemessen in der Reihe.
-    if ($isWindowsHost) {
-        if ($p -notmatch '^[a-zA-Z]:\\' -and $p -notmatch '^\\\\') { return $null }
-    } elseif ($p -notmatch '^/') { return $null }
-    if (-not [System.IO.Path]::IsPathRooted($p)) { return $null }
-    try { $p = [System.IO.Path]::GetFullPath($p) } catch { return $null }
-    return $p.TrimEnd($pathSeparators)
-}
-
-function Test-PathWithin([string]$path, [string]$root) {
-    $p = Normalize-AbsolutePath $path
-    $r = Normalize-AbsolutePath $root
-    if (-not $p -or -not $r) { return $false }
-    if ($p.Equals($r, $pathComparison)) { return $true }
-    return $p.StartsWith($r + [System.IO.Path]::DirectorySeparatorChar, $pathComparison)
-}
-
-# Relative Werkzeugziele gegen das gemeldete Arbeitsverzeichnis aufloesen.
-# Ein erlaubtes cwd allein erlaubt noch keinen Ausbruch ueber "../".
-function Resolve-TargetPath([string]$path, [string]$cwd) {
-    $absolute = Normalize-AbsolutePath $path
-    if ($absolute -or [string]::IsNullOrWhiteSpace($path)) { return $absolute }
-    $base = Normalize-AbsolutePath $cwd
-    if (-not $base) { return $null }
-    $relative = $path.Trim().Trim('"').Trim("'")
-    return Normalize-AbsolutePath ([System.IO.Path]::Combine($base, $relative))
-}
 
 # WICHTIG: Im Durchlass-Fall gibt dieser Hook NICHTS aus und beendet sich nur mit
 # Exitcode 0. Die Hook-Dokumentation kennt zwar einen Rueckgabewert "defer" fuer
@@ -117,7 +60,10 @@ function Write-Decision([string]$decision, [string]$reason) {
             permissionDecisionReason = $reason
         }
     }
-    $out | ConvertTo-Json -Depth 5 -Compress
+    # Als UTF-8-Bytes schreiben: Die Konsole nimmt sonst die OEM-Codepage, und ein Umlaut im
+    # Pfad kommt beim Agenten verstuemmelt an (gemessen im Ende-zu-Ende-Lauf zu 5.0).
+    $bytes = (New-Object System.Text.UTF8Encoding($false)).GetBytes(($out | ConvertTo-Json -Depth 5 -Compress))
+    $s = [Console]::OpenStandardOutput(); $s.Write($bytes, 0, $bytes.Length); $s.Flush()
     exit 0
 }
 
@@ -126,45 +72,37 @@ function Write-Decision([string]$decision, [string]$reason) {
 # die sie schliesst.
 try {
 
+. (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
+
 # Eingabe ausdruecklich als UTF-8 lesen: [Console]::In nimmt die OEM-Codepage, und aus einem Umlaut im Pfad werden zwei falsche Zeichen (Leo Core, Meldung #10).
 $raw = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-Object System.Text.UTF8Encoding($false)))).ReadToEnd()
 if ([string]::IsNullOrWhiteSpace($raw)) { Write-Decision "durch" "" }
 $in = $raw | ConvertFrom-Json
 
-$repo = Normalize-AbsolutePath (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
-# Der Artefakte-Ordner ist der Geschwisterordner "<Repo> Artifacts". Join-Path statt
-# Zeichenkette, weil ein Repo direkt auf einem Laufwerk sonst einen doppelten
-# Trenner ergibt: Split-Path liefert dort den Laufwerksnamen samt Trennzeichen.
-$artifacts = Normalize-AbsolutePath (Join-Path (Split-Path -Parent $repo) ((Split-Path -Leaf $repo) + " Artifacts"))
-# Das Belegarchiv ist der zweite Geschwisterordner, nach demselben Muster gebildet:
-# dort liegen die Primaerquellen, aus denen Wissensnotizen entstanden sind
-# (Abschnitt 5). Getrennt von Artifacts, weil die Herkunft unterschiedlich ist:
-# Artifacts traegt, was das System erzeugt hat, das Archiv, was von aussen kam.
-$archiv = Normalize-AbsolutePath (Join-Path (Split-Path -Parent $repo) ((Split-Path -Leaf $repo) + " Archiv"))
-$scratch = Normalize-AbsolutePath (Join-Path $tempPath 'claude')
+$ab = Get-Arbeitsbereich (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+$repo = $ab.repo
 $memoryProjects = if ($homePath) {
     Normalize-AbsolutePath (Join-Path (Join-Path $homePath '.claude') 'projects')
 } else { $null }
 $memoryPattern = if ($memoryProjects) { Join-Path (Join-Path $memoryProjects '*') 'memory' } else { $null }
 $memorySubtreePattern = if ($memoryPattern) { Join-Path $memoryPattern '*' } else { $null }
 
-# --- Erlaubte Bereiche ------------------------------------------------------
-# Das Repo selbst, dazu drei Ausnahmen, die je einen Ablauf betreffen, der ohne
-# sie bricht. Die Muster enthalten vor dem Stern immer einen echten
-# Verzeichnistrenner: sonst wuerde ein Muster fuer C:\Leo auch C:\Leonardo
-# erlauben, und eines fuer /Users/a/Leo auch /Users/a/Leo-old.
+# --- Eingebaute Bereiche ------------------------------------------------------
+# Das Repo selbst, dazu die eingebauten Zonen der Standardsperre und der Memory-Pfad. Die
+# Muster enthalten vor dem Stern immer einen echten Verzeichnistrenner: sonst wuerde ein
+# Muster fuer C:\Leo auch C:\Leonardo erlauben. Eigene Orte kommen NICHT hier hinein,
+# sondern ueber freigeben.ps1 in freigegebene-pfade.txt.
 $allowPatterns = @(
     $repo                                          # das Repo selbst
     (Join-Path $repo '*')                         # alles darin
-    $artifacts                                     # erzeugte Artefakte (Abschnitt 5)
-    (Join-Path $artifacts '*')
-    $archiv                                        # Primaerquellen-Archiv (Abschnitt 5)
-    (Join-Path $archiv '*')
-    $scratch                                       # Scratchpad des Werkzeugs
-    (Join-Path $scratch '*')
+    $ab.artifacts                                  # erzeugte Artefakte (Abschnitt 5)
+    (Join-Path $ab.artifacts '*')
+    $ab.archiv                                     # Primaerquellen-Archiv (Abschnitt 5)
+    (Join-Path $ab.archiv '*')
     $memoryPattern                                 # nur um Harness-Memory zu LOESCHEN
     $memorySubtreePattern
 )
+foreach ($s in $ab.scratch) { $allowPatterns += @($s, (Join-Path $s '*')) }   # Scratchpad
 # Auf POSIX sind die Geraetedateien keine Schreibziele im Sinn der Sperre: Eine
 # Umleitung wie "2>/dev/null" steht in fast jedem Shell-Kommando, und ein Guard, der
 # sie blockiert, wird abgeschaltet. Unter Windows tauchen diese Pfade nicht auf.
@@ -180,20 +118,42 @@ function Test-Allowed([string]$path) {
     foreach ($pat in $allowPatterns) {
         if ($pat -and (($isWindowsHost -and $p -like $pat) -or (-not $isWindowsHost -and $p -clike $pat))) { return $true }
     }
-    # Abgeschnittener Pfad aus einem Kommandotext. Die Pfad-Regex weiter unten
-    # endet am Leerzeichen, weil ein Leerzeichen in einem unquotierten Kommando
-    # das naechste Argument einleitet. Liegt das Repo selbst in einem Pfad MIT
-    # Leerzeichen (etwa unter "C:\Users\Anna Muster\Mein Leo" oder in einem
-    # OneDrive-Ordner), findet sie deshalb nur den Anfang, und ohne diese Regel
-    # waere jeder Schreibbefehl mit absolutem Pfad im EIGENEN Repo blockiert.
-    # Erlaubt wird nur der echte Abschneidefall: Der Fund muss Anfang eines
-    # erlaubten Pfades sein UND dort muss genau ein Leerzeichen folgen.
-    foreach ($pat in $allowPatterns) {
-        if (-not $pat) { continue }
-        $klar = $pat.TrimEnd('*').TrimEnd($pathSeparators)
-        if ($klar.Length -gt $p.Length -and
-            $klar.StartsWith($p, $pathComparison) -and
-            $klar[$p.Length] -eq ' ') { return $true }
+    # Abgeschnittener Pfad aus einem Kommandotext (Repo in einem Pfad mit Leerzeichen),
+    # siehe Test-UnterWurzel in lib\arbeitsbereich.ps1.
+    if (Test-UnterWurzel $p (Get-EingebauteZonen $ab)) { return $true }
+    # Freigaben des Besitzers, ausser was darin wieder gesperrt ist (seit 5.0).
+    # Nur Freigaben der Stufe "lesen-und-schreiben" oeffnen das Schreiben.
+    if ((Test-Freigegeben $p $ab -Schreiben) -and -not (Get-Sperre $p $ab)) { return $true }
+    return $false
+}
+
+# --- Die Freigaben gehoeren dem Besitzer (seit 5.0) ---------------------------
+# Die beiden Listen schreibt nur freigeben.ps1, und das startet nur der Besitzer in seinem
+# eigenen Terminal. Lesen darf der Agent sie, damit er seine Policy erklaeren kann.
+$policyDateien = @('freigegebene-pfade.txt', 'gesperrte-pfade.txt')
+$policyRx = '(?i)(?:^|[\\/\s"''])(?:freigegebene|gesperrte)-pfade\.txt'
+$policyGrund = "Diese Liste gehoert [NAME]: Sie legt fest, was du ausserhalb deines Arbeitsbereichs lesen und schreiben darfst (AGENTS.md Abschnitt 18). Du schreibst sie nie, auch nicht auf seinen Wunsch hin und auch nicht ueber Git. Aendern kann er sie nur selbst, mit freigeben.ps1 in seinem eigenen PowerShell-Fenster. Sag ihm das in einem Satz und gib ihm in einem Codeblock den passenden Befehl: Freigeben " + (Get-FreigabeBefehl '<Pfad>' $ab) + " ; Freigabe zuruecknehmen mit -Entziehen; einen Unterordner wieder sperren mit -Sperren, die Sperre aufheben mit -Entsperren; ohne Pfad zeigt der Befehl den aktuellen Stand."
+function Test-PolicyDatei([string]$path) {
+    $p = Normalize-AbsolutePath $path
+    if (-not $p) { return $false }
+    $name = [System.IO.Path]::GetFileName($p)
+    foreach ($d in $policyDateien) {
+        if ($name.Equals($d, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-PathWithin $p $repo)) { return $true }
+    }
+    return $false
+}
+
+# Ein Aufruf von freigeben.ps1 aus einer Session. Erlaubt bleibt nur, die Datei zu lesen oder
+# mit Git zu verwalten (das Update holt sie mit git checkout); jedes Segment, das mit etwas
+# anderem beginnt (powershell, pwsh, &, ., dem Pfad selbst, Start-Process), gilt als Aufruf.
+function Test-FreigebenAufruf([string]$cmd) {
+    if ($cmd -notmatch '(?i)freigeben\.ps1') { return $false }
+    $erlaubt = '(?i)^(?:git|cat|type|gc|get-content|head|tail|less|more|select-string|sls|grep|rg|findstr|diff|fc|compare-object|test-path|get-item|get-childitem|gci|ls|dir|wc|get-filehash|sha256sum|md5sum|file|stat|echo|write-output|write-host)(?:\.exe)?(?=\s|$)'
+    foreach ($seg in [regex]::Split($cmd, '\r?\n|;|&&|\|\||\|')) {
+        $s = $seg.Trim()
+        if ($s -notmatch '(?i)freigeben\.ps1') { continue }
+        if ($s -match $erlaubt) { continue }
+        return $true
     }
     return $false
 }
@@ -245,8 +205,11 @@ $ti   = $in.tool_input
 # --- 1) Dateiwerkzeuge: der Zielpfad steht direkt im Aufruf -------------------
 if ($tool -in @("Write", "Edit", "NotebookEdit", "MultiEdit")) {
     $target = Resolve-TargetPath ([string]$ti.file_path) ([string]$in.cwd)
+    if (Test-PolicyDatei $target) {
+        Write-Decision "deny" ("Schreiben gesperrt: " + $target + ". " + $policyGrund)
+    }
     if (-not (Test-Allowed $target)) {
-        Write-Decision "deny" "Ausserhalb des Repos ($repo) wird nichts geschrieben. Blockierter Pfad: $target. Harte Regel, siehe AGENTS.md Abschnitt 18. Wenn das wirklich gewollt ist, gibt es zwei saubere Wege, und beide entscheidet [NAME]: die Datei von Hand an den Zielort legen, oder den Pfad dauerhaft in die Liste `$allowPatterns in 00_INDEX\scripts\guard-workspace.ps1 eintragen. Diese Liste erweiterst du nicht selbst, um an ein blockiertes Ziel zu kommen."
+        Write-Decision "deny" (Get-SperrHinweis "Schreiben" $target $ab)
     }
     if (Test-ArtefaktVerbot $target) {
         Write-Decision "deny" "Blockierter Pfad: $target. $artefaktGrund"
@@ -258,11 +221,14 @@ if ($tool -in @("Write", "Edit", "NotebookEdit", "MultiEdit")) {
 if ($tool -in @("Bash", "PowerShell")) {
     $cmd = [string]$ti.command
     if ([string]::IsNullOrWhiteSpace($cmd)) { Write-Decision "durch" "" }
-    $quotedPattern = '"([^"\r\n]+)"|''([^''\r\n]+)'''
 
-    # Geprueft werden nur schreibende Kommandos. Lesen ausserhalb ist erlaubt, und
-    # ein Hook, der jede Suche blockiert, fuehrt nur dazu, dass die Sperre
-    # irgendwann abgeschaltet wird.
+    # Den Freigabebefehl fuehrt nur der Besitzer aus, in seinem eigenen Terminal (seit 5.0).
+    if (Test-FreigebenAufruf $cmd) {
+        $kurz = if ($cmd.Length -gt 300) { $cmd.Substring(0, 300) + " ..." } else { $cmd }
+        Write-Decision "deny" ("Gesperrt: freigeben.ps1 fuehrt nur [NAME] selbst aus, in seinem eigenen PowerShell-Fenster, nie du aus einer Session, auch nicht auf seinen Wunsch hin (AGENTS.md Abschnitt 18). Der Befehl verlangt dort ausserdem eine Bestaetigung an der Tastatur. Erklaer ihm in ein, zwei Saetzen, was die Freigabe bewirkt (Lesen und Schreiben in diesem Ordner und allem darunter, Zugangsdaten bleiben gesperrt), und gib ihm den Befehl in einem Codeblock zum Selbstausfuehren, mit vollem Pfad zum Skript, damit er in jedem Fenster laeuft: " + (Get-FreigabeBefehl '<Pfad>' $ab) + " (dazu der Schalter, den du vorgesehen hattest: -Entziehen, -Sperren oder -Entsperren). Dein Aufruf war: " + $kurz)
+    }
+
+    # Geprueft werden nur schreibende Kommandos. Das Lesen prueft guard-read.ps1.
     $writeVerbs = @(
         'Set-Content','Add-Content','Out-File','New-Item','Remove-Item','Move-Item','Copy-Item',
         'Rename-Item','Clear-Content','Set-ItemProperty','New-ItemProperty','Remove-ItemProperty',
@@ -301,8 +267,24 @@ if ($tool -in @("Bash", "PowerShell")) {
             @($m.Groups[2].Value, $m.Groups[3].Value, $m.Groups[4].Value) | Where-Object { $_ } | Select-Object -First 1
         }
     }
+
+    # Die Freigabelisten: jedes schreibende Segment, das eine davon nennt, ist gesperrt, auch
+    # git checkout und git add (seit 5.0). Segmentweise, damit "cat ...gesperrte-pfade.txt;
+    # touch x" nicht am fremden Schreibverb haengen bleibt.
+    if ($cmd -match $policyRx) {
+        foreach ($seg in [regex]::Split($cmd, '\r?\n|;|&&|\|\|')) {
+            if ($seg -notmatch $policyRx) { continue }
+            $segWrite = $false
+            foreach ($v in $writeVerbs) { if ($seg -match $v) { $segWrite = $true; break } }
+            if (-not $segWrite) {
+                foreach ($z in @(Get-Umleitungsziele $seg)) { if ($z -match $policyRx) { $segWrite = $true } }
+            }
+            if ($segWrite) { Write-Decision "deny" ("Schreiben gesperrt: Der Befehl veraendert eine Freigabeliste. " + $policyGrund) }
+        }
+    }
+
     # Ist die Umleitung das einzige Schreibmerkmal, wird nur ihr Ziel geprueft, nicht
-    # jeder Pfad im Kommando: Fremdes lesen und ins Repo umleiten bleibt erlaubt.
+    # jeder Pfad im Kommando: Fremdes lesen und ins Repo umleiten bleibt hier erlaubt.
     $nurUmleitung = $false
     if (-not $isWrite) {
         if (@(Get-Umleitungsziele $cmd).Count -gt 0) { $nurUmleitung = $true }
@@ -313,125 +295,14 @@ if ($tool -in @("Bash", "PowerShell")) {
     # Pfaden trifft sonst unbemerkt ein fremdes Verzeichnis.
     $cwd = [string]$in.cwd
     if (-not (Test-Allowed $cwd)) {
-        Write-Decision "deny" "Schreibendes Kommando mit Arbeitsverzeichnis ausserhalb des Repos: $cwd. Harte Regel, siehe AGENTS.md Abschnitt 18."
+        Write-Decision "deny" ("Schreibendes Kommando mit Arbeitsverzeichnis ausserhalb des Arbeitsbereichs. " + (Get-SperrHinweis "Schreiben" (Normalize-AbsolutePath $cwd) $ab))
     }
 
-    # --- Zielpfade aufloesen, die erst zur Laufzeit entstehen (seit 3.2) -------
-    # Die Pfadsuche unten liest Pfade als TEXT. Ein Kommando, das sein Ziel erst
-    # beim Ausfuehren berechnet, enthaelt gar keinen Pfad und ging deshalb durch:
-    #   Join-Path ([Environment]::GetFolderPath('Desktop')) 'x.txt'
-    # hat auf den Desktop geschrieben, obwohl Hook und Matcher griffen. Dieselbe
-    # Luecke bestand bei $env:USERPROFILE, $HOME und der Bash-Tilde. Gemessen und
-    # mit demselben Ziel gegengemessen: berechnet keine Ausgabe, literal ein deny.
-    #
-    # Die Loesung ist bewusst NICHT, solche Ausdruecke pauschal zu blockieren:
-    # Das erlaubte Scratchpad und der Memory-Pfad werden genau so geschrieben,
-    # und eine Sperre, die legitime Arbeit trifft, wird irgendwann abgeschaltet.
-    # Stattdessen werden die bekannten Ausdruecke durch ihren echten Wert
-    # ersetzt, danach entscheidet dieselbe Pruefung wie fuer jeden anderen Pfad.
-    #
-    # GRENZE, ausdruecklich: Wer sein Ziel aus Teilstuecken zusammensetzt, kommt
-    # weiter durch. Diese Sperre ist gegen das Versehen gebaut, nicht gegen die
-    # Umgehung; letztere verbietet AGENTS.md Abschnitt 18 als Regel, und die
-    # tragende technische Ebene dafuer ist die Sandbox des Werkzeugs.
-    #
-    # BEKANNTES FALSCH-POSITIV, bewusst behalten: Ein Kommandotext, der eine
-    # solche Variable nur ERWAEHNT, statt sie als Ziel zu benutzen, wird ebenfalls
-    # aufgeloest und kann blockiert werden. Betroffen sind nur Kommandotexte,
-    # also auch Commit-Nachrichten; Repo-Dateien laufen ueber file_path. Abhilfe
-    # ist Umformulieren. Eine Blockade zu viel kostet einen Satz, eine Luecke
-    # kostet eine Datei.
-    $cmdN = $cmd
-    $ersatz = [ordered]@{
-        '\$\{?env:USERPROFILE\}?'      = $homePath
-        # Wortgrenze hinter HOME: sonst frisst das Muster den Anfang von $env:HOMEDRIVE
-        # und $HOMEPATH, und aus dem Ziel wird Buchstabensalat, den Windows PowerShell
-        # 5.1 nicht mehr als Pfad liest (Bypass, gefunden 13.09.2026).
-        '\$\{?env:HOME\}?(?![A-Za-z0-9_])' = $homePath
-        '\$\{?env:LOCALAPPDATA\}?'     = $env:LOCALAPPDATA
-        '\$\{?env:APPDATA\}?'          = $env:APPDATA
-        '\$\{?env:PUBLIC\}?'           = $env:PUBLIC
-        '\$\{?env:ONEDRIVE\}?'         = $env:OneDrive
-        '\$\{?env:PROGRAMDATA\}?'      = $env:ProgramData
-        '\$\{?env:SYSTEMROOT\}?'       = $env:SystemRoot
-        '\$\{?env:WINDIR\}?'           = $env:windir
-        # Genau den Variablennamen treffen: TMP darf nicht TMPDIR zerlegen.
-        '\$\{?env:TEMP(?![A-Za-z0-9_])\}?'   = $tempPath
-        '\$\{?env:TMP(?![A-Za-z0-9_])\}?'    = $tempPath
-        '\$\{?env:TMPDIR(?![A-Za-z0-9_])\}?' = $tempPath
-        '\$\{?env:HOMEDRIVE\}?\$\{?env:HOMEPATH\}?' = $homePath
-        '\$\{?HOME\}?(?![A-Za-z0-9_])'   = $homePath
-        '\$\{?TMPDIR\}?(?![A-Za-z0-9_])' = $tempPath
-    }
-    # Ersetzt wird ueber eine Lambda und nicht ueber einen Ersatzstring: In einem
-    # Ersatzstring ist "$" ein Sonderzeichen, und ein Pfad, der eines enthaelt,
-    # wuerde still verstuemmelt. Eine Lambda gibt den Wert unveraendert zurueck.
-    foreach ($k in $ersatz.Keys) {
-        $wert = $ersatz[$k]
-        if ($wert) { $cmdN = [regex]::Replace($cmdN, $k, { param($m) $wert }.GetNewClosure(), 'IgnoreCase') }
-    }
-    # [Environment]::GetFolderPath('Desktop') und Verwandte. Der Ordnername wird
-    # ueber die .NET-Aufzaehlung selbst aufgeloest, damit die Liste nicht von Hand
-    # gepflegt werden muss und auch bei umgeleiteten Ordnern stimmt (ein Desktop
-    # unterhalb eines Cloud-Speichers ist der Normalfall).
-    $cmdN = [regex]::Replace($cmdN, '\[(?:System\.)?Environment\]::GetFolderPath\(\s*[''"]?(?:System\.Environment\+SpecialFolder\.|SpecialFolder\.)?([A-Za-z]+)[''"]?\s*\)', {
-        param($m)
-        try {
-            $wert = [System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::($m.Groups[1].Value))
-            if ($wert) { return $wert }
-        } catch { }
-        return $m.Value
-    }, 'IgnoreCase')
-    # Bash-Tilde am Anfang eines Pfades.
-    $up = $homePath
-    $cmdN = [regex]::Replace($cmdN, '(?<![\w.])~(?=[\\/])', { param($m) $up }.GetNewClosure())
-
-    # Absolute Pfade im Kommandotext einsammeln: Laufwerk, UNC, Git-Bash-Stil
-    # oder ein nativer POSIX-Pfad.
-    # Das UNC-Muster verlangt bewusst einen Hostnamen und danach einen EINFACHEN
-    # Trenner. Ohne diese Verschaerfung trifft es auch JSON mit escapten
-    # Backslashes und blockiert damit jeden Versuch, eine Hook-Konfiguration
-    # zu schreiben.
-    $found = @()
-    $parentPattern = if ($isWindowsHost) { '(?:^|[\\/])\.\.(?:[\\/]|$)' } else { '(?:^|/)\.\.(?:/|$)' }
-    # Erster Durchgang: Pfade in Anfuehrungszeichen. Die muessen als GANZES
-    # geprueft werden, sonst zerfaellt ein Pfad mit Leerzeichen am ersten
-    # Leerzeichen, und die Pruefung urteilt ueber etwas, das so nie gemeint war.
-    foreach ($m in [regex]::Matches($cmdN, $quotedPattern)) {
-        $inhalt = if ($m.Groups[1].Success) { $m.Groups[1].Value } else { $m.Groups[2].Value }
-        if (Normalize-AbsolutePath $inhalt) { $found += $inhalt }
-        elseif ($inhalt -match $parentPattern -and $inhalt -notmatch '^[A-Za-z][A-Za-z0-9+.-]*://') {
-            $aufgeloest = Resolve-TargetPath $inhalt $cwd
-            if ($aufgeloest) { $found += $aufgeloest }
-        }
-    }
-    # Zweiter Durchgang: unquotierte Pfade. Endet zwangslaeufig am Leerzeichen,
-    # den Abschneidefall faengt Test-Allowed ab.
-    # Der linke Anker vor dem Laufwerksmuster verhindert, dass mitten in einem Wort
-    # ein "Laufwerk" gefunden wird: file:///C:/... enthaelt sonst den Fund e:///,
-    # und jeder Chrome-Aufruf mit Datei-URL waere blockiert (Fix aus dem
-    # Ursprungssystem vom 11.08.2026, hier nachgezogen am 30.08.2026).
-    $pathRegexes = if ($isWindowsHost) {
-        @('(?<![A-Za-z0-9])[a-zA-Z]:[\\/][^"''`;,|)\s]*', '(?<!\\)\\\\[a-zA-Z0-9._-]+\\(?!\\)[^"''`;,|)\s]+', '(?<![\w.])/[a-zA-Z]/[^"''`;,|)\s]*')
-    } else {
-        # Der linke Anker verhindert Treffer in URLs wie https://example.org/x.
-        @('(?<![A-Za-z0-9:/.])/(?!/)[^"''`;,|)\s]+')
-    }
-    foreach ($rx in $pathRegexes) {
-        foreach ($m in [regex]::Matches($cmdN, $rx)) { $found += $m.Value }
-    }
-    # Auch unquotierte relative Pfade mit Elternsegmenten pruefen. Zitierte
-    # Argumente wurden oben als Ganzes geprueft; hier duerfen sie nicht nochmals
-    # am Leerzeichen zerfallen. URLs bleiben wie in der absoluten Suche frei.
-    $unquotedPaths = [regex]::Replace($cmdN, $quotedPattern, ' ')
-    foreach ($m in [regex]::Matches($unquotedPaths, '[^"''`;,|()<>\s]+')) {
-        $pfad = $m.Value
-        if ($pfad -match $parentPattern -and $pfad -notmatch '^[A-Za-z][A-Za-z0-9+.-]*://' -and
-            -not (Normalize-AbsolutePath $pfad)) {
-            $aufgeloest = Resolve-TargetPath $pfad $cwd
-            if ($aufgeloest) { $found += $aufgeloest }
-        }
-    }
+    # Zielpfade, die erst zur Laufzeit entstehen ($env:USERPROFILE, die Tilde,
+    # [Environment]::GetFolderPath), werden durch ihren echten Wert ersetzt; danach
+    # entscheidet dieselbe Pruefung wie fuer jeden anderen Pfad (lib\arbeitsbereich.ps1).
+    $cmdN = Expand-BekannteVariablen $cmd
+    $found = @(Get-AbsolutePfade $cmdN $cwd)
     if ($nurUmleitung) {
         $found = @()
         foreach ($ziel in @(Get-Umleitungsziele $cmdN)) {
@@ -445,7 +316,9 @@ if ($tool -in @("Bash", "PowerShell")) {
     }
     foreach ($f in ($found | Select-Object -Unique)) {
         if (-not (Test-Allowed $f)) {
-            Write-Decision "deny" "Schreibendes Kommando mit Ziel ausserhalb des Repos ($repo). Blockierter Pfad: $f. Harte Regel, siehe AGENTS.md Abschnitt 18. Wenn das wirklich gewollt ist, entscheidet [NAME]: die Datei von Hand an den Zielort legen, oder den Pfad dauerhaft in die Liste `$allowPatterns eintragen. Diese Liste erweiterst du nicht selbst."
+            $n = Normalize-AbsolutePath $f
+            if (-not $n) { $n = $f }
+            Write-Decision "deny" ("Schreibendes Kommando. " + (Get-SperrHinweis "Schreiben" $n $ab))
         }
     }
     # Formatdisziplin im Shell-Zweig bewusst eng: Nur die AUSGABE-Ziele der bekannten
@@ -464,5 +337,7 @@ if ($tool -in @("Bash", "PowerShell")) {
 Write-Decision "durch" ""
 
 } catch {
+    # Die Reihe setzt LEO_GUARD_DEBUG, damit ein abgefangener Fehler dort nicht als PASS durchgeht.
+    if ($env:LEO_GUARD_DEBUG) { "HOOK-FEHLER: " + $_.Exception.Message + " (Zeile " + $_.InvocationInfo.ScriptLineNumber + ")"; exit 0 }
     Write-Decision "durch" ""
 }

@@ -2,7 +2,7 @@
 titel: Mein System (persönliche Ebene)
 zweck: Alles, was an diesem System dir gehört - Name, Pfad, eigene Regeln, eigene Bauten. Wird von Updates nie angefasst.
 type: master-regeln
-stand: 2026-08-31
+stand: 2026-11-09
 ---
 
 # Mein System
@@ -90,4 +90,5 @@ Kurznotizen zu deiner Umgebung, damit das LLM nicht jedes Mal nachfragt. Was hie
 - **Werkzeug:** *(z.B. Claude Code auf dem eigenen Rechner, oder ein Chat-Harness mit Dateizugriff)*
 - **Fernsicherung:** *(privates GitHub-Repo? nur lokal? Wenn nur lokal: es gibt kein Netz unter dir, siehe ANLEITUNG Teil 5)*
 - **Automatik:** *(läuft der tägliche Index-Sync als geplante Aufgabe? Hook aktiv?)*
+- **Ordner ausserhalb des Repos:** *(stehen nicht hier. Ab Werk sieht dein Agent nur dein Repo, `<Repo> Archiv`, `<Repo> Artifacts` und sein Scratchpad; was du ihm darüber hinaus öffnest, steht in `00_INDEX\freigegebene-pfade.txt`, und freigeben kannst nur du, mit `00_INDEX\scripts\freigeben.ps1` in deinem eigenen PowerShell-Fenster. Erklärung: ANLEITUNG Teil 5, Schritt 7c.)*
 - **Besonderheiten:** *(alles, was bei dir anders ist als in der Anleitung beschrieben)*
