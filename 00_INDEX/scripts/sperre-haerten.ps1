@@ -69,6 +69,20 @@ if ($Pruefen) {
     exit 0
 }
 
+# --- Nie im Repo des Herausgebers (seit 5.2) --------------------------------------------------
+# Auf dem Rechner, auf dem das Grundgeruest gebaut wird, ist kein Leo-Kind eingerichtet; die
+# Haertung wuerde dort die Hooks aller anderen Projekte abschalten, auch die eines eigenen
+# Systems. Erkannt am Release-Gate, das nur der Herausgeber lokal setzt (git config leo.releaseGate).
+if (-not $test) {
+    $ErrorActionPreference = 'Continue'
+    $gate = & git -C $repo config --get leo.releaseGate 2>$null
+    $ErrorActionPreference = 'Stop'
+    if ($gate) {
+        "Abgebrochen: Das ist das Repo des Herausgebers (git config leo.releaseGate ist gesetzt), kein Leo-Kind. Die Haertung wuerde auf diesem Rechner die Hooks aller anderen Projekte abschalten. Nichts geaendert."
+        exit 3
+    }
+}
+
 # --- Rueckfrage und Rechteerhoehung (nicht in der Testreihe) ----------------------------------
 function Test-Admin {
     if ($isWindowsHost) {

@@ -158,7 +158,9 @@ Pruef "41 Danach Stand fehlt" ($r.out -match 'Stand:\s+fehlt') "True"
 
 # --- Nur der Besitzer, nie aus einer Session -------------------------------------------------------
 $r = Starte $haerten "" "j`n"
-Pruef "42 Aus umgeleiteter Eingabe: abgelehnt" $r.code "2"
+# Im Repo des Herausgebers (Release-Gate gesetzt) bricht es schon davor ab, mit Exit 3.
+$istHerausgeber = [bool](& git -C $repo config --get leo.releaseGate 2>$null)
+Pruef "42 Nie aus einer Session, nie beim Herausgeber" $r.code $(if ($istHerausgeber) { "3" } else { "2" })
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 ""
