@@ -239,11 +239,15 @@ function Read-PfadListe([string]$datei, [switch]$NurSchreiben) {
     return $list
 }
 
-function Get-Arbeitsbereich([string]$repoRoh) {
+# $indexOrdner: wo die beiden Listen liegen. Leer heisst <Repo>/00_INDEX. Die Schutzkopie der
+# Haertung (sperre-haerten.ps1) gibt ihren eigenen Ordner an, damit dort die Kopien gelten, die
+# nur mit Adminrechten zu aendern sind.
+function Get-Arbeitsbereich([string]$repoRoh, [string]$indexOrdner = '') {
     $repo = Normalize-AbsolutePath $repoRoh
     $eltern = Split-Path -Parent $repo
     $name = Split-Path -Leaf $repo
     $index = Join-Path $repo '00_INDEX'
+    $listen = if ($indexOrdner) { $indexOrdner } else { $index }
     $scratch = @(Normalize-AbsolutePath (Join-Path $tempPath 'claude'))
     # Unter Windows kann TEMP in der 8.3-Kurzform stehen (C:\Users\ANNAMU~1\...), waehrend das
     # Werkzeug die Langform meldet. Die Langform ueber LOCALAPPDATA kommt deshalb dazu.
@@ -272,8 +276,8 @@ function Get-Arbeitsbereich([string]$repoRoh) {
     } else {
         $programme = @('/Applications', '/System', '/usr', '/bin', '/sbin', '/opt', '/Library/Frameworks')
     }
-    $freigabeDatei = if ($env:LEO_GUARD_FREIGABE_KONFIG) { $env:LEO_GUARD_FREIGABE_KONFIG } else { Join-Path $index 'freigegebene-pfade.txt' }
-    $sperrDatei = if ($env:LEO_GUARD_READ_KONFIG) { $env:LEO_GUARD_READ_KONFIG } else { Join-Path $index 'gesperrte-pfade.txt' }
+    $freigabeDatei = if ($env:LEO_GUARD_FREIGABE_KONFIG) { $env:LEO_GUARD_FREIGABE_KONFIG } else { Join-Path $listen 'freigegebene-pfade.txt' }
+    $sperrDatei = if ($env:LEO_GUARD_READ_KONFIG) { $env:LEO_GUARD_READ_KONFIG } else { Join-Path $listen 'gesperrte-pfade.txt' }
     return @{
         repo          = $repo
         name          = $name
@@ -415,4 +419,49 @@ function Set-PfadInListe([string]$datei, [string]$pfad, [switch]$Entfernen, [str
     $zeilen += $zeile
     [System.IO.File]::WriteAllLines($datei, [string[]]$zeilen, $utf8)
     return 'hinzugefuegt'
+}
+
+# --- Haertung mit verwalteten Einstellungen (sperre-haerten.ps1, seit 5.1) -------------------
+# Wo Claude Code seine verwalteten Einstellungen liest und wo die Schutzkopie der Sperren liegt.
+# Beides ist nur mit Administratorrechten zu aendern. $systemOrdner ersetzt den Systemordner in
+# der Testreihe.
+$haertungsDateien = @(
+    '00_INDEX/scripts/guard-read.ps1', '00_INDEX/scripts/guard-workspace.ps1',
+    '00_INDEX/scripts/guard-git.ps1', '00_INDEX/scripts/guard-mail.ps1',
+    '00_INDEX/scripts/leo-hook.ps1', '00_INDEX/scripts/lib/arbeitsbereich.ps1')
+$haertungsListen = @('00_INDEX/freigegebene-pfade.txt', '00_INDEX/gesperrte-pfade.txt')
+
+function Get-HaertungsOrt([string]$repo, [string]$systemOrdner = '') {
+    $sys = $systemOrdner
+    if (-not $sys) {
+        if ($isWindowsHost) { $sys = Join-Path $env:ProgramFiles 'ClaudeCode' }
+        elseif ($IsMacOS) { $sys = '/Library/Application Support/ClaudeCode' }
+        else { $sys = '/etc/claude-code' }
+    }
+    $n = Normalize-AbsolutePath $repo
+    $slug = ($n -replace '[^A-Za-z0-9]', '-').Trim('-')
+    return @{
+        system = $sys
+        dropin = Join-Path (Join-Path $sys 'managed-settings.d') ('50-leo-' + $slug + '.json')
+        kopie  = Join-Path (Join-Path $sys 'leo') $slug
+    }
+}
+
+# Stand der Haertung: fehlt, aktuell oder veraltet (die Schutzkopie weicht vom Repo ab, etwa nach
+# einem Update oder einer Freigabe, die noch nicht uebernommen ist). Liefert dazu die Abweichungen.
+function Get-HaertungsStand([string]$repo, $ort) {
+    if (-not (Test-Path -LiteralPath $ort.dropin)) { return @{ stand = 'fehlt'; abweichend = @() } }
+    $ab = @()
+    foreach ($rel in ($haertungsDateien + $haertungsListen)) {
+        $q = Join-Path $repo $rel
+        $k = Join-Path $ort.kopie $rel
+        $qda = Test-Path -LiteralPath $q
+        $kda = Test-Path -LiteralPath $k
+        if (-not $qda -and -not $kda) { continue }
+        if ($qda -ne $kda) { $ab += $rel; continue }
+        $hq = (Get-FileHash -LiteralPath $q -Algorithm SHA256).Hash
+        $hk = (Get-FileHash -LiteralPath $k -Algorithm SHA256).Hash
+        if ($hq -ne $hk) { $ab += $rel }
+    }
+    return @{ stand = $(if ($ab.Count -eq 0) { 'aktuell' } else { 'veraltet' }); abweichend = $ab }
 }

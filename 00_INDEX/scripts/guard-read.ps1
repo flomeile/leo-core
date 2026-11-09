@@ -1,4 +1,4 @@
-# guard-read.ps1
+﻿# guard-read.ps1
 # Zweck: PreToolUse-Hook. Die Lese-Haelfte der Standardsperre (AGENTS.md Abschnitt 18, seit 5.0):
 # Der Agent liest ab Werk nur im eigenen Repo, in "<Repo> Archiv", "<Repo> Artifacts" und im
 # Scratchpad. Alles andere ist zu, bis der Besitzer es mit 00_INDEX\scripts\freigeben.ps1 in
@@ -36,6 +36,11 @@
 # Eingabe: JSON auf stdin. Ausgabe: JSON nur beim Blockieren, Exitcode immer 0.
 # ASCII-only mit BOM, damit es unter Windows PowerShell 5.1 und PowerShell 7 gleich laeuft.
 # Regressionsreihe: guard-read-tests.ps1 im selben Ordner, Pflicht vor und nach jeder Aenderung.
+
+# -Repo: gesetzt, wenn der Hook als Schutzkopie ausserhalb des Repos laeuft (Haertung mit
+# verwalteten Einstellungen, sperre-haerten.ps1, seit 5.1). Ohne Angabe ist das Repo der Ordner
+# zwei Ebenen ueber diesem Skript. Die Listen kommen immer aus dem 00_INDEX neben diesem Skript.
+param([string]$Repo = '')
 
 $ErrorActionPreference = "Stop"
 
@@ -114,7 +119,7 @@ try {
     }
     if ([string]::IsNullOrWhiteSpace($text) -and $pfade.Count -eq 0) { exit 0 }
 
-    $ab = Get-Arbeitsbereich (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+    $ab = Get-Arbeitsbereich $(if ($Repo) { $Repo } else { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }) (Split-Path -Parent $PSScriptRoot)
 
     # (1) Zugangsdaten, eingebaut, gelten ueberall.
     if (-not [string]::IsNullOrWhiteSpace($text)) {

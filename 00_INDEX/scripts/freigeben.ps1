@@ -173,6 +173,15 @@ if ($listeImRepo -and (Test-Path -LiteralPath (Join-Path $ab.repo '.git'))) {
     else { "Nicht committet (Git meldet einen Fehler); die Aenderung wirkt trotzdem. Dein Agent nimmt sie beim naechsten Commit mit." }
     $ErrorActionPreference = 'Stop'
 }
+# Ist die Haertung eingerichtet (sperre-haerten.ps1, seit 5.1), lesen die Sperren ihre Listen aus
+# der Schutzkopie im Systemordner. Die Aenderung muss dorthin, und dafuer braucht es Adminrechte.
+$ort = Get-HaertungsOrt $ab.repo
+if (-not $env:LEO_GUARD_FREIGABE_KONFIG -and (Test-Path -LiteralPath $ort.dropin)) {
+    ""
+    "Die Haertung ist eingerichtet: Die Aenderung gilt erst, wenn sie in der Schutzkopie steht."
+    "Dein System fragt dafuer gleich nach Administratorrechten."
+    & (Join-Path $PSScriptRoot 'sperre-haerten.ps1') -NurListen
+}
 "Wirkt ab dem naechsten Werkzeugaufruf deines Agenten, ohne Neustart."
 $ab = Get-Arbeitsbereich $repoRoh
 Zeige-Stand

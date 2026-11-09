@@ -180,6 +180,17 @@ $freigabeFaelle = @(
     @{ n = "79 Shell in Lese-Freigabe";    erw = "DENY"; tool = "PowerShell"; cmd = "Set-Content -LiteralPath `"$(Join-Path $freiNurLesen 'y.md')`" -Value x" }
     @{ n = "81 Umlaut in der Meldung heil"; erw = "DENY"; tool = "Write"; file = (Join-Path $freiNurLesen 'z.md'); muss = $freiNurLesen }
     @{ n = "80 Lese-Freigabe nur lesen";   erw = "PASS"; tool = "PowerShell"; cmd = "Get-Content -LiteralPath `"$(Join-Path $freiNurLesen 'y.md')`"" }
+    # Seit 5.1: keine Rechteerhoehung aus der Session, Haertungsbefehl nur durch den Besitzer.
+    @{ n = "82 Start-Process -Verb RunAs";  erw = "DENY"; tool = "PowerShell"; cmd = "Start-Process powershell -Verb RunAs -ArgumentList '-File x.ps1'" }
+    @{ n = "83 sudo";                       erw = "DENY"; tool = "Bash"; cmd = "sudo cp a.txt /etc/x" }
+    @{ n = "84 osascript Adminrechte";      erw = "DENY"; tool = "Bash"; cmd = "osascript -e 'do shell script `"ls`" with administrator privileges'" }
+    @{ n = "85 runas";                      erw = "DENY"; tool = "Bash"; cmd = "runas /user:Administrator cmd" }
+    @{ n = "86 sperre-haerten.ps1 starten"; erw = "DENY"; tool = "PowerShell"; cmd = "powershell -NoProfile -File 00_INDEX\scripts\sperre-haerten.ps1"; muss = "nur [NAME] selbst" }
+    @{ n = "87 sperre-haerten.ps1 lesen";   erw = "PASS"; tool = "Bash"; cmd = "cat 00_INDEX/scripts/sperre-haerten.ps1" }
+    @{ n = "88 sperre-haerten.ps1 git add"; erw = "PASS"; tool = "Bash"; cmd = "git add 00_INDEX/scripts/sperre-haerten.ps1" }
+    @{ n = "90 sperre-haerten -Pruefen";    erw = "PASS"; tool = "PowerShell"; cmd = "powershell -NoProfile -File 00_INDEX\scripts\sperre-haerten.ps1 -Pruefen" }
+    @{ n = "91 -Pruefen mit -Entfernen";    erw = "DENY"; tool = "PowerShell"; cmd = "powershell -NoProfile -File 00_INDEX\scripts\sperre-haerten.ps1 -Pruefen -Entfernen" }
+    @{ n = "89 hooks-einrichten erlaubt";   erw = "PASS"; tool = "PowerShell"; cmd = "powershell -NoProfile -File 00_INDEX\scripts\hooks-einrichten.ps1 -Pruefen" }
 )
 if ($isWindowsHost) {
     $freigabeFaelle += @(

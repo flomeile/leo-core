@@ -867,10 +867,26 @@ if (-not (Test-Path $guardSkript)) {
     $guardSettingsText = Get-Content -Path $guardSettings -Raw -Encoding UTF8
     $guardIsWindows = [System.IO.Path]::DirectorySeparatorChar -eq '\'
     if (-not $guardIsWindows -and $guardSettingsText -match '"command"\s*:\s*"powershell(?:\s|\")') {
-        Add-Check "WARN" $cat ".claude\settings.json haengt den Guard ein, ruft unter macOS/Linux aber die Windows-Befehlszeile powershell auf. Auf den absoluten pwsh-Pfad und POSIX-Pfade umstellen (ANLEITUNG.md Schritt 7a); sonst wirkt die Sperre nicht."
+        Add-Check "WARN" $cat ".claude\settings.json haengt den Guard ein, ruft unter macOS/Linux aber die Windows-Befehlszeile powershell auf. Einrichten mit: pwsh -NoProfile -File 00_INDEX/scripts/hooks-einrichten.ps1 (ANLEITUNG.md Schritt 7a)."
     } else {
         Add-Check "OK" $cat "Arbeitsbereich-Sperre eingehaengt. Ob der Hook im Werkzeug freigeschaltet ist, muss mit der Regressionsreihe und einem echten Blockierfall gegengemessen werden."
     }
+    # Seit 5.1: Die vier Sperren sperren auch dann, wenn ihr Hook nicht startet ("onFailure":
+    # "block"). Fehlt der Schluessel, laesst ein Hook, der nicht startet, alles durch.
+    try {
+        $hcJson = $guardSettingsText | ConvertFrom-Json
+        $ohne = @()
+        foreach ($g in @($hcJson.hooks.PreToolUse)) {
+            foreach ($h in @($g.hooks)) {
+                if ([string]$h.command -match '(guard-read|guard-workspace|guard-git|guard-mail)\.ps1' -and [string]$h.onFailure -ne 'block') { $ohne += $matches[1] }
+            }
+        }
+        if ($ohne.Count -gt 0) {
+            Add-Check "WARN" $cat ("Ohne onFailure block: " + ($ohne -join ', ') + ". Startet einer dieser Hooks nicht, laesst er alles durch. Einrichten mit 00_INDEX\scripts\hooks-einrichten.ps1 (der Agent darf es selbst ausfuehren).")
+        } else {
+            Add-Check "OK" $cat "Die vier Sperren sperren auch, wenn ihr Hook nicht startet (onFailure block)."
+        }
+    } catch { Add-Check "WARN" $cat ".claude\settings.json ist kein gueltiges JSON: $($_.Exception.Message)" }
     # Zweiter Hook seit 3.3: die Sperre gegen pauschales Stagen (AGENTS.md Abschnitt 12).
     # Eine Verbotsliste in den Einstellungen greift in einem Modus mit vollen Rechten nicht,
     # ein Hook schon. Fehlt der Eintrag, ist die Regel dort nur Text.
@@ -922,6 +938,15 @@ if (-not (Test-Path $guardSkript)) {
             foreach ($w in $sperrStand.weit) {
                 Add-Check "WARN" $cat "Freigabe sehr weit: $w (Laufwerkswurzel, Benutzerordner oder Ordner aller Benutzer). Damit ist die Standardsperre praktisch aufgehoben. Zuruecknehmen mit freigeben.ps1 `"$w`" -Entziehen und nur den gebrauchten Ordner freigeben; der Agent fuehrt den Befehl nicht aus, nur der Besitzer."
             }
+        }
+        # Seit 5.1: Haertung mit verwalteten Einstellungen (sperre-haerten.ps1). Der Besitzer richtet
+        # sie selbst ein; der Health-Check sagt, ob sie fehlt oder nach einem Update veraltet ist.
+        $haertung = & { param($l, $r) . $l; Get-HaertungsStand $r (Get-HaertungsOrt $r) } $sperrLib $repo
+        $haertBefehl = if ($guardIsWindows) { "powershell -NoProfile -ExecutionPolicy Bypass -File `"$repo\00_INDEX\scripts\sperre-haerten.ps1`"" } else { "sudo pwsh -NoProfile -File `"$repo/00_INDEX/scripts/sperre-haerten.ps1`"" }
+        switch ($haertung.stand) {
+            'fehlt'    { Add-Check "WARN" $cat "Haertung nicht eingerichtet: Der Agent koennte seine Sperren mit Absicht abschalten, weil sie im Repo liegen. Einrichten kann nur der Besitzer, in seinem eigenen Fenster, mit Bestaetigung der Adminrechte: $haertBefehl (ANLEITUNG.md, Schritt 7c). Der Agent fuehrt den Befehl nicht aus." }
+            'veraltet' { Add-Check "WARN" $cat ("Haertung veraltet, die Schutzkopie weicht vom Repo ab (" + ($haertung.abweichend -join ', ') + "), etwa nach einem Update. Bis zur Uebernahme gelten die alten Sperren und Listen. Der Besitzer fuehrt erneut aus: $haertBefehl") }
+            'aktuell'  { Add-Check "OK" $cat "Haertung eingerichtet und aktuell: Die Sperren laufen aus der Schutzkopie im Systemordner." }
         }
     }
     # Seit 4.8: die Frischepruefung eingehaengter Repos (AGENTS.md Abschnitt 4, seit 4.7).

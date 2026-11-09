@@ -14,7 +14,7 @@ Im frischen Kern ist die Themenbereichs-Liste leer, bis du den ersten Themenordn
 
 ## Ordnerbaum (mechanisch aktuell)
 <!-- AUTO:BAUM:BEGIN -->
-Stand: 2026-11-09 09:29 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
+Stand: 2026-11-09 11:19 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
 
 - .codex\  (0 Dateien)
 - 00_INDEX\  (1 Dateien)

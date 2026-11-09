@@ -42,6 +42,11 @@
 # laeuft bei jedem einzelnen Werkzeugaufruf und muss unter Windows PowerShell 5.1
 # genauso starten wie unter PowerShell 7.
 
+# -Repo: gesetzt, wenn der Hook als Schutzkopie ausserhalb des Repos laeuft (Haertung mit
+# verwalteten Einstellungen, sperre-haerten.ps1, seit 5.1). Ohne Angabe ist das Repo der Ordner
+# zwei Ebenen ueber diesem Skript. Die Listen kommen immer aus dem 00_INDEX neben diesem Skript.
+param([string]$Repo = '')
+
 $ErrorActionPreference = "Stop"
 
 # WICHTIG: Im Durchlass-Fall gibt dieser Hook NICHTS aus und beendet sich nur mit
@@ -79,7 +84,7 @@ $raw = (New-Object System.IO.StreamReader([Console]::OpenStandardInput(), (New-O
 if ([string]::IsNullOrWhiteSpace($raw)) { Write-Decision "durch" "" }
 $in = $raw | ConvertFrom-Json
 
-$ab = Get-Arbeitsbereich (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
+$ab = Get-Arbeitsbereich $(if ($Repo) { $Repo } else { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }) (Split-Path -Parent $PSScriptRoot)
 $repo = $ab.repo
 $memoryProjects = if ($homePath) {
     Normalize-AbsolutePath (Join-Path (Join-Path $homePath '.claude') 'projects')
@@ -146,12 +151,16 @@ function Test-PolicyDatei([string]$path) {
 # Ein Aufruf von freigeben.ps1 aus einer Session. Erlaubt bleibt nur, die Datei zu lesen oder
 # mit Git zu verwalten (das Update holt sie mit git checkout); jedes Segment, das mit etwas
 # anderem beginnt (powershell, pwsh, &, ., dem Pfad selbst, Start-Process), gilt als Aufruf.
-function Test-FreigebenAufruf([string]$cmd) {
-    if ($cmd -notmatch '(?i)freigeben\.ps1') { return $false }
+# Seit 5.1 gilt dasselbe fuer sperre-haerten.ps1, den Einrichtungsbefehl der verwalteten
+# Einstellungen; $skriptRx waehlt, welches der beiden Skripte geprueft wird.
+function Test-FreigebenAufruf([string]$cmd, [string]$skriptRx = 'freigeben\.ps1') {
+    if ($cmd -notmatch ('(?i)' + $skriptRx)) { return $false }
     $erlaubt = '(?i)^(?:git|cat|type|gc|get-content|head|tail|less|more|select-string|sls|grep|rg|findstr|diff|fc|compare-object|test-path|get-item|get-childitem|gci|ls|dir|wc|get-filehash|sha256sum|md5sum|file|stat|echo|write-output|write-host)(?:\.exe)?(?=\s|$)'
     foreach ($seg in [regex]::Split($cmd, '\r?\n|;|&&|\|\||\|')) {
         $s = $seg.Trim()
-        if ($s -notmatch '(?i)freigeben\.ps1') { continue }
+        if ($s -notmatch ('(?i)' + $skriptRx)) { continue }
+        # sperre-haerten.ps1 -Pruefen zeigt nur den Stand und aendert nichts; das darf der Agent.
+        if ($skriptRx -like 'sperre*' -and $s -match '(?i)\s-Pruefen\b' -and $s -notmatch '(?i)\s-(Entfernen|NurListen|Sandbox|Ziel|Erhoeht|Protokoll)\b') { continue }
         if ($s -match $erlaubt) { continue }
         return $true
     }
@@ -223,6 +232,15 @@ if ($tool -in @("Bash", "PowerShell")) {
     if ([string]::IsNullOrWhiteSpace($cmd)) { Write-Decision "durch" "" }
 
     # Den Freigabebefehl fuehrt nur der Besitzer aus, in seinem eigenen Terminal (seit 5.0).
+    # Rechteerhoehung aus einer Session (seit 5.1). Der Agent laeuft ohne Adminrechte, und dabei
+    # soll es bleiben: Ein Fenster der Benutzerkontensteuerung oder eine Passwortabfrage, die der
+    # Agent ausloest, bestaetigt der Besitzer sonst womoeglich, ohne zu wissen, wofuer.
+    if ($cmd -match '(?i)(Start-Process[^\r\n;|]*-Verb\s*[''"]?RunAs|\bsudo\b|\bgsudo\b|\brunas(\.exe)?\s|\bdoas\b|with\s+administrator\s+privileges|\bpkexec\b)') {
+        Write-Decision "deny" "Gesperrt: Der Befehl wuerde Administratorrechte anfordern (Benutzerkontensteuerung, sudo, runas). Ein Agent fordert nie selbst erhoehte Rechte an, auch nicht auf Wunsch von [NAME] (AGENTS.md Abschnitt 18). Braucht eine Aufgabe Adminrechte, sag ihm in ein, zwei Saetzen, wozu, und gib ihm den Befehl in einem Codeblock, den er selbst in seinem eigenen Fenster ausfuehrt. Erinnere ihn dabei an die Regel: nie eine Abfrage der Benutzerkontensteuerung oder ein Passwortfenster bestaetigen, das er nicht selbst ausgeloest hat."
+    }
+    if (Test-FreigebenAufruf $cmd 'sperre-haerten\.ps1') {
+        Write-Decision "deny" ("Gesperrt: sperre-haerten.ps1 fuehrt nur [NAME] selbst aus, in seinem eigenen Fenster, weil es Administratorrechte braucht und er sie dort bewusst bestaetigt (AGENTS.md Abschnitt 18). Erklaer ihm in ein, zwei Saetzen, was die Haertung bewirkt, und gib ihm den Befehl in einem Codeblock, mit vollem Pfad: " + $(if ($isWindowsHost) { 'powershell -NoProfile -ExecutionPolicy Bypass -File "' } else { 'sudo pwsh -NoProfile -File "' }) + (Join-Path (Join-Path (Join-Path $repo '00_INDEX') 'scripts') 'sperre-haerten.ps1') + '"')
+    }
     if (Test-FreigebenAufruf $cmd) {
         $kurz = if ($cmd.Length -gt 300) { $cmd.Substring(0, 300) + " ..." } else { $cmd }
         Write-Decision "deny" ("Gesperrt: freigeben.ps1 fuehrt nur [NAME] selbst aus, in seinem eigenen PowerShell-Fenster, nie du aus einer Session, auch nicht auf seinen Wunsch hin (AGENTS.md Abschnitt 18). Der Befehl verlangt dort ausserdem eine Bestaetigung an der Tastatur. Erklaer ihm in ein, zwei Saetzen, was die Freigabe bewirkt (Lesen und Schreiben in diesem Ordner und allem darunter, Zugangsdaten bleiben gesperrt), und gib ihm den Befehl in einem Codeblock zum Selbstausfuehren, mit vollem Pfad zum Skript, damit er in jedem Fenster laeuft: " + (Get-FreigabeBefehl '<Pfad>' $ab) + " (dazu der Schalter, den du vorgesehen hattest: -Entziehen, -Sperren oder -Entsperren). Dein Aufruf war: " + $kurz)
