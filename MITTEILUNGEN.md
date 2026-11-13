@@ -11,3 +11,5 @@ Diese Datei liest jedes System auf diesem Kern beim Sessionstart von GitHub (`00
 Eine Mitteilung je Zeile, die neueste unten, Kennung fortlaufend: Bindestrich, Kennung fett in Sternchen, Datum in Klammern, Doppelpunkt, ein kurzer Satz. Beispiel in Worten: M1, Datum 2026-11-13, "Neu ist Core 5.3". Kennungen werden nie wiederverwendet; eine überholte Mitteilung bleibt stehen.
 
 ## Mitteilungen
+
+- **M1** (2026-11-13): Neu in Core 5.3: Updates kommen ab jetzt von selbst, und hier erscheinen kurze Mitteilungen des Herausgebers.
