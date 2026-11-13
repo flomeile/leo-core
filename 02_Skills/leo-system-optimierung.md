@@ -3,7 +3,7 @@ name: leo-system-optimierung
 trigger: '"system-optimierung", "system optimieren", "optimierungslauf", "pruefset fahren", "prüfset fahren", "messlauf", "regeltreue messen"'
 zweck: Misst mit kalten Prüfset-Läufen, ob das System seine eigenen Regeln einhält, leitet aus Durchfallern gezielte Regel- oder Mechanik-Fixes ab und misst nach; Rollback bei sinkender Quote
 type: skill
-version: 3
+version: 3.1
 ---
 
 # Skill: Leo System-Optimierung
@@ -29,10 +29,11 @@ Fälle und Messmechanik stehen in deinem Prüfset (Datei Pruefset.md in `10_Syst
 
 ```powershell
 Set-Location -LiteralPath '<Repo> Artifacts\_Cache\pruefkopie'
+$env:LEO_GRUNDPFLEGE = 'aus'
 claude -p '<Eingabe im Wortlaut>' --permission-mode acceptEdits --output-format stream-json --verbose 2>&1 | Out-File "<scratchpad>\fall.jsonl" -Encoding utf8
 ```
 
-Beurteilt wird der Dateizustand in der Kopie; danach `pruefkopie.ps1 -Modus loeschen`. Offene, nicht committete Änderungen sind in der Kopie bewusst nicht dabei; committe vor dem Lauf, was gemessen werden soll. In der Kopie ist nur die Kopie selbst beschreibbar: Die Hooks laufen über `${CLAUDE_PROJECT_DIR}`, und `guard-workspace.ps1` leitet seinen Repo-Pfad aus dem eigenen Ort ab, also blockiert er das echte Repo, den Artefakte-Ordner und das Archiv. Ein Fall, der dorthin schreiben soll, misst deshalb nur die Entscheidung, nicht die Ablage selbst.
+`LEO_GRUNDPFLEGE = 'aus'` (seit 5.3) hält die Versionsprüfung beim Sessionstart still: Sonst begänne ein Prüffall bei einem Rückstand mit dem Einspielen des Updates statt mit seiner Aufgabe. Beurteilt wird der Dateizustand in der Kopie; danach `pruefkopie.ps1 -Modus loeschen`. Offene, nicht committete Änderungen sind in der Kopie bewusst nicht dabei; committe vor dem Lauf, was gemessen werden soll. In der Kopie ist nur die Kopie selbst beschreibbar: Die Hooks laufen über `${CLAUDE_PROJECT_DIR}`, und `guard-workspace.ps1` leitet seinen Repo-Pfad aus dem eigenen Ort ab, also blockiert er das echte Repo, den Artefakte-Ordner und das Archiv. Ein Fall, der dorthin schreiben soll, misst deshalb nur die Entscheidung, nicht die Ablage selbst.
 
 **Zwei Prüfungen an der Messumgebung:** (1) Steht in einem JSONL sinngemäss "Ignoring ... permissions.allow entries ... this workspace has not been trusted", gilt in der Kopie deine Freigabeliste nicht, und Shell-Aufrufe, die im Alltag durchgehen, werden abgelehnt; die Messung ist dann strenger als der Alltag und verfälscht jeden Fall mit Shell-Aufrufen. Abhilfe ist die einmalige Bestätigung durch `[NAME]`: Kopie anlegen, darin einmal `claude` interaktiv starten und den Ordner als vertrauenswürdig bestätigen; die Bestätigung gilt je Pfad und überlebt das Löschen der Kopie. Nie selbst in die Konfigurationsdatei des Werkzeugs schreiben, es ist eine Sicherheitseinstellung. (2) Was `claude -p` unter Windows über die PowerShell-Pipeline nach `Out-File` schreibt, kann als UTF-8 in Codepage 850 gelesen ankommen (Umlaute als `Ã¤`); die Auswertung repariert dann jede Zeile mit `s.encode("cp850").decode("utf-8")` und gibt mit `PYTHONIOENCODING=utf-8` aus.
 

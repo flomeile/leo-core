@@ -17,7 +17,9 @@
 # dass es da ist. Installation auf dem Mac: brew install --cask powershell
 #
 # WAS ES ANFASST: nur Hook-Eintraege, deren Befehl eines der Kernskripte startet (guard-read,
-# guard-workspace, guard-git, guard-mail, eingehaengte-repos-aktuell, pruef-frontmatter). Eigene
+# guard-workspace, guard-git, guard-mail, eingehaengte-repos-aktuell, pruef-frontmatter, seit 5.3
+# version-check). Fehlt der Eintrag der Versionspruefung oder ist er beschaedigt, schreibt es ihn
+# selbst (seit 5.3, Liste $pflicht). Eigene
 # Hooks und alle anderen Schluessel bleiben, wie sie sind. In .codex\hooks.json wird statt
 # ${CLAUDE_PROJECT_DIR} der ausgeschriebene Repo-Pfad eingesetzt; "onFailure" kommt dort nicht
 # hinein, weil nicht belegt ist, dass Codex den Schluessel kennt.
@@ -47,7 +49,7 @@ if ($Plattform -eq 'posix' -and -not $Pwsh) {
     if (-not $Pwsh) { "PowerShell 7 (pwsh) nicht gefunden. Auf dem Mac installieren mit: brew install --cask powershell"; exit 2 }
 }
 
-$kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|eingehaengte-repos-aktuell|pruef-frontmatter)\.ps1"?(.*)$'
+$kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(.*)$'
 $sperren = @('guard-read', 'guard-workspace', 'guard-git', 'guard-mail')
 
 function Neuer-Befehl([string]$name, [string]$rest, [string]$wurzel) {
@@ -87,6 +89,39 @@ function Richte-Ein($json, [string]$wurzel, [switch]$MitOnFailure) {
     return $aenderungen
 }
 
+# Seit 5.3: Kern-Hooks, die dieses Skript selbst eintraegt, statt sie dem Update-Skill zu
+# ueberlassen. Anlass: Im kalten Update-Lauf zu 5.3 schrieb das Modell den neuen Eintrag ueber die
+# Shell, und aus "\00_INDEX" und "\version" wurden ein NUL- und ein Tabulatorzeichen; der Hook haette
+# nie gestartet, ohne dass es jemand merkt. Ein beschaedigter Eintrag eines solchen Hooks (Steuerzeichen
+# im Befehl) wird entfernt und neu geschrieben. Nur fuer Claude Code, nicht fuer Codex (dort ist nicht
+# belegt, dass es diese Ereignisse kennt).
+$pflicht = @(@{ ereignis = 'SessionStart'; name = 'version-check'; rest = ' -Hook SessionStart'; timeout = 60 })
+function Ergaenze-Pflicht($json, [string]$wurzel) {
+    $aenderungen = @()
+    if (-not $json.PSObject.Properties['hooks']) { $json | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) }
+    foreach ($p in $pflicht) {
+        $liste = $json.hooks.PSObject.Properties[$p.ereignis]
+        $da = $false
+        if ($liste) {
+            foreach ($gruppe in @($liste.Value)) {
+                if (-not $gruppe -or -not $gruppe.PSObject.Properties['hooks']) { continue }
+                $alt = @($gruppe.hooks)
+                $neu = @($alt | Where-Object { -not ([string]$_.command -match '[\x00-\x1F]' -and [string]$_.command -match ([regex]::Escape($p.name.Substring(1)) + '\.ps1')) })
+                if ($neu.Count -ne $alt.Count) { $gruppe.hooks = $neu; $aenderungen += "$($p.ereignis) / $($p.name): beschaedigten Eintrag entfernt (Steuerzeichen im Befehl)" }
+                foreach ($h in $neu) { if ([string]$h.command -match $kernRx -and $matches[1] -eq $p.name) { $da = $true } }
+            }
+        }
+        if (-not $da) {
+            $eintrag = [pscustomobject]@{ type = 'command'; timeout = $p.timeout; command = (Neuer-Befehl $p.name $p.rest $wurzel) }
+            $erste = if ($liste) { @($liste.Value | Where-Object { $_ -and $_.PSObject.Properties['hooks'] }) | Select-Object -First 1 } else { $null }
+            if ($erste) { $erste.hooks = @(@($erste.hooks) + $eintrag) }
+            else { $json.hooks | Add-Member -NotePropertyName $p.ereignis -NotePropertyValue @([pscustomobject]@{ hooks = @($eintrag) }) -Force }
+            $aenderungen += "$($p.ereignis) / $($p.name): Eintrag ergaenzt"
+        }
+    }
+    return $aenderungen
+}
+
 function Schreibe-Json($json, [string]$pfad) {
     $text = $json | ConvertTo-Json -Depth 30
     [System.IO.File]::WriteAllText($pfad, $text + [Environment]::NewLine, (New-Object System.Text.UTF8Encoding($false)))
@@ -96,7 +131,7 @@ $fehlt = $false
 if (Test-Path -LiteralPath $Datei) {
     $json = Get-Content -LiteralPath $Datei -Raw -Encoding UTF8 | ConvertFrom-Json
     $wurzel = if ($Plattform -eq 'windows') { '${CLAUDE_PROJECT_DIR}' } else { '${CLAUDE_PROJECT_DIR}' }
-    $a = @(Richte-Ein $json $wurzel -MitOnFailure)
+    $a = @(Ergaenze-Pflicht $json $wurzel) + @(Richte-Ein $json $wurzel -MitOnFailure)
     if ($a.Count -eq 0) { "Claude Code ($Datei): eingerichtet, nichts zu tun." }
     else {
         $fehlt = $true

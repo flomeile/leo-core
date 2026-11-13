@@ -50,6 +50,11 @@
             "type": "command",
             "timeout": 90,
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\eingehaengte-repos-aktuell.ps1\" -Hook SessionStart"
+          },
+          {
+            "type": "command",
+            "timeout": 60,
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\version-check.ps1\" -Hook SessionStart"
           }
         ]
       }

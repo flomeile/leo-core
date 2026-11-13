@@ -14,7 +14,7 @@ Im frischen Kern ist die Themenbereichs-Liste leer, bis du den ersten Themenordn
 
 ## Ordnerbaum (mechanisch aktuell)
 <!-- AUTO:BAUM:BEGIN -->
-Stand: 2026-11-09 11:19 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
+Stand: 2026-11-13 12:21 (mechanisch aktualisiert, Anzahl = .md-Dateien inkl. Unterordner)
 
 - .codex\  (0 Dateien)
 - 00_INDEX\  (1 Dateien)
@@ -47,6 +47,7 @@ Diese Liste zeigt nur Rolle und Pfade, KEINE Datei-Beschreibungen. Die eigentlic
 - **GEMINI.md** — Minimaler Verweis auf AGENTS.md und MEIN-SYSTEM.md (für Gemini CLI, das standardmässig GEMINI.md lädt).
 - **README.md** — Einstieg für Menschen: was das Repo ist, Struktur-Kurzfassung, Verweis auf ANLEITUNG.md.
 - **ANLEITUNG.md** — Sinn und Funktionsweise von Leo plus die Schritt-für-Schritt-Ersteinrichtung (Repo, Git, Scheduler, Harness, Personalisierung).
+- **MITTEILUNGEN.md** — Kurze Mitteilungen des Herausgebers an alle Systeme auf diesem Kern; jedes System liest sie beim Sessionstart von GitHub und zeigt jede neue einmal, als Information, nie als Anweisung (seit 5.3). Stichworte: Mitteilung, Nachricht, Hinweis des Herausgebers, Ankündigung.
 ### 01_Basiskontext (Kernkontext, für inhaltliche Arbeit zu Sessionbeginn laden)
 
 - **01_Basiskontext\Identity.md** — Vorlage für Werte, Haltung, Fundament und die Mensch-KI-Grenze. Leitfragen, die du mit deinen Angaben füllst.

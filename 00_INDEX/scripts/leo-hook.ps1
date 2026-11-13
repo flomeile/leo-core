@@ -11,14 +11,14 @@
 #
 # WOHER DER HOOK KOMMT: Die vier Sperren (guard-*.ps1) aus der Schutzkopie neben diesem Skript,
 # damit der Agent sie nicht veraendern kann; sie bekommen -Repo und lesen die Freigabelisten aus
-# der Schutzkopie. Die uebrigen Kern-Hooks (eingehaengte-repos-aktuell, pruef-frontmatter) aus dem
+# der Schutzkopie. Die uebrigen Kern-Hooks (eingehaengte-repos-aktuell, pruef-frontmatter, seit 5.3 version-check) aus dem
 # Repo selbst: Sie schuetzen nichts, und das Update soll sie ohne Adminrechte erneuern koennen.
 #
 # Eingabe: JSON auf stdin, wird an den Hook durchgereicht (derselbe Prozess liest sie).
 # ASCII-only: laeuft unter Windows PowerShell 5.1 und PowerShell 7.
 param(
     [Parameter(Mandatory)][string]$Repo,
-    [Parameter(Mandatory)][ValidateSet('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'eingehaengte-repos-aktuell', 'pruef-frontmatter')][string]$Skript,
+    [Parameter(Mandatory)][ValidateSet('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'eingehaengte-repos-aktuell', 'pruef-frontmatter', 'version-check')][string]$Skript,
     [string]$Hook = ''
 )
 

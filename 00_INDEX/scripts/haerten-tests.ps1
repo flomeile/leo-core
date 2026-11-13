@@ -117,6 +117,7 @@ Pruef "24 Verteiler aus der Schutzkopie" ([string]$lese[0].command -like ('*' + 
 $start = @($d.hooks.SessionStart | ForEach-Object { $_.hooks })
 Pruef "25 SessionStart uebernommen mit -Hook" ([string]$start[0].command -like '*-Skript eingehaengte-repos-aktuell -Hook SessionStart') "True"
 Pruef "26 SessionStart ohne onFailure" ([string]$start[0].onFailure) ""
+Pruef "26b Versionspruefung ueber Verteiler mit -Hook (seit 5.3)" (@($start | Where-Object { [string]$_.command -like '*-Skript version-check -Hook SessionStart' }).Count) "1"
 Pruef "27 Deny fuer Freigabeliste" (@($d.permissions.deny) -contains 'Edit(**/00_INDEX/freigegebene-pfade.txt)') "True"
 Pruef "28 Schutzkopie hat Lese-Sperre und Logik" ((Test-Path -LiteralPath (Join-Path $ort.kopie '00_INDEX/scripts/guard-read.ps1')) -and (Test-Path -LiteralPath (Join-Path $ort.kopie '00_INDEX/scripts/lib/arbeitsbereich.ps1'))) "True"
 $r = Starte $haerten "-Ziel `"$sys`" -Pruefen"
@@ -127,6 +128,8 @@ $verteiler = Join-Path (Join-Path (Join-Path $ort.kopie '00_INDEX') 'scripts') '
 $eingabe = (@{ tool_name = 'Read'; cwd = $repo; tool_input = @{ file_path = (Join-Path $desktop 'x.md') } } | ConvertTo-Json -Compress -Depth 5)
 $r = Starte $verteiler "-Repo `"$repo`" -Skript guard-read" $eingabe @{ CLAUDE_PROJECT_DIR = $repo }
 Pruef "30 Leo-Kind: Lesen ausserhalb gesperrt" (Urteil $r) "DENY"
+$r = Starte $verteiler "-Repo `"$repo`" -Skript version-check -Hook SessionStart" '{"source":"compact"}' @{ CLAUDE_PROJECT_DIR = $repo }
+Pruef "30b Verteiler startet die Versionspruefung (seit 5.3)" $r.code "0"
 $r = Starte $verteiler "-Repo `"$repo`" -Skript guard-read" $eingabe @{ CLAUDE_PROJECT_DIR = (Join-Path $tmp 'anderes Projekt') }
 Pruef "31 Anderes Projekt: nichts gesperrt" (Urteil $r) "PASS"
 $r = Starte $verteiler "-Repo `"$repo`" -Skript guard-read" $eingabe @{ CLAUDE_PROJECT_DIR = (Join-Path (Join-Path $repo '.claude') 'worktrees\a') }

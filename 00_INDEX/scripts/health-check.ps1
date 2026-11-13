@@ -963,6 +963,16 @@ if (-not (Test-Path $guardSkript)) {
             Add-Check "OK" $cat "Frischepruefung eingehaengter Repos eingehaengt (SessionStart und UserPromptSubmit)."
         }
     }
+    # Seit 5.3: Versionspruefung und Mitteilungen beim Sessionstart (AGENTS.md Abschnitt 1, Grundpflege).
+    # Fehlt der Eintrag, bleibt nur die Textregel, und ein Rueckstand faellt erst auf, wenn ein
+    # Agent daran denkt; das Update ersetzt das Skript, die settings.json aber nur auf Vorlage.
+    if (Test-Path (Join-Path $repo "00_INDEX\scripts\version-check.ps1")) {
+        if ($guardSettingsText -notmatch 'version-check\.ps1.{0,12}-Hook\s+SessionStart') {
+            Add-Check "WARN" $cat ".claude\settings.json haengt version-check.ps1 nicht unter SessionStart ein. Ein neuer Kern und die Mitteilungen des Herausgebers kommen dann nur an, wenn der Agent an die Textregel denkt. Eintrag aus der Zielversion ergaenzen (Skill leo-mechanik-update, Kategorie B)."
+        } else {
+            Add-Check "OK" $cat "Versionspruefung und Mitteilungen beim Sessionstart eingehaengt."
+        }
+    }
     # Seit 4.9: die Frontmatter-Pruefung nach jedem Schreiben (AGENTS.md Abschnitte 5 und 7).
     # Fehlt der Eintrag, faellt ein ungueltiger Wert erst beim naechsten Health-Check auf, und
     # niemand erinnert an stand:. Das Update ersetzt das Skript, die settings.json nur auf Vorlage.

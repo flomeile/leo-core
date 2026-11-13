@@ -160,7 +160,7 @@ try {
     # --- Verwaltete Einstellungen ---------------------------------------------------------------
     $exe = if ($isWindowsHost) { 'powershell -NoProfile -ExecutionPolicy Bypass -File' } else { '"' + (Join-Path $PSHOME 'pwsh') + '" -NoProfile -File' }
     $verteiler = Join-Path (Join-Path (Join-Path $ort.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
-    $kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|eingehaengte-repos-aktuell|pruef-frontmatter)\.ps1"?(?:\s+-Hook\s+(\w+))?'
+    $kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(?:\s+-Hook\s+(\w+))?'
     $settings = Get-Content -LiteralPath (Join-Path (Join-Path $repo '.claude') 'settings.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $hooks = [ordered]@{}
     $fremd = @()
