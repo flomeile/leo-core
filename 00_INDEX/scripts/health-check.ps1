@@ -1332,8 +1332,10 @@ $archivRoot = if (Test-Path -LiteralPath $archivKandidat) { $archivKandidat.Trim
 $provIssues = @()
 # Zustandsdateien, die erst zur Laufzeit entstehen (Zeitstempel des letzten Laufs),
 # sind keine Belege: Im frischen Repo existieren sie noch nicht, und ein Skill, der
-# sie erwaehnt, verweist auf ein Werkzeugergebnis, nicht auf eine Quelle.
-$phPattern  = '[<>*?%]|\.\.\.|YYYY|^~|last-run\.txt$|^zustand-'
+# sie erwaehnt, verweist auf ein Werkzeugergebnis, nicht auf eine Quelle. Dasselbe gilt
+# fuer die Freigabelisten des Besitzers: Das Update legt sie nie an, eine fehlende gilt als
+# leer (seit 6.0 auch extern-freigaben.txt; die kalte Messung zu 6.0 meldete sie als toten Beleg).
+$phPattern  = '[<>*?%]|\.\.\.|YYYY|^~|last-run\.txt$|^zustand-|(freigegebene-pfade|gesperrte-pfade|extern-freigaben)\.txt$'
 $cmdPattern = '^(git|pwsh|powershell|cd|python|schtasks|npm)\s|\s--\s'
 # 90_Inbox ist ausgenommen: Rohquellen verlassen die Inbox nach dem Ingest, ihr
 # Zitat in der Zieldatei bleibt bewusst stehen und ist die Herkunftsangabe selbst.
