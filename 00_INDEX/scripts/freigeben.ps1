@@ -28,13 +28,91 @@ param(
     [Parameter(Position = 0)][string]$Pfad,
     [switch]$Entziehen,
     [switch]$Sperren,
-    [switch]$Entsperren
+    [switch]$Entsperren,
+    [string]$Werkzeug = ''
 )
+# Seit 6.0 dazu:
+#   ... freigeben.ps1 -Werkzeug <name>              ein Connector-Werkzeug erlauben, das guard-extern.ps1 sperrt
+#   ... freigeben.ps1 -Werkzeug <name> -Entziehen   diese Erlaubnis zuruecknehmen
+# Eingetragen wird in 00_INDEX\extern-freigaben.txt; das Werkzeug laeuft danach wieder ueber die normale
+# Berechtigungsabfrage des Werkzeugs.
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
 $repoRoh = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $ab = Get-Arbeitsbereich $repoRoh
+
+# Die Listen gelten erst, wenn sie in der Kopie der Sperren stehen: in der Schutzkopie im Systemordner
+# (Haertung, braucht Adminrechte) oder in der Kopie im Benutzerprofil (ohne Adminrechte, seit 6.0).
+function Uebernimm-Listen {
+    if ($env:LEO_GUARD_FREIGABE_KONFIG) { return }
+    $ort = Get-HaertungsOrt $ab.repo
+    if (Test-Path -LiteralPath $ort.dropin) {
+        ""
+        "Die Haertung ist eingerichtet: Die Aenderung gilt erst, wenn sie in der Schutzkopie steht."
+        "Dein System fragt dafuer gleich nach Administratorrechten."
+        & (Join-Path $PSScriptRoot 'sperre-haerten.ps1') -NurListen
+    }
+    $prof = Get-ProfilOrt $ab.repo
+    if (Test-Path -LiteralPath $prof.kopie) {
+        foreach ($rel in $haertungsListen) {
+            $q = Join-Path $ab.repo $rel
+            $k = Join-Path $prof.kopie $rel
+            if (Test-Path -LiteralPath $q) {
+                New-Item -ItemType Directory -Force -Path (Split-Path -Parent $k) | Out-Null
+                Copy-Item -LiteralPath $q -Destination $k -Force
+            } elseif (Test-Path -LiteralPath $k) { Remove-Item -LiteralPath $k -Force }
+        }
+        "In die Kopie der Sperren im Benutzerprofil uebernommen ($($prof.kopie))."
+    }
+}
+
+function Commit-Liste([string]$datei) {
+    if (-not (Test-PathWithin $datei $ab.repo) -or -not (Test-Path -LiteralPath (Join-Path $ab.repo '.git'))) { return }
+    $rel = (Normalize-AbsolutePath $datei).Substring($ab.repo.Length).TrimStart($pathSeparators) -replace '\\', '/'
+    $ErrorActionPreference = 'Continue'
+    & git -C $ab.repo add -- $rel 2>&1 | Out-Null
+    & git -C $ab.repo commit -q -m "Freigaben geaendert mit freigeben.ps1" -- $rel 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) { "Mit Git committet." }
+    else { "Nicht committet (Git meldet einen Fehler); die Aenderung wirkt trotzdem. Dein Agent nimmt sie beim naechsten Commit mit." }
+    $ErrorActionPreference = 'Stop'
+}
+
+if ($Werkzeug) {
+    if ([Console]::IsInputRedirected) {
+        "freigeben.ps1 laeuft nur in deinem eigenen PowerShell-Fenster, weil es eine Antwort an der Tastatur verlangt. Aus einer Agenten-Session heraus ist es gesperrt (AGENTS.md Abschnitt 18). Nichts geaendert."
+        exit 2
+    }
+    $w = $Werkzeug.Trim()
+    if ($w -notmatch '^[A-Za-z0-9_\-]+$') { "Ungueltiger Werkzeugname: $Werkzeug (erwartet etwa create_event oder den vollen Namen mcp__<server>__<werkzeug>)."; exit 1 }
+    $datei = if ($env:LEO_GUARD_EXTERN_KONFIG) { $env:LEO_GUARD_EXTERN_KONFIG } else { Join-Path (Join-Path $ab.repo '00_INDEX') 'extern-freigaben.txt' }
+    $zeilen = @()
+    if (Test-Path -LiteralPath $datei) { $zeilen = @(Get-Content -LiteralPath $datei -Encoding UTF8) }
+    else { $zeilen = @('# extern-freigaben.txt', '# Connector-Werkzeuge, die du deinem Agenten erlaubt hast (AGENTS.md Abschnitt 16). Pflege nur mit', '# freigeben.ps1 -Werkzeug <name> in deinem eigenen Fenster; dein Agent schreibt diese Datei nie.') }
+    $da = @($zeilen | Where-Object { (($_ -split '#')[0].Trim()) -eq $w }).Count -gt 0
+    ""
+    if ($Entziehen) {
+        if (-not $da) { "'$w' ist nicht freigegeben. Nichts geaendert."; exit 0 }
+        "Erlaubnis zuruecknehmen: '$w' ist danach wieder gesperrt."
+    } else {
+        if ($da) { "'$w' ist schon freigegeben. Nichts geaendert."; exit 0 }
+        "Connector-Werkzeug erlauben: '$w'"
+        "Risiko: Dein Agent kann damit nach aussen wirken (versenden, loeschen, teilen oder in einen Dienst"
+        "schreiben), und das laesst sich meist nicht zurueckholen. Er fragt dich danach vor jedem Aufruf ueber"
+        "die normale Abfrage des Werkzeugs."
+    }
+    ""
+    $antwort = Read-Host "Fortfahren? (j/n)"
+    if ($antwort -notmatch '^\s*(j|ja|y|yes)\s*$') { "Abgebrochen, nichts geaendert."; exit 1 }
+    if ($Entziehen) { $zeilen = @($zeilen | Where-Object { (($_ -split '#')[0].Trim()) -ne $w }) }
+    else { $zeilen += $w }
+    [System.IO.File]::WriteAllLines($datei, [string[]]$zeilen, (New-Object System.Text.UTF8Encoding($false)))
+    "Eingetragen in $datei."
+    Commit-Liste $datei
+    Uebernimm-Listen
+    "Wirkt ab dem naechsten Werkzeugaufruf deines Agenten, ohne Neustart."
+    exit 0
+}
 
 $kopfFreigabe = @(
     '# freigegebene-pfade.txt'
@@ -163,25 +241,10 @@ switch ($ergebnis) {
 }
 
 # Committen, damit jede Freigabe im Verlauf steht. Nur fuer die echten Listen im Repo.
-$listeImRepo = Test-PathWithin $datei $ab.repo
-if ($listeImRepo -and (Test-Path -LiteralPath (Join-Path $ab.repo '.git'))) {
-    $rel = (Normalize-AbsolutePath $datei).Substring($ab.repo.Length).TrimStart($pathSeparators) -replace '\\', '/'
-    $ErrorActionPreference = 'Continue'
-    & git -C $ab.repo add -- $rel 2>&1 | Out-Null
-    & git -C $ab.repo commit -q -m "Freigaben geaendert mit freigeben.ps1" -- $rel 2>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) { "Mit Git committet." }
-    else { "Nicht committet (Git meldet einen Fehler); die Aenderung wirkt trotzdem. Dein Agent nimmt sie beim naechsten Commit mit." }
-    $ErrorActionPreference = 'Stop'
-}
-# Ist die Haertung eingerichtet (sperre-haerten.ps1, seit 5.1), lesen die Sperren ihre Listen aus
-# der Schutzkopie im Systemordner. Die Aenderung muss dorthin, und dafuer braucht es Adminrechte.
-$ort = Get-HaertungsOrt $ab.repo
-if (-not $env:LEO_GUARD_FREIGABE_KONFIG -and (Test-Path -LiteralPath $ort.dropin)) {
-    ""
-    "Die Haertung ist eingerichtet: Die Aenderung gilt erst, wenn sie in der Schutzkopie steht."
-    "Dein System fragt dafuer gleich nach Administratorrechten."
-    & (Join-Path $PSScriptRoot 'sperre-haerten.ps1') -NurListen
-}
+Commit-Liste $datei
+# Lesen die Sperren ihre Listen aus einer Kopie (Haertung seit 5.1, Kopie im Benutzerprofil seit 6.0),
+# muss die Aenderung dorthin.
+Uebernimm-Listen
 "Wirkt ab dem naechsten Werkzeugaufruf deines Agenten, ohne Neustart."
 $ab = Get-Arbeitsbereich $repoRoh
 Zeige-Stand

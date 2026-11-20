@@ -67,7 +67,7 @@ try {
     $q = Quelle 'std' @('v5.1', 'v5.2', 'v5.3')
     $q10 = Quelle 'zehn' @('v5.9', 'v5.10')
     $weg = Join-Path $w 'gibt-es-nicht.git'
-    $leer = Join-Path $repoEcht 'MITTEILUNGEN.md'
+    $leer = Mitteilungen 'leer' @()
     $keine = Join-Path $w 'keine-mitteilungen.md'
 
     # --- Von Hand (Rueckfall ohne Hook) -----------------------------------------------------------
@@ -96,12 +96,12 @@ try {
     Check '08 Hook aktuell, keine Mitteilung: keine Ausgabe' (-not $e.text -and $e.code -eq 0) $e.text
     $k = Kind 'hook-benutzen' '5.2' '5.2' 'benutzen'
     $e = Lauf $k $q $leer -Hook
-    Check '09 Hook Rueckstand (benutzen): Auftrag ohne Rueckfrage' ($e.kontext -match 'RUECKSTAND, eingespielt 5\.2, verfuegbar 5\.3' -and $e.kontext -match 'ohne zu fragen' -and $e.kontext -match 'leo-mechanik-update') $e.text
-    Check '10 Hook Rueckstand: Satz an die Person nennt die Zielversion' ($e.kontext -match "Ich spiele zuerst Core 5\.3 ein") $e.kontext
+    Check '09 Hook Rueckstand (benutzen): ankuendigen, erst nach Ja (seit 6.0)' ($e.kontext -match 'RUECKSTAND, eingespielt 5\.2, verfuegbar 5\.3' -and $e.kontext -match 'erst nach ihrem Ja' -and $e.kontext -notmatch 'ohne zu fragen' -and $e.kontext -match 'leo-mechanik-update') $e.text
+    Check '10 Hook Rueckstand: Ankuendigung nennt die Zielversion und fragt' ($e.kontext -match 'Core 5\.3 ist verfuegbar' -and $e.kontext -match 'ob du es jetzt einspielen sollst') $e.kontext
     Check '11 Hook: gueltiges JSON mit hookEventName SessionStart' ((($e.text | ConvertFrom-Json).hookSpecificOutput.hookEventName) -eq 'SessionStart') $e.text
     $k = Kind 'hook-mitbauen' '5.2' '5.2' 'mitbauen'
     $e = Lauf $k $q $leer -Hook
-    Check '12 Hook Rueckstand (mitbauen): derselbe Auftrag' ($e.kontext -match 'ohne zu fragen und in beiden Nutzungsmodi') $e.text
+    Check '12 Hook Rueckstand (mitbauen): derselbe Auftrag' ($e.kontext -match 'in beiden Nutzungsmodi' -and $e.kontext -match 'erst nach ihrem Ja') $e.text
     $k = Kind 'hook-widerspruch' '2.4' '5.3'
     $e = Lauf $k $q $leer -Hook
     Check '13 Auslieferungswert 2.4 bei AGENTS 5.3: kein Auftrag, nur Hinweis' ($e.kontext -match 'Widerspruch' -and $e.kontext -notmatch 'Spiel das Update') $e.kontext
@@ -117,7 +117,7 @@ try {
     $k = Kind 'takt' '5.2' '5.2'
     StempelSetzen $k (Get-Date).AddHours(-2) '5.3'
     $e = Lauf $k $weg $leer -Hook
-    Check '17 Innert 24 h ohne Netz: Rueckstand aus dem Stand, Auftrag bleibt' ($e.kontext -match 'RUECKSTAND, eingespielt 5\.2, verfuegbar 5\.3' -and $e.kontext -match 'ohne zu fragen') $e.kontext
+    Check '17 Innert 24 h ohne Netz: Rueckstand aus dem Stand, Auftrag bleibt' ($e.kontext -match 'RUECKSTAND, eingespielt 5\.2, verfuegbar 5\.3' -and $e.kontext -match 'erst nach ihrem Ja') $e.kontext
     [System.IO.File]::WriteAllText((Join-Path $k 'MEIN-SYSTEM.md'), ([System.IO.File]::ReadAllText((Join-Path $k 'MEIN-SYSTEM.md')) -replace '\| 5\.2 \|', '| 5.3 |'), $utf8)
     [System.IO.File]::WriteAllText((Join-Path $k 'AGENTS.md'), ([System.IO.File]::ReadAllText((Join-Path $k 'AGENTS.md')) -replace 'version: 5\.2', 'version: 5.3'), $utf8)
     $e = Lauf $k $weg $leer -Hook
@@ -144,7 +144,7 @@ try {
     Check '25 Umlaute bleiben erhalten' ($e.kontext -match ("Gr${ue}sse f${ue}r L${ae}ufe")) $e.kontext
     $k = Kind 'leer' '5.3' '5.3'
     $e = Lauf $k $q $leer -Hook
-    Check '26 Leere Datei (echte MITTEILUNGEN.md): keine Ausgabe, nichts vermerkt' (-not $e.text -and -not (Test-Path -LiteralPath (Join-Path $k '10_System\mitteilungen-last-run.txt'))) $e.text
+    Check '26 Leere Datei: keine Ausgabe, nichts vermerkt' (-not $e.text -and -not (Test-Path -LiteralPath (Join-Path $k '10_System\mitteilungen-last-run.txt'))) $e.text
     $k = Kind 'nichtabrufbar' '5.2' '5.2'
     $e = Lauf $k $q $keine -Hook
     Check '27 Mitteilungen nicht abrufbar: Hinweis, Versionsauftrag bleibt' ($e.kontext -match 'nicht abrufbar' -and $e.kontext -match 'Spiel das Update') $e.kontext
@@ -178,7 +178,7 @@ try {
         $sp = Join-Path $w "settings-$pl.json"; Copy-Item -LiteralPath (Join-Path $repoEcht '.claude\settings.json') -Destination $sp
         $cx = Join-Path $w "keine-codex-$pl.json"
         $ErrorActionPreference = 'Continue'
-        $null = & $Exe -NoProfile -ExecutionPolicy Bypass -File $einrichten -Plattform $pl -Pwsh '/opt/homebrew/bin/pwsh' -Datei $sp -CodexDatei $cx 2>&1
+        $null = & $Exe -NoProfile -ExecutionPolicy Bypass -File $einrichten -OhneProfil -Plattform $pl -Pwsh '/opt/homebrew/bin/pwsh' -Datei $sp -CodexDatei $cx 2>&1
         $ErrorActionPreference = 'Stop'
         $j = Get-Content -LiteralPath $sp -Raw -Encoding UTF8 | ConvertFrom-Json
         $vc = @($j.hooks.SessionStart | ForEach-Object { $_.hooks } | Where-Object { $_.command -like '*version-check.ps1*' })
@@ -193,9 +193,9 @@ try {
     $j.hooks.SessionStart[0].hooks = @($j.hooks.SessionStart[0].hooks | Where-Object { $_.command -notlike '*version-check*' })
     [System.IO.File]::WriteAllText($alt, ($j | ConvertTo-Json -Depth 30), $utf8)
     $ErrorActionPreference = 'Continue'
-    $null = & $Exe -NoProfile -ExecutionPolicy Bypass -File $einrichten -Plattform windows -Datei $alt -CodexDatei (Join-Path $w 'keine.json') -Pruefen 2>&1
+    $null = & $Exe -NoProfile -ExecutionPolicy Bypass -File $einrichten -OhneProfil -Plattform windows -Datei $alt -CodexDatei (Join-Path $w 'keine.json') -Pruefen 2>&1
     $codePruefen = $LASTEXITCODE
-    $null = & $Exe -NoProfile -ExecutionPolicy Bypass -File $einrichten -Plattform windows -Datei $alt -CodexDatei (Join-Path $w 'keine.json') 2>&1
+    $null = & $Exe -NoProfile -ExecutionPolicy Bypass -File $einrichten -OhneProfil -Plattform windows -Datei $alt -CodexDatei (Join-Path $w 'keine.json') 2>&1
     $ErrorActionPreference = 'Stop'
     Check '37 Einrichtung -Pruefen: fehlender Eintrag gemeldet (Exit 1)' ($codePruefen -eq 1) "$codePruefen"
     $j = Get-Content -LiteralPath $alt -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -206,7 +206,7 @@ try {
     $text = $text.Replace('\\00_INDEX\\scripts\\version-check.ps1', '\u0000_INDEX\\scripts\u000bersion-check.ps1')
     [System.IO.File]::WriteAllText($kaputt, $text, $utf8)
     $ErrorActionPreference = 'Continue'
-    $null = & $Exe -NoProfile -ExecutionPolicy Bypass -File $einrichten -Plattform windows -Datei $kaputt -CodexDatei (Join-Path $w 'keine.json') 2>&1
+    $null = & $Exe -NoProfile -ExecutionPolicy Bypass -File $einrichten -OhneProfil -Plattform windows -Datei $kaputt -CodexDatei (Join-Path $w 'keine.json') 2>&1
     $ErrorActionPreference = 'Stop'
     $j = Get-Content -LiteralPath $kaputt -Raw -Encoding UTF8 | ConvertFrom-Json
     $start = @($j.hooks.SessionStart | ForEach-Object { $_.hooks })

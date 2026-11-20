@@ -41,6 +41,26 @@
             "onFailure": "block"
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*javascript.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\guard-fremdsysteme.ps1\"",
+            "onFailure": "block"
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\guard-extern.ps1\"",
+            "onFailure": "block"
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -101,7 +121,8 @@
       "Read(**/*.kdbx)",
       "Read(**/*.ppk)",
       "Edit(**/00_INDEX/freigegebene-pfade.txt)",
-      "Edit(**/00_INDEX/gesperrte-pfade.txt)"
+      "Edit(**/00_INDEX/gesperrte-pfade.txt)",
+      "Edit(**/00_INDEX/extern-freigaben.txt)"
     ]
   }
 }

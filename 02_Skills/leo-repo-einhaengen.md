@@ -3,7 +3,7 @@ name: leo-repo-einhaengen
 trigger: '"repo einhängen", "wissensrepo einhängen", "geteiltes repo einhängen", "repo synchronisieren", "wissensrepo synchronisieren"'
 zweck: Ein geteiltes Wissensrepo (Anleitungen, Regeln, Kontext eines Teams) als Ordner in dieses Repo einhängen und darin sicher arbeiten, also klonen oder forken, einrichten, Stand abgleichen, Änderungen per Pull Request vorschlagen
 type: skill
-version: 1.1
+version: 1.2
 ---
 
 # Skill: Leo Repo einhängen
@@ -74,6 +74,9 @@ Ein **Wissensrepo** ist ein geteiltes Git-Repo, das mehrere Personen und ihre Ag
 - Nicht gesehen werden vom Hook: Kommentare und Issues auf GitHub, Bearbeitungen im GitHub-Web, Binärinhalte und Merge-Commits, die GitHub selbst erzeugt. Dort gilt Schritt 7 ohne mechanisches Netz.
 - **Wer auf GitHub zusammenführt, stellt dort zuerst die Adresse privat:** GitHub, Profilbild, **Settings**, **Emails**, Häkchen bei **Keep my email addresses private** und bei **Block command line pushes that expose my email**. Ohne diese Einstellung trägt jeder Merge-Commit, den GitHub beim Zusammenführen eines Pull Requests erzeugt, die Hauptadresse des Kontos als Autor, oft eine private, und kein lokaler Hook kann das verhindern. Das betrifft den Owner, aber auch jeden, der im eigenen Fork über die Weboberfläche zusammenführt.
 - **Den eingehängten Ordner nie in einem Notiz-Werkzeug umbenennen oder verschieben** (etwa Obsidian mit automatischer Link-Aktualisierung): Das Werkzeug schreibt dabei Links in den Dateien des geteilten Repos um, oft auf Pfade deines eigenen Systems. Umbenennen nur über den Agenten (Ordner verschieben, Zeile in der `.gitignore` anpassen, Einrichtungsskript erneut laufen lassen) und danach `git -C "<Ordner>" status` prüfen: Auf `main` dürfen keine ungespeicherten Änderungen liegen. Der Health-Check warnt, wenn doch.
+
+- **Eine `schutzliste.txt` im Wurzelordner des eingehängten Repos liest die Sperre für Fremdsysteme mit** (seit 6.0, `AGENTS.md` Abschnitt 16): Adressen, in die nur über ein Werkzeug geschrieben wird, Schlüsseldateien, Werkzeuge mit Freigabefenster. Gelesen wird die Fassung auf GitHub; ändere sie nie lokal, ein Vorschlag geht als Pull Request an den Owner. Schlüssel selbst gehören nie in das Repo.
+- **Eine Firmenschicht ist ein eingehängtes Repo wie jedes andere** (seit 6.0): Verlangt die Organisation sie, hängst du sie mit diesem Skill ein, bevor du andere Arbeit machst.
 
 ## Definition of Done
 

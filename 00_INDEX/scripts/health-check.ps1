@@ -871,20 +871,20 @@ if (-not (Test-Path $guardSkript)) {
     } else {
         Add-Check "OK" $cat "Arbeitsbereich-Sperre eingehaengt. Ob der Hook im Werkzeug freigeschaltet ist, muss mit der Regressionsreihe und einem echten Blockierfall gegengemessen werden."
     }
-    # Seit 5.1: Die vier Sperren sperren auch dann, wenn ihr Hook nicht startet ("onFailure":
+    # Seit 5.1: Die Sperren (seit 6.0 sechs) sperren auch dann, wenn ihr Hook nicht startet ("onFailure":
     # "block"). Fehlt der Schluessel, laesst ein Hook, der nicht startet, alles durch.
     try {
         $hcJson = $guardSettingsText | ConvertFrom-Json
         $ohne = @()
         foreach ($g in @($hcJson.hooks.PreToolUse)) {
             foreach ($h in @($g.hooks)) {
-                if ([string]$h.command -match '(guard-read|guard-workspace|guard-git|guard-mail)\.ps1' -and [string]$h.onFailure -ne 'block') { $ohne += $matches[1] }
+                if ([string]$h.command -match '(guard-read|guard-workspace|guard-git|guard-mail|guard-fremdsysteme|guard-extern)\.ps1' -and [string]$h.onFailure -ne 'block') { $ohne += $matches[1] }
             }
         }
         if ($ohne.Count -gt 0) {
             Add-Check "WARN" $cat ("Ohne onFailure block: " + ($ohne -join ', ') + ". Startet einer dieser Hooks nicht, laesst er alles durch. Einrichten mit 00_INDEX\scripts\hooks-einrichten.ps1 (der Agent darf es selbst ausfuehren).")
         } else {
-            Add-Check "OK" $cat "Die vier Sperren sperren auch, wenn ihr Hook nicht startet (onFailure block)."
+            Add-Check "OK" $cat "Die Sperren sperren auch, wenn ihr Hook nicht startet (onFailure block)."
         }
     } catch { Add-Check "WARN" $cat ".claude\settings.json ist kein gueltiges JSON: $($_.Exception.Message)" }
     # Zweiter Hook seit 3.3: die Sperre gegen pauschales Stagen (AGENTS.md Abschnitt 12).
@@ -908,6 +908,26 @@ if (-not (Test-Path $guardSkript)) {
         Add-Check "WARN" $cat ".claude\settings.json haengt guard-mail.ps1 nicht als PreToolUse-Hook ein. Ein eigener Sendeweg aus einer Session ist dann nicht gesperrt. Eintrag aus der Zielversion ergaenzen (Skill leo-mechanik-update, Kategorie B)."
     } else {
         Add-Check "OK" $cat "Mailversand-Sperre eingehaengt (guard-mail.ps1)."
+    }
+    # Seit 6.0: Sperre fuer Fremdsysteme und Connector-Sperre (AGENTS.md Abschnitt 16). Den Eintrag
+    # schreibt hooks-einrichten.ps1, nie das Modell von Hand.
+    foreach ($neuSperre in @(@{ n = 'guard-fremdsysteme'; was = 'Schreiben in Fremdsysteme (Google, Microsoft 365 und vergleichbare Dienste) ohne Werkzeug mit Freigabefenster' }, @{ n = 'guard-extern'; was = 'Versenden, Loeschen, Teilen und Schreiben in Google ueber einen Connector' })) {
+        if (-not (Test-Path (Join-Path $repo ("00_INDEX\scripts\" + $neuSperre.n + ".ps1")))) {
+            Add-Check "FAIL" $cat ($neuSperre.n + ".ps1 fehlt. " + $neuSperre.was + " ist damit nicht gesperrt. Datei aus der Zielversion holen (Skill leo-mechanik-update).")
+        } elseif ($guardSettingsText -notmatch $neuSperre.n) {
+            Add-Check "FAIL" $cat (".claude\settings.json haengt " + $neuSperre.n + ".ps1 nicht ein: " + $neuSperre.was + " ist nicht gesperrt. Einrichten mit 00_INDEX\scripts\hooks-einrichten.ps1 (der Agent darf es selbst ausfuehren).")
+        } else {
+            Add-Check "OK" $cat ("Eingehaengt: " + $neuSperre.n + ".ps1.")
+        }
+    }
+    # Seit 6.0: Verlangt die Organisation eine Firmenschicht (LEO_FIRMENSCHICHT aus ihrer zentralen
+    # Richtlinie), muss sie eingehaengt sein (AGENTS.md Abschnitt 16).
+    if ($env:LEO_FIRMENSCHICHT) {
+        try {
+            $fsStand = & { param($l, $r) . $l; $s = Get-SchutzStand $r -Frisch; @{ fehlt = (Test-FirmenschichtFehlt $s); soll = (Get-FirmenschichtSoll) } } (Join-Path $repo "00_INDEX\scripts\lib\schutzliste.ps1") $repo
+            if ($fsStand.fehlt) { Add-Check "FAIL" $cat ("Die Firmenschicht " + $fsStand.soll + " ist nicht eingehaengt, und deine Organisation verlangt sie. Bis dahin sperrt der Agent jedes Schreiben von Dateien. Einhaengen mit dem Skill leo-repo-einhaengen: https://github.com/" + $fsStand.soll) }
+            else { Add-Check "OK" $cat ("Firmenschicht der Organisation eingehaengt (" + $fsStand.soll + ").") }
+        } catch { Add-Check "WARN" $cat ("Firmenschicht nicht pruefbar: " + $_.Exception.Message) }
     }
     # Vierter Hook seit 3.8, seit 5.0 die Lese-Haelfte der Standardsperre (AGENTS.md Abschnitt 18):
     # Ausserhalb des Arbeitsbereichs ist Lesen zu, bis der Besitzer mit freigeben.ps1 freigibt.
@@ -944,7 +964,13 @@ if (-not (Test-Path $guardSkript)) {
         $haertung = & { param($l, $r) . $l; Get-HaertungsStand $r (Get-HaertungsOrt $r) } $sperrLib $repo
         $haertBefehl = if ($guardIsWindows) { "powershell -NoProfile -ExecutionPolicy Bypass -File `"$repo\00_INDEX\scripts\sperre-haerten.ps1`"" } else { "sudo pwsh -NoProfile -File `"$repo/00_INDEX/scripts/sperre-haerten.ps1`"" }
         switch ($haertung.stand) {
-            'fehlt'    { Add-Check "WARN" $cat "Haertung nicht eingerichtet: Der Agent koennte seine Sperren mit Absicht abschalten, weil sie im Repo liegen. Einrichten kann nur der Besitzer, in seinem eigenen Fenster, mit Bestaetigung der Adminrechte: $haertBefehl (ANLEITUNG.md, Schritt 7c). Der Agent fuehrt den Befehl nicht aus." }
+            'fehlt'    {
+                Add-Check "WARN" $cat "Haertung nicht eingerichtet: Der Agent koennte seine Sperren mit Absicht abschalten, weil sie im Repo liegen. Einrichten kann nur der Besitzer, in seinem eigenen Fenster, mit Bestaetigung der Adminrechte: $haertBefehl (ANLEITUNG.md, Schritt 7c). Der Agent fuehrt den Befehl nicht aus."
+                # Seit 6.0: Ohne Haertung greifen die Sperren in anderen Projekten nur ueber die persoenlichen Einstellungen.
+                $profilStand = & { param($l, $r) . $l; $po = Get-ProfilOrt $r; $t = if (Test-Path -LiteralPath $po.settings) { [System.IO.File]::ReadAllText($po.settings) } else { '' }; @{ da = ((Test-Path -LiteralPath (Join-Path $po.kopie '00_INDEX\scripts\leo-hook.ps1')) -and $t.Contains((ConvertTo-Json $po.kopie).Trim('"'))); kopie = $po.kopie } } $sperrLib $repo
+                if ($profilStand.da) { Add-Check "OK" $cat ("Sperren in allen Projekten ueber die persoenlichen Einstellungen eingerichtet (Kopie " + $profilStand.kopie + ").") }
+                else { Add-Check "WARN" $cat "Die Sperren greifen nur in diesem Repo; in jedem anderen Projekt arbeitet der Agent ohne Sperre. Einrichten mit 00_INDEX\scripts\hooks-einrichten.ps1 (der Agent darf es selbst ausfuehren; braucht Netz fuer die Pruefung des Versionsstands)." }
+            }
             'veraltet' { Add-Check "WARN" $cat ("Haertung veraltet, die Schutzkopie weicht vom Repo ab (" + ($haertung.abweichend -join ', ') + "), etwa nach einem Update. Bis zur Uebernahme gelten die alten Sperren und Listen. Der Besitzer fuehrt erneut aus: $haertBefehl") }
             'aktuell'  { Add-Check "OK" $cat "Haertung eingerichtet und aktuell: Die Sperren laufen aus der Schutzkopie im Systemordner." }
         }

@@ -1,0 +1,11 @@
+# extern-freigaben.txt
+# Connector-Werkzeuge, die du deinem Agenten trotz der Connector-Sperre erlaubt hast (AGENTS.md
+# Abschnitt 16, guard-extern.ps1). Ab Werk steht hier nichts: Versenden, Loeschen, Teilen und Schreiben in
+# Google ueber einen Connector sind gesperrt.
+#
+# Eine Zeile je Werkzeug, als Endung (etwa create_event) oder voller Name (mcp__<server>__<werkzeug>).
+# Ein eingetragenes Werkzeug laeuft wieder ueber die normale Abfrage des Werkzeugs.
+#
+# Diese Datei pflegst nur du, mit 00_INDEX\scripts\freigeben.ps1 -Werkzeug <name> in deinem eigenen
+# PowerShell-Fenster (mit -Entziehen zuruecknehmen). Dein Agent kann sie lesen, aber nicht schreiben.
+# Diese Datei gehoert dir (Kern-Dateien.md, Kategorie B): Ein Update ersetzt sie nie.

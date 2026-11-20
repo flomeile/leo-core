@@ -291,7 +291,9 @@ function Get-Arbeitsbereich([string]$repoRoh, [string]$indexOrdner = '') {
         freigaben     = @(Read-PfadListe $freigabeDatei)
         freigabenSchreiben = @(Read-PfadListe $freigabeDatei -NurSchreiben)
         sperren       = @(Read-PfadListe $sperrDatei)
-        freigebenSkript = Join-Path (Join-Path $index 'scripts') 'freigeben.ps1'
+        # In einem fremden Projekt (seit 6.0) gibt der Besitzer im Repo seines Leo-Kinds frei; der Verteiler
+        # setzt dafuer LEO_KIND_REPO, bevor er die Sperre startet.
+        freigebenSkript = Join-Path (Join-Path (Join-Path $(if ($env:LEO_KIND_REPO) { $env:LEO_KIND_REPO } else { $repo }) '00_INDEX') 'scripts') 'freigeben.ps1'
     }
 }
 
@@ -428,8 +430,26 @@ function Set-PfadInListe([string]$datei, [string]$pfad, [switch]$Entfernen, [str
 $haertungsDateien = @(
     '00_INDEX/scripts/guard-read.ps1', '00_INDEX/scripts/guard-workspace.ps1',
     '00_INDEX/scripts/guard-git.ps1', '00_INDEX/scripts/guard-mail.ps1',
-    '00_INDEX/scripts/leo-hook.ps1', '00_INDEX/scripts/lib/arbeitsbereich.ps1')
-$haertungsListen = @('00_INDEX/freigegebene-pfade.txt', '00_INDEX/gesperrte-pfade.txt')
+    '00_INDEX/scripts/guard-fremdsysteme.ps1', '00_INDEX/scripts/guard-extern.ps1',
+    '00_INDEX/scripts/leo-hook.ps1', '00_INDEX/scripts/lib/arbeitsbereich.ps1',
+    '00_INDEX/scripts/lib/schutzliste.ps1', '00_INDEX/scripts/lib/eingehaengt-ausschluss.ps1')
+$haertungsListen = @('00_INDEX/freigegebene-pfade.txt', '00_INDEX/gesperrte-pfade.txt', '00_INDEX/extern-freigaben.txt')
+# Die Sperren als Hook-Namen (seit 6.0 sechs).
+$sperrNamen = @('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'guard-fremdsysteme', 'guard-extern')
+
+# Ohne Adminrechte (seit 6.0): Die Kopie der Sperren liegt im Benutzerprofil, die Hooks stehen in den
+# persoenlichen Einstellungen von Claude Code und gelten damit in jedem Projekt. Beides liegt ausserhalb des
+# Arbeitsbereichs; die Schreibsperre haelt den Agenten davon fern. hooks-einrichten.ps1 befuellt die Kopie
+# nur aus dem offiziellen Versionsstand, freigeben.ps1 traegt die Listen ein.
+function Get-ProfilOrt([string]$repo, [string]$heimOrdner = '') {
+    $h = if ($heimOrdner) { $heimOrdner } else { $homePath }
+    $n = Normalize-AbsolutePath $repo
+    $slug = ($n -replace '[^A-Za-z0-9]', '-').Trim('-')
+    return @{
+        kopie    = Join-Path (Join-Path $h '.leo-sperren') $slug
+        settings = Join-Path (Join-Path $h '.claude') 'settings.json'
+    }
+}
 
 function Get-HaertungsOrt([string]$repo, [string]$systemOrdner = '') {
     $sys = $systemOrdner

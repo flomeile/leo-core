@@ -9,8 +9,16 @@
 # Thema einsteigt, und das Update brauchte danach immer ein Ja. Seit 5.3 laeuft es deshalb als
 # SessionStart-Hook (.claude\settings.json), hoechstens einmal je 24 Stunden mit Netz, und
 # schreibt das Ergebnis als Kontext vor die erste Nachricht: bei Rueckstand den Auftrag, das
-# Update ohne Rueckfrage einzuspielen (in beiden Nutzungsmodi), und neue Mitteilungen. Die
-# Textregel bleibt als Rueckfall fuer Werkzeuge ohne Hooks.
+# Update anzukuendigen und erst nach dem Ja der Person einzuspielen (seit 6.0; 5.3 spielte es ohne
+# Rueckfrage ein), und neue Mitteilungen. Die Textregel bleibt als Rueckfall fuer Werkzeuge ohne Hooks.
+#
+# WARUM SEIT 6.0 MIT JA: Wer das Grundgeruest auf GitHub aendern kann, steuert jedes System, das es
+# ohne Rueckfrage einspielt. Die Ankuendigung mit der Release Note zeigt der Person, was kommt, bevor
+# es kommt.
+#
+# FIRMENSCHICHT (seit 6.0): Verlangt die Organisation eine Firmenschicht (Umgebungsvariable
+# LEO_FIRMENSCHICHT aus ihrer zentralen Richtlinie) und ist sie nicht eingehaengt, steht bei jedem
+# Sessionstart der Auftrag im Kontext, sie zuerst einzuhaengen (lib\schutzliste.ps1).
 #
 # SCHUTZ VOR DEM FALSCHEN UPDATE: Den Auftrag zum Einspielen gibt der Hook nur, wenn die Lage
 # eindeutig ist. Kein Auftrag (nur Hinweis) bei: keiner lesbaren Version in MEIN-SYSTEM.md, einer
@@ -115,6 +123,41 @@ try {
 
     $zeilen = New-Object System.Collections.Generic.List[string]
 
+    # --- Firmenschicht der Organisation (seit 6.0): bei jedem Start, nicht nur einmal je $Stunden ---------
+    if ($env:LEO_FIRMENSCHICHT) {
+        try {
+            . (Join-Path (Join-Path $PSScriptRoot 'lib') 'schutzliste.ps1')
+            $schutz = Get-SchutzStand $root -Frisch
+            if (Test-FirmenschichtFehlt $schutz) {
+                $fs = Get-FirmenschichtSoll
+                if ($Hook) { $zeilen.Add("PFLICHT DER ORGANISATION: Die Firmenschicht $fs ist nicht eingehaengt (AGENTS.md Abschnitt 16, Firmenschicht). Sag der Person in deiner ersten Antwort, dass ihre Organisation das verlangt und dass du bis dahin keine Dateien schreiben kannst, und haeng sie zuerst mit ihr ein (Skill leo-repo-einhaengen, Adresse https://github.com/$fs). Fehlt ihr der Zugriff, wendet sie sich an die Person, die ihr Leo Core gegeben hat.") }
+                else { $zeilen.Add("FIRMENSCHICHT fehlt $fs") }
+            }
+        } catch { }
+    }
+
+    # --- Sperren fuer alle Projekte (seit 6.0), ohne Modell ---------------------------------------
+    # Im kalten Update-Lauf zu 6.0 liess der Agent diesen Schritt zweimal aus Vorsicht aus und fragte
+    # nach; deshalb richtet ihn dieser Hook selbst ein: wenn die Kopie fehlt oder eine andere Version
+    # traegt, sonst hoechstens einmal je $Stunden mit Netz. Nicht mit der Haertung (dann gelten die
+    # verwalteten Hooks) und nur gegen das echte Grundgeruest, nie in einer Testreihe mit eigener Quelle.
+    if ($Hook -and $eingespielt -and $Quelle -eq 'https://github.com/flomeile/leo-core') {
+        try {
+            . (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
+            $po = Get-ProfilOrt $root
+            $marke = Join-Path $po.kopie 'version.txt'
+            $kopieVersion = if (Test-Path -LiteralPath $marke) { ([System.IO.File]::ReadAllText($marke)).Trim() } else { '' }
+            $he = Join-Path $PSScriptRoot 'hooks-einrichten.ps1'
+            if (-not (Test-Path -LiteralPath (Get-HaertungsOrt $root).dropin) -and (Test-Path -LiteralPath $he) -and ($frisch -or $kopieVersion -ne $eingespielt)) {
+                $exe = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { 'powershell' } else { Join-Path $PSHOME 'pwsh' }
+                $aus = & $exe -NoProfile -ExecutionPolicy Bypass -File $he -NurProfil 2>&1 | Out-String
+                if ($aus -match 'Alle Projekte: Sperren aus Version [0-9.]+ eingerichtet \(') {
+                    $zeilen.Add('Sperren fuer alle Projekte eingerichtet oder erneuert (ohne Modell, hooks-einrichten.ps1, AGENTS.md Abschnitt 18). Sag der Person in einer Zeile, dass sie ab dem naechsten Start von Claude Code auch in anderen Projekten gelten.')
+                }
+            }
+        } catch { }
+    }
+
     # --- Versionsbefund ----------------------------------------------------------------------
     if (-not $neueste) {
         if ($Hook) { $zeilen.Add('Leo-Core-Versionspruefung beim Sessionstart nicht moeglich (kein Netz oder GitHub nicht erreichbar); naechster Versuch beim naechsten Sessionstart. Kein Befund, nichts zu tun.') }
@@ -127,7 +170,7 @@ try {
         elseif ($agentsVersion -and $agentsVersion -ne $eingespielt) {
             $zeilen.Add("Leo-Core-Versionspruefung: MEIN-SYSTEM.md, Abschnitt 4 nennt $eingespielt, die AGENTS.md traegt aber $agentsVersion; verfuegbar ist $neueste. Wegen dieses Widerspruchs kein automatisches Update. Sag der Person in einer Zeile, dass die eingespielte Version unklar ist, und klaer sie mit ihr, bevor ein Update laeuft (Skill leo-mechanik-update, Schritt 3).")
         } else {
-            $zeilen.Add("Leo-Core-Versionspruefung beim Sessionstart (ohne Modell): RUECKSTAND, eingespielt $eingespielt, verfuegbar $neueste. Grundpflege (AGENTS.md Abschnitt 1, seit 5.3): Spiel das Update jetzt ein, bevor du die erste Nachricht inhaltlich bearbeitest, ohne zu fragen und in beiden Nutzungsmodi, mit dem Skill leo-mechanik-update (unter dem lokalen Skill-Praefix). Sag der Person vorher genau einen Satz in ihrer Arbeitssprache, sinngemaess: 'Ich spiele zuerst Core $neueste ein, dann kuemmere ich mich um deine Frage.' Haelt der Skill an, weil etwas der Person gehoeren koennte, melde das und bearbeite danach ihre Nachricht. Der Bericht danach beginnt mit der Release Note (Skill, Schritt 9).")
+            $zeilen.Add("Leo-Core-Versionspruefung beim Sessionstart (ohne Modell): RUECKSTAND, eingespielt $eingespielt, verfuegbar $neueste. Grundpflege (AGENTS.md Abschnitt 1, seit 6.0): Kuendige das Update in deiner ersten Antwort an, in beiden Nutzungsmodi: Core $neueste ist verfuegbar, dazu je Version die Release Note in zwei, drei Saetzen in der Arbeitssprache der Person (Versionszeile in ANLEITUNG.md der neuen Version, abrufbar mit git show; Skill leo-mechanik-update, Schritt 2), und die Frage, ob du es jetzt einspielen sollst. Spiel das Update erst nach ihrem Ja ein, mit dem Skill leo-mechanik-update (unter dem lokalen Skill-Praefix). Sagt sie nein oder antwortet nicht darauf, bearbeite ihre Nachricht; der Hinweis kommt beim naechsten Sessionstart wieder. Der Bericht nach dem Update beginnt mit der Release Note (Skill, Schritt 9).")
         }
     } elseif (-not $Hook) {
         $zeilen.Add("AKTUELL $eingespielt")

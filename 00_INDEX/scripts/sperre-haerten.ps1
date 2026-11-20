@@ -12,15 +12,15 @@
 # Benutzerkontensteuerung oder ein Passwortfenster bestaetigen, das man nicht selbst ausgeloest hat.
 #
 # WAS ES EINRICHTET:
-#   1. Eine Schutzkopie der vier Sperren, ihrer gemeinsamen Logik, des Verteilers leo-hook.ps1 und
-#      der beiden Freigabelisten unter <Systemordner>\leo\<Repo-Name>.
+#   1. Eine Schutzkopie der sechs Sperren (seit 6.0), ihrer gemeinsamen Logik, des Verteilers leo-hook.ps1 und
+#      der drei Freigabelisten unter <Systemordner>\leo\<Repo-Name>.
 #   2. Eine eigene Datei in <Systemordner>\managed-settings.d (eine bestehende managed-settings.json
 #      der IT bleibt unangetastet) mit:
 #      - allowManagedHooksOnly: Hooks aus den Projekt- und Benutzereinstellungen laufen nicht mehr,
 #        nur diese. Das gilt fuer alle Projekte auf dem Rechner.
-#      - allen Kern-Hooks des Leo-Kinds ueber den Verteiler; die Sperren greifen nur im Repo des
-#        Leo-Kinds, andere Projekte merken davon nichts.
-#      - "onFailure": "block" fuer die vier Sperren und den Lese-Verboten fuer Zugangsdaten.
+#      - allen Kern-Hooks des Leo-Kinds ueber den Verteiler; die Sperren greifen seit 6.0 in jedem
+#        Projekt des Rechners (ausserhalb des Leo-Kinds ist der Projektordner der Arbeitsbereich).
+#      - "onFailure": "block" fuer die Sperren und den Lese-Verboten fuer Zugangsdaten.
 #      - auf dem Mac auf Wunsch (-Sandbox) die eingebaute Sandbox von Claude Code, ebenfalls fest.
 #   Systemordner: Windows C:\Program Files\ClaudeCode, macOS /Library/Application Support/ClaudeCode,
 #   Linux /etc/claude-code.
@@ -104,8 +104,8 @@ if (-not $test -and -not $Erhoeht) {
         "  - Die Sperren deines Agenten kommen in einen Systemordner, den nur ein Administrator aendern kann:"
         "    $($ort.kopie)"
         "  - Claude Code fuehrt danach nur noch diese Hooks aus, in allen Projekten auf diesem Rechner."
-        "    Eigene Hooks anderer Projekte laufen dann nicht mehr. Die Sperren selbst greifen nur im Repo"
-        "    deines Agenten; andere Projekte merken davon nichts."
+        "    Eigene Hooks anderer Projekte laufen dann nicht mehr. Die Sperren greifen in jedem Projekt:"
+        "    ausserhalb des Repos deines Agenten ist der Projektordner der Arbeitsbereich."
         "  - Nach jedem Update deines Agenten fuehrst du diesen Befehl erneut aus (der Health-Check meldet es)."
         "  - Drei Regeln: Claude nie 'als Administrator ausfuehren', die Benutzerkontensteuerung nie"
         "    abschalten, und nie eine Rechteabfrage bestaetigen, die du nicht selbst ausgeloest hast."
@@ -160,7 +160,7 @@ try {
     # --- Verwaltete Einstellungen ---------------------------------------------------------------
     $exe = if ($isWindowsHost) { 'powershell -NoProfile -ExecutionPolicy Bypass -File' } else { '"' + (Join-Path $PSHOME 'pwsh') + '" -NoProfile -File' }
     $verteiler = Join-Path (Join-Path (Join-Path $ort.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
-    $kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(?:\s+-Hook\s+(\w+))?'
+    $kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|guard-fremdsysteme|guard-extern|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(?:\s+-Hook\s+(\w+))?'
     $settings = Get-Content -LiteralPath (Join-Path (Join-Path $repo '.claude') 'settings.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $hooks = [ordered]@{}
     $fremd = @()

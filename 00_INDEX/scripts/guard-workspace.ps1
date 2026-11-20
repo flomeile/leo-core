@@ -135,8 +135,8 @@ function Test-Allowed([string]$path) {
 # --- Die Freigaben gehoeren dem Besitzer (seit 5.0) ---------------------------
 # Die beiden Listen schreibt nur freigeben.ps1, und das startet nur der Besitzer in seinem
 # eigenen Terminal. Lesen darf der Agent sie, damit er seine Policy erklaeren kann.
-$policyDateien = @('freigegebene-pfade.txt', 'gesperrte-pfade.txt')
-$policyRx = '(?i)(?:^|[\\/\s"''])(?:freigegebene|gesperrte)-pfade\.txt'
+$policyDateien = @('freigegebene-pfade.txt', 'gesperrte-pfade.txt', 'extern-freigaben.txt')
+$policyRx = '(?i)(?:^|[\\/\s"''])(?:(?:freigegebene|gesperrte)-pfade|extern-freigaben)\.txt'
 $policyGrund = "Diese Liste gehoert [NAME]: Sie legt fest, was du ausserhalb deines Arbeitsbereichs lesen und schreiben darfst (AGENTS.md Abschnitt 18). Du schreibst sie nie, auch nicht auf seinen Wunsch hin und auch nicht ueber Git. Aendern kann er sie nur selbst, mit freigeben.ps1 in seinem eigenen PowerShell-Fenster. Sag ihm das in einem Satz und gib ihm in einem Codeblock den passenden Befehl: Freigeben " + (Get-FreigabeBefehl '<Pfad>' $ab) + " ; Freigabe zuruecknehmen mit -Entziehen; einen Unterordner wieder sperren mit -Sperren, die Sperre aufheben mit -Entsperren; ohne Pfad zeigt der Befehl den aktuellen Stand."
 function Test-PolicyDatei([string]$path) {
     $p = Normalize-AbsolutePath $path

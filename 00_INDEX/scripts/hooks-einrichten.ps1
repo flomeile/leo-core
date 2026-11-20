@@ -1,44 +1,68 @@
 ﻿# hooks-einrichten.ps1
 # Zweck: Richtet die Hook-Befehle in .claude\settings.json (und .codex\hooks.json) fuer die
-# Plattform dieses Rechners ein und setzt die vier Sperren auf "sperren, wenn der Hook nicht
-# startet" (AGENTS.md Abschnitt 18, seit 5.1).
+# Plattform dieses Rechners ein, setzt die Sperren auf "sperren, wenn der Hook nicht startet"
+# (AGENTS.md Abschnitt 18, seit 5.1) und richtet seit 6.0 die Sperren fuer alle Projekte des
+# Rechners ein, auch ohne Adminrechte.
 #
 # WARUM ES DAS GIBT: Die mitgelieferten Hook-Befehle rufen "powershell", das gibt es nur unter
 # Windows. Auf macOS und Linux startete deshalb bis 5.0 kein Hook, bis der Besitzer die Befehle
 # von Hand umschrieb, und ein Hook, der nicht startet, liess bis dahin alles durch. Bei einer
 # Standardsperre ist das der gefaehrlichste Fall: Alles sieht richtig aus, und nichts ist gesperrt.
-# Seit 5.1 tragen die vier Sperren "onFailure": "block" (Claude Code ab 2.1.295): Startet der
+# Seit 5.1 tragen die Sperren "onFailure": "block" (Claude Code ab 2.1.295): Startet der
 # Hook nicht, laeuft er in eine Zeitueberschreitung oder endet er mit einem Fehler, sperrt Claude
 # Code den Werkzeugaufruf. Dieses Skript schreibt dazu die Befehle so, dass sie hier starten.
 #
+# SPERREN IN ALLEN PROJEKTEN (seit 6.0): Die Hooks in .claude\settings.json gelten nur im Repo des
+# Leo-Kinds. Damit derselbe Agent in einem anderen Ordner nicht ohne Sperre arbeitet, richtet dieses
+# Skript zusaetzlich die Sperren in den persoenlichen Einstellungen von Claude Code ein
+# (~/.claude/settings.json), die in jedem Projekt gelten:
+#   - Die Sperren laufen aus einer Kopie im Benutzerprofil (~/.leo-sperren/<Repo>), nie aus dem Repo.
+#     Die Kopie kommt ausschliesslich aus dem offiziellen Versionsstand: aus dem Tag der eingespielten
+#     Version, nachdem geprueft ist, dass dieser Tag auf dem Grundgeruest (GitHub) auf denselben Commit
+#     zeigt. Was der Agent im Repo an einer Sperre aendert, gelangt so nie in die Kopie. Die Freigabelisten
+#     kommen aus dem Repo (sie schreibt nur der Besitzer mit freigeben.ps1).
+#   - Ist die Haertung mit Adminrechten eingerichtet (sperre-haerten.ps1), ist das nicht noetig: Dann
+#     gelten nur die verwalteten Hooks, und dieses Skript laesst die persoenlichen Einstellungen in Ruhe.
+#   - Gegen den Agenten schuetzt beides die Schreibsperre: Profil und Einstellungen liegen ausserhalb des
+#     Arbeitsbereichs. Gegen Absicht schuetzt erst die Haertung mit Adminrechten (AGENTS.md Abschnitt 18).
+#   - Nicht moeglich ohne Netz oder ohne den Tag auf GitHub: dann bleibt die bisherige Kopie, und das
+#     Skript sagt es.
+#
 # FOLGE, DIE DER BESITZER KENNEN MUSS: Fehlt auf macOS oder Linux PowerShell 7, kann der Agent
 # nach diesem Skript gar kein Werkzeug mehr benutzen, bis PowerShell 7 installiert ist. Das ist
-# gewollt. Das Skript selbst laeuft ohnehin nur mit PowerShell 7, prueft also durch sein Laufen,
-# dass es da ist. Installation auf dem Mac: brew install --cask powershell
+# gewollt. Installation auf dem Mac: brew install --cask powershell
 #
-# WAS ES ANFASST: nur Hook-Eintraege, deren Befehl eines der Kernskripte startet (guard-read,
-# guard-workspace, guard-git, guard-mail, eingehaengte-repos-aktuell, pruef-frontmatter, seit 5.3
-# version-check). Fehlt der Eintrag der Versionspruefung oder ist er beschaedigt, schreibt es ihn
-# selbst (seit 5.3, Liste $pflicht). Eigene
-# Hooks und alle anderen Schluessel bleiben, wie sie sind. In .codex\hooks.json wird statt
-# ${CLAUDE_PROJECT_DIR} der ausgeschriebene Repo-Pfad eingesetzt; "onFailure" kommt dort nicht
-# hinein, weil nicht belegt ist, dass Codex den Schluessel kennt.
+# WAS ES ANFASST: in .claude\settings.json und .codex\hooks.json nur Hook-Eintraege, deren Befehl eines der
+# Kernskripte startet; fehlende Eintraege der Pflichtliste ($pflicht) schreibt es selbst (seit 5.3, Anlass:
+# ein vom Modell ueber die Shell geschriebener Eintrag trug Steuerzeichen und haette nie gestartet). Eigene
+# Hooks und alle anderen Schluessel bleiben, wie sie sind. In ~/.claude/settings.json nur die eigenen
+# Eintraege dieses Repos (erkannt am Pfad der Kopie) und die Leseverbote fuer Zugangsdaten.
 #
-# AUFRUF (der Agent darf es selbst ausfuehren; es schreibt nur ins Repo):
+# AUFRUF (der Agent darf es selbst ausfuehren):
 #   Windows:       powershell -NoProfile -ExecutionPolicy Bypass -File "<Repo>\00_INDEX\scripts\hooks-einrichten.ps1"
 #   macOS/Linux:   pwsh -NoProfile -File "<Repo>/00_INDEX/scripts/hooks-einrichten.ps1"
 #   -Pruefen       aendert nichts, meldet nur, was zu tun waere (Exit 1, wenn etwas fehlt)
-# Testparameter: -Plattform windows|posix, -Pwsh <Pfad>, -Datei <settings.json>, -CodexDatei <hooks.json>
+# Testparameter: -Plattform windows|posix, -Pwsh <Pfad>, -Datei <settings.json>, -CodexDatei <hooks.json>,
+#   -Heim <Ordner> (statt des Benutzerprofils), -Quelle <Repo des Grundgeruests>, -System <Systemordner>,
+#   -OhneProfil (nur die Projektdateien).
 # ASCII-only: laeuft unter Windows PowerShell 5.1 und PowerShell 7.
 param(
     [switch]$Pruefen,
     [ValidateSet('', 'windows', 'posix')][string]$Plattform = '',
     [string]$Pwsh = '',
     [string]$Datei = '',
-    [string]$CodexDatei = ''
+    [string]$CodexDatei = '',
+    [string]$Heim = '',
+    [string]$Quelle = 'https://github.com/flomeile/leo-core',
+    [string]$System = '',
+    [switch]$OhneProfil,
+    [switch]$NurProfil
 )
+# -NurProfil (seit 6.0): nur die Sperren fuer alle Projekte, ohne die Projektdateien. So ruft es die
+# Versionspruefung beim Sessionstart auf, ohne Modell, hoechstens einmal je Tag (version-check.ps1).
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 if (-not $Plattform) { $Plattform = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { 'windows' } else { 'posix' } }
 if (-not $Datei) { $Datei = Join-Path (Join-Path $repo '.claude') 'settings.json' }
@@ -49,8 +73,16 @@ if ($Plattform -eq 'posix' -and -not $Pwsh) {
     if (-not $Pwsh) { "PowerShell 7 (pwsh) nicht gefunden. Auf dem Mac installieren mit: brew install --cask powershell"; exit 2 }
 }
 
-$kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(.*)$'
-$sperren = @('guard-read', 'guard-workspace', 'guard-git', 'guard-mail')
+$kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|guard-fremdsysteme|guard-extern|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(.*)$'
+$sperren = @('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'guard-fremdsysteme', 'guard-extern')
+$matcherJe = @{
+    'guard-workspace'    = 'Write|Edit|NotebookEdit|MultiEdit|Bash|PowerShell'
+    'guard-git'          = 'Bash|PowerShell'
+    'guard-mail'         = 'Bash|PowerShell'
+    'guard-read'         = 'Read|Grep|Glob|NotebookRead|Bash|PowerShell'
+    'guard-fremdsysteme' = 'Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*javascript.*'
+    'guard-extern'       = 'mcp__.*'
+}
 
 function Neuer-Befehl([string]$name, [string]$rest, [string]$wurzel) {
     if ($Plattform -eq 'windows') {
@@ -89,14 +121,15 @@ function Richte-Ein($json, [string]$wurzel, [switch]$MitOnFailure) {
     return $aenderungen
 }
 
-# Seit 5.3: Kern-Hooks, die dieses Skript selbst eintraegt, statt sie dem Update-Skill zu
-# ueberlassen. Anlass: Im kalten Update-Lauf zu 5.3 schrieb das Modell den neuen Eintrag ueber die
-# Shell, und aus "\00_INDEX" und "\version" wurden ein NUL- und ein Tabulatorzeichen; der Hook haette
-# nie gestartet, ohne dass es jemand merkt. Ein beschaedigter Eintrag eines solchen Hooks (Steuerzeichen
-# im Befehl) wird entfernt und neu geschrieben. Nur fuer Claude Code, nicht fuer Codex (dort ist nicht
-# belegt, dass es diese Ereignisse kennt).
-$pflicht = @(@{ ereignis = 'SessionStart'; name = 'version-check'; rest = ' -Hook SessionStart'; timeout = 60 })
-function Ergaenze-Pflicht($json, [string]$wurzel) {
+# Kern-Hooks, die dieses Skript selbst eintraegt, statt sie dem Update-Skill zu ueberlassen (seit 5.3,
+# seit 6.0 auch die beiden neuen Sperren). Ein beschaedigter Eintrag (Steuerzeichen im Befehl) wird
+# entfernt und neu geschrieben.
+$pflicht = @(
+    @{ ereignis = 'SessionStart'; name = 'version-check'; rest = ' -Hook SessionStart'; timeout = 60; matcher = '' }
+    @{ ereignis = 'PreToolUse'; name = 'guard-fremdsysteme'; rest = ''; timeout = 0; matcher = $matcherJe['guard-fremdsysteme'] }
+    @{ ereignis = 'PreToolUse'; name = 'guard-extern'; rest = ''; timeout = 0; matcher = $matcherJe['guard-extern'] }
+)
+function Ergaenze-Pflicht($json, [string]$wurzel, [switch]$MitOnFailure) {
     $aenderungen = @()
     if (-not $json.PSObject.Properties['hooks']) { $json | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) }
     foreach ($p in $pflicht) {
@@ -111,27 +144,66 @@ function Ergaenze-Pflicht($json, [string]$wurzel) {
                 foreach ($h in $neu) { if ([string]$h.command -match $kernRx -and $matches[1] -eq $p.name) { $da = $true } }
             }
         }
-        if (-not $da) {
-            $eintrag = [pscustomobject]@{ type = 'command'; timeout = $p.timeout; command = (Neuer-Befehl $p.name $p.rest $wurzel) }
+        if ($da) { continue }
+        $eintrag = [ordered]@{ type = 'command' }
+        if ($p.timeout) { $eintrag.timeout = $p.timeout }
+        $eintrag.command = (Neuer-Befehl $p.name $p.rest $wurzel)
+        if ($MitOnFailure -and $p.ereignis -eq 'PreToolUse') { $eintrag.onFailure = 'block' }
+        $eintrag = [pscustomobject]$eintrag
+        if ($p.matcher) {
+            $gruppeNeu = [pscustomobject]@{ matcher = $p.matcher; hooks = @($eintrag) }
+            if ($liste) { $liste.Value = @(@($liste.Value) + $gruppeNeu) }
+            else { $json.hooks | Add-Member -NotePropertyName $p.ereignis -NotePropertyValue @($gruppeNeu) -Force }
+        } else {
             $erste = if ($liste) { @($liste.Value | Where-Object { $_ -and $_.PSObject.Properties['hooks'] }) | Select-Object -First 1 } else { $null }
             if ($erste) { $erste.hooks = @(@($erste.hooks) + $eintrag) }
             else { $json.hooks | Add-Member -NotePropertyName $p.ereignis -NotePropertyValue @([pscustomobject]@{ hooks = @($eintrag) }) -Force }
-            $aenderungen += "$($p.ereignis) / $($p.name): Eintrag ergaenzt"
         }
+        $aenderungen += "$($p.ereignis) / $($p.name): Eintrag ergaenzt"
     }
     return $aenderungen
 }
 
 function Schreibe-Json($json, [string]$pfad) {
     $text = $json | ConvertTo-Json -Depth 30
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $pfad) | Out-Null
     [System.IO.File]::WriteAllText($pfad, $text + [Environment]::NewLine, (New-Object System.Text.UTF8Encoding($false)))
 }
 
+function Invoke-Git([string[]]$argumente) {
+    $alt = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $o = & git @argumente 2>$null
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $alt
+    if ($code -ne 0) { return $null }
+    return @($o)
+}
+
+# Eine Datei aus einem Git-Stand als Bytes, unveraendert (die Ausgabe der Shell wuerde Kodierung und
+# Zeilenenden umschreiben). $null, wenn es die Datei dort nicht gibt.
+function Get-GitBlob([string]$repoPfad, [string]$objekt) {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = 'git'
+    $psi.Arguments = '-C "' + $repoPfad + '" cat-file blob "' + $objekt + '"'
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $ms = New-Object System.IO.MemoryStream
+    $p.StandardOutput.BaseStream.CopyTo($ms)
+    [void]$p.StandardError.ReadToEnd()
+    $p.WaitForExit()
+    if ($p.ExitCode -ne 0) { return $null }
+    return ,$ms.ToArray()
+}
+
 $fehlt = $false
-if (Test-Path -LiteralPath $Datei) {
+if ($NurProfil) { }
+elseif (Test-Path -LiteralPath $Datei) {
     $json = Get-Content -LiteralPath $Datei -Raw -Encoding UTF8 | ConvertFrom-Json
-    $wurzel = if ($Plattform -eq 'windows') { '${CLAUDE_PROJECT_DIR}' } else { '${CLAUDE_PROJECT_DIR}' }
-    $a = @(Ergaenze-Pflicht $json $wurzel) + @(Richte-Ein $json $wurzel -MitOnFailure)
+    $wurzel = '${CLAUDE_PROJECT_DIR}'
+    $a = @(Ergaenze-Pflicht $json $wurzel -MitOnFailure) + @(Richte-Ein $json $wurzel -MitOnFailure)
     if ($a.Count -eq 0) { "Claude Code ($Datei): eingerichtet, nichts zu tun." }
     else {
         $fehlt = $true
@@ -140,7 +212,7 @@ if (Test-Path -LiteralPath $Datei) {
     }
 } else { "Keine $Datei gefunden; nichts eingerichtet." ; $fehlt = $true }
 
-if (Test-Path -LiteralPath $CodexDatei) {
+if (-not $NurProfil -and (Test-Path -LiteralPath $CodexDatei)) {
     $cj = Get-Content -LiteralPath $CodexDatei -Raw -Encoding UTF8 | ConvertFrom-Json
     $b = @(Richte-Ein $cj $repo)
     if ($b.Count -eq 0) { "Codex ($CodexDatei): eingerichtet, nichts zu tun." }
@@ -150,8 +222,115 @@ if (Test-Path -LiteralPath $CodexDatei) {
     }
 }
 
+# --- Sperren in allen Projekten, ohne Adminrechte (seit 6.0) ----------------------------------------
+function Richte-Profil-Ein {
+    $ort = Get-HaertungsOrt $repo $System
+    if (Test-Path -LiteralPath $ort.dropin) { "Alle Projekte: Die Haertung mit Adminrechten ist eingerichtet; die persoenlichen Einstellungen braucht es nicht."; return $false }
+    if (Invoke-Git @('-C', $repo, 'config', '--get', 'leo.releaseGate')) { "Alle Projekte: Repo des Herausgebers, keine persoenlichen Einstellungen."; return $false }
+    $prof = Get-ProfilOrt $repo $Heim
+
+    # Eingespielte Version und ihr Tag, gegen das Grundgeruest geprueft.
+    $version = $null
+    $ms = Join-Path $repo 'MEIN-SYSTEM.md'
+    if (Test-Path -LiteralPath $ms) {
+        $t = Get-Content -LiteralPath $ms -Raw -Encoding UTF8
+        if ($t -match '(?m)^\|\s*Eingespielte Version\s*\|\s*([0-9]+\.[0-9]+)\s*\|') { $version = $matches[1] }
+    }
+    if (-not $version) {
+        $kopf = (Get-Content -LiteralPath (Join-Path $repo 'AGENTS.md') -Encoding UTF8 -TotalCount 12) -join "`n"
+        if ($kopf -match '(?m)^version:\s*([0-9]+\.[0-9]+)\s*$') { $version = $matches[1] }
+    }
+    if (-not $version) { "Alle Projekte: Keine eingespielte Version lesbar; die Kopie der Sperren bleibt, wie sie ist."; return $true }
+    $tag = 'v' + $version
+    $lokal = @(Invoke-Git @('-C', $repo, 'rev-parse', ($tag + '^{commit}')))[0]
+    $fern = $null
+    $zeilen = Invoke-Git @('ls-remote', '--tags', $Quelle, ('refs/tags/' + $tag), ('refs/tags/' + $tag + '^{}'))
+    foreach ($z in @($zeilen)) {
+        if ($z -match ('^([0-9a-f]{40})\s+refs/tags/' + [regex]::Escape($tag) + '\^\{\}$')) { $fern = $matches[1] }
+    }
+    if (-not $fern) { foreach ($z in @($zeilen)) { if ($z -match ('^([0-9a-f]{40})\s+refs/tags/' + [regex]::Escape($tag) + '$')) { $fern = $matches[1] } } }
+    if (-not $lokal -or -not $fern -or $lokal -ne $fern) {
+        $grund = if (-not $lokal) { "Tag $tag fehlt lokal" } elseif (-not $fern) { "Tag $tag auf dem Grundgeruest nicht erreichbar (kein Netz?)" } else { "Tag $tag zeigt lokal auf einen anderen Commit als auf dem Grundgeruest" }
+        "Alle Projekte: Kopie der Sperren nicht erneuert ($grund). Die bisherige Kopie bleibt; naechster Versuch beim naechsten Aufruf."
+        return $true
+    }
+
+    # Kopie aus dem Tag; abweichende Dateien zaehlen.
+    $neu = @()
+    foreach ($rel in $haertungsDateien) {
+        $inhalt = Get-GitBlob $repo ($tag + ':' + $rel)
+        $ziel = Join-Path $prof.kopie $rel
+        if ($null -eq $inhalt) { continue }
+        $vorher = if (Test-Path -LiteralPath $ziel) { [System.IO.File]::ReadAllBytes($ziel) } else { $null }
+        if ($null -eq $vorher -or [Convert]::ToBase64String($vorher) -ne [Convert]::ToBase64String($inhalt)) {
+            $neu += $rel
+            if (-not $Pruefen) {
+                New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ziel) | Out-Null
+                [System.IO.File]::WriteAllBytes($ziel, $inhalt)
+            }
+        }
+    }
+    foreach ($rel in $haertungsListen) {
+        $q = Join-Path $repo $rel
+        $ziel = Join-Path $prof.kopie $rel
+        $qT = if (Test-Path -LiteralPath $q) { [System.IO.File]::ReadAllText($q) } else { $null }
+        $zT = if (Test-Path -LiteralPath $ziel) { [System.IO.File]::ReadAllText($ziel) } else { $null }
+        if ($qT -ne $zT) {
+            $neu += $rel
+            if (-not $Pruefen) {
+                if ($null -eq $qT) { Remove-Item -LiteralPath $ziel -Force }
+                else { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ziel) | Out-Null; Copy-Item -LiteralPath $q -Destination $ziel -Force }
+            }
+        }
+    }
+
+    # Persoenliche Einstellungen: eigene Eintraege ersetzen, fremde behalten.
+    $verteiler = Join-Path (Join-Path (Join-Path $prof.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
+    $exe = if ($Plattform -eq 'windows') { 'powershell -NoProfile -ExecutionPolicy Bypass -File' } else { '"' + $Pwsh + '" -NoProfile -File' }
+    $us = if (Test-Path -LiteralPath $prof.settings) { Get-Content -LiteralPath $prof.settings -Raw -Encoding UTF8 | ConvertFrom-Json } else { [pscustomobject]@{} }
+    if (-not $us.PSObject.Properties['hooks']) { $us | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) }
+    $alt = @()
+    if ($us.hooks.PSObject.Properties['PreToolUse']) { $alt = @($us.hooks.PreToolUse) }
+    $kopieRx = [regex]::Escape($prof.kopie)
+    $behalten = @($alt | Where-Object { -not (@($_.hooks) | Where-Object { [string]$_.command -match $kopieRx }) })
+    $eigene = @()
+    foreach ($s in $sperren) {
+        $eigene += [pscustomobject]@{ matcher = $matcherJe[$s]; hooks = @([pscustomobject]@{ type = 'command'; command = ($exe + ' "' + $verteiler + '" -Repo "' + (Normalize-AbsolutePath $repo) + '" -Skript ' + $s); onFailure = 'block' }) }
+    }
+    $vorherJson = ConvertTo-Json @($alt) -Depth 10 -Compress
+    $nachher = @($behalten) + @($eigene)
+    $nachherJson = ConvertTo-Json @($nachher) -Depth 10 -Compress
+    $deny = @('Read(**/.env)', 'Read(**/.env.*)', 'Read(**/*.pem)', 'Read(**/*.key)', 'Read(**/*.pfx)', 'Read(**/*.p12)',
+              'Read(**/*.kdbx)', 'Read(**/*.ppk)', 'Read(**/id_rsa*)', 'Read(**/id_ed25519*)', 'Read(~/.ssh/**)',
+              'Read(~/.aws/**)', 'Read(~/.gnupg/**)', 'Read(~/.azure/**)', 'Read(~/.kube/**)', 'Read(~/.leo-sperren/**)')
+    if (-not $us.PSObject.Properties['permissions']) { $us | Add-Member -NotePropertyName permissions -NotePropertyValue ([pscustomobject]@{}) }
+    $denyAlt = @()
+    if ($us.permissions.PSObject.Properties['deny']) { $denyAlt = @($us.permissions.deny) }
+    $denyNeu = @($denyAlt + @($deny | Where-Object { $denyAlt -notcontains $_ }))
+    $einstellungNeu = ($vorherJson -ne $nachherJson) -or ($denyNeu.Count -ne $denyAlt.Count)
+    if ($einstellungNeu) { $neu += $prof.settings }
+    if ($neu.Count -eq 0) { "Alle Projekte: Sperren aus Version $version eingerichtet, nichts zu tun ($($prof.kopie))."; return $false }
+    if ($Pruefen) { "Alle Projekte: fehlt noch:"; $neu | ForEach-Object { "  $_" }; return $true }
+    if ($us.hooks.PSObject.Properties['PreToolUse']) { $us.hooks.PreToolUse = $nachher }
+    else { $us.hooks | Add-Member -NotePropertyName PreToolUse -NotePropertyValue $nachher }
+    if ($us.permissions.PSObject.Properties['deny']) { $us.permissions.deny = $denyNeu }
+    else { $us.permissions | Add-Member -NotePropertyName deny -NotePropertyValue $denyNeu }
+    Schreibe-Json $us $prof.settings
+    [System.IO.File]::WriteAllText((Join-Path $prof.kopie 'version.txt'), $version)
+    "Alle Projekte: Sperren aus Version $version eingerichtet ($($prof.kopie), $($prof.settings)):"
+    $neu | ForEach-Object { "  $_" }
+    "Wirkt ab dem naechsten Start von Claude Code."
+    return $false
+}
+if (-not $OhneProfil) {
+    $ergebnis = @(Richte-Profil-Ein)
+    $ergebnis | Where-Object { $_ -is [string] }
+    if (@($ergebnis | Where-Object { $_ -is [bool] })[-1]) { $fehlt = $true }
+}
+
 # Claude Code kennt "onFailure" erst ab 2.1.295; aeltere Fassungen lassen einen Hook, der nicht
 # startet, weiter durch.
+if ($NurProfil) { if ($Pruefen -and $fehlt) { exit 1 }; exit 0 }
 $ErrorActionPreference = 'Continue'
 $v = (& claude --version 2>$null | Select-Object -First 1)
 $ErrorActionPreference = 'Stop'

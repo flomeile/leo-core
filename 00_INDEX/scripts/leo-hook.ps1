@@ -1,40 +1,65 @@
 ﻿# leo-hook.ps1
-# Zweck: Verteiler fuer die Hooks in den verwalteten Einstellungen (Haertung mit sperre-haerten.ps1,
-# AGENTS.md Abschnitt 18, seit 5.1). Laeuft aus der Schutzkopie, die nur mit Adminrechten zu
-# aendern ist, und startet von dort den eigentlichen Hook.
+# Zweck: Verteiler fuer die Hooks aus den verwalteten Einstellungen (Haertung mit sperre-haerten.ps1,
+# seit 5.1) und aus den persoenlichen Einstellungen (~/.claude/settings.json, eingerichtet von
+# hooks-einrichten.ps1, seit 6.0). Laeuft aus einer Kopie der Sperren ausserhalb des Repos und startet
+# von dort den eigentlichen Hook.
 #
-# WARUM ES DAS GIBT: Verwaltete Einstellungen gelten fuer jede Claude-Code-Sitzung auf diesem
-# Rechner, in jedem Projekt. Die Sperren des Leo-Kinds sollen aber nur im Repo des Leo-Kinds
-# greifen; wer daneben in einem anderen Projekt arbeitet, soll davon nichts merken. Dieser
-# Verteiler prueft deshalb zuerst, in welchem Projekt die Sitzung laeuft, und laesst alles durch,
-# was nicht das Leo-Kind ist (stiller Exitcode 0).
+# DIE SPERREN GREIFEN IN JEDER SITZUNG DES RECHNERS (seit 6.0): Bis 5.3 liess dieser Verteiler alles
+# durch, was nicht im Repo des Leo-Kinds lief; jede Sitzung in einem anderen Ordner lief damit ohne
+# Sperre, auch fuer denselben Agenten mit denselben Zugangsdaten. Seither gilt:
+#   - Im Repo des Leo-Kinds (und darunter, etwa in Arbeitsbaeumen) laufen alle Kern-Hooks wie bisher.
+#   - In jedem anderen Projekt laufen nur die Sperren. Der Projektordner der Sitzung ist dort der
+#     erlaubte Arbeitsbereich (samt "<Projekt> Archiv", "<Projekt> Artifacts" und Scratchpad); Zugangsdaten,
+#     Mailversand, Fremdsysteme, Connectoren und Pushes bleiben gesperrt wie im Leo-Kind, und die
+#     Freigabelisten des Leo-Kinds gelten auch dort. Ein zu weiter Projektordner (Laufwerk,
+#     Benutzerordner, Ordner aller Benutzer) gibt keinen Arbeitsbereich her. Eigene Skripte eines fremden
+#     Projekts laufen nie.
 #
-# WOHER DER HOOK KOMMT: Die vier Sperren (guard-*.ps1) aus der Schutzkopie neben diesem Skript,
-# damit der Agent sie nicht veraendern kann; sie bekommen -Repo und lesen die Freigabelisten aus
-# der Schutzkopie. Die uebrigen Kern-Hooks (eingehaengte-repos-aktuell, pruef-frontmatter, seit 5.3 version-check) aus dem
+# WOHER DER HOOK KOMMT: Die Sperren (guard-*.ps1) aus der Kopie neben diesem Skript, damit der Agent sie
+# nicht veraendern kann. Ihre Testschalter ueber Umgebungsvariablen werden vorher geleert, damit eine
+# Einstellung im Repo sie nicht lockern kann. Fehlt eine Sperre in der Kopie, sperrt der Verteiler
+# (Exit 2). Die uebrigen Kern-Hooks (eingehaengte-repos-aktuell, pruef-frontmatter, version-check) aus dem
 # Repo selbst: Sie schuetzen nichts, und das Update soll sie ohne Adminrechte erneuern koennen.
 #
 # Eingabe: JSON auf stdin, wird an den Hook durchgereicht (derselbe Prozess liest sie).
 # ASCII-only: laeuft unter Windows PowerShell 5.1 und PowerShell 7.
 param(
     [Parameter(Mandatory)][string]$Repo,
-    [Parameter(Mandatory)][ValidateSet('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'eingehaengte-repos-aktuell', 'pruef-frontmatter', 'version-check')][string]$Skript,
+    [Parameter(Mandatory)][ValidateSet('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'guard-fremdsysteme', 'guard-extern', 'eingehaengte-repos-aktuell', 'pruef-frontmatter', 'version-check')][string]$Skript,
     [string]$Hook = ''
 )
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
 
-# Nur im Leo-Kind: Projekt der Sitzung muss das Repo sein oder darin liegen (Arbeitsbaeume).
-if ($env:CLAUDE_PROJECT_DIR -and -not (Test-PathWithin $env:CLAUDE_PROJECT_DIR $Repo)) { exit 0 }
+$kind = (Normalize-AbsolutePath $Repo)
+$zone = $kind
+$nurSperren = $false
+if ($env:CLAUDE_PROJECT_DIR -and -not (Test-PathWithin $env:CLAUDE_PROJECT_DIR $kind)) {
+    $nurSperren = $true
+    $proj = Normalize-AbsolutePath $env:CLAUDE_PROJECT_DIR
+    $zone = if ((-not $proj) -or (Test-ZuWeit $proj)) { Join-Path (Join-Path $tempPath 'claude') 'leo-kein-projekt' } else { $proj }
+}
+
+foreach ($v in @('LEO_GUARD_FREIGABE_KONFIG', 'LEO_GUARD_READ_KONFIG')) {
+    Remove-Item -Path ('Env:' + $v) -ErrorAction SilentlyContinue
+}
+$env:LEO_KIND_REPO = $kind
 
 if ($Skript -like 'guard-*') {
     $ziel = Join-Path $PSScriptRoot ($Skript + '.ps1')
-    if ($Skript -in @('guard-read', 'guard-workspace')) { & $ziel -Repo $Repo }
+    if (-not (Test-Path -LiteralPath $ziel)) {
+        [Console]::Error.WriteLine("Sperre $Skript fehlt in der Kopie ($PSScriptRoot). Der Besitzer fuehrt sperre-haerten.ps1 oder hooks-einrichten.ps1 erneut aus.")
+        exit 2
+    }
+    if ($Skript -in @('guard-read', 'guard-workspace')) { & $ziel -Repo $zone }
+    elseif ($Skript -in @('guard-git', 'guard-fremdsysteme')) { & $ziel -Repo $kind }
     else { & $ziel }
-} else {
-    $ziel = Join-Path (Join-Path (Join-Path $Repo '00_INDEX') 'scripts') ($Skript + '.ps1')
-    if (-not (Test-Path -LiteralPath $ziel)) { exit 0 }
-    if ($Hook) { & $ziel -Hook $Hook } else { & $ziel }
+    exit $LASTEXITCODE
 }
+
+if ($nurSperren) { exit 0 }
+$ziel = Join-Path (Join-Path (Join-Path $kind '00_INDEX') 'scripts') ($Skript + '.ps1')
+if (-not (Test-Path -LiteralPath $ziel)) { exit 0 }
+if ($Hook) { & $ziel -Hook $Hook } else { & $ziel }
 exit $LASTEXITCODE
