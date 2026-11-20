@@ -236,11 +236,23 @@ function Richte-Profil-Ein {
         $t = Get-Content -LiteralPath $ms -Raw -Encoding UTF8
         if ($t -match '(?m)^\|\s*Eingespielte Version\s*\|\s*([0-9]+\.[0-9]+)\s*\|') { $version = $matches[1] }
     }
-    if (-not $version) {
-        $kopf = (Get-Content -LiteralPath (Join-Path $repo 'AGENTS.md') -Encoding UTF8 -TotalCount 12) -join "`n"
-        if ($kopf -match '(?m)^version:\s*([0-9]+\.[0-9]+)\s*$') { $version = $matches[1] }
+    $agentsVersion = $null
+    $agDatei = Join-Path $repo 'AGENTS.md'
+    if (Test-Path -LiteralPath $agDatei) {
+        $kopf = (Get-Content -LiteralPath $agDatei -Encoding UTF8 -TotalCount 12) -join "`n"
+        if ($kopf -match '(?m)^version:\s*([0-9]+\.[0-9]+)\s*$') { $agentsVersion = $matches[1] }
     }
+    if (-not $version) { $version = $agentsVersion }
     if (-not $version) { "Alle Projekte: Keine eingespielte Version lesbar; die Kopie der Sperren bleibt, wie sie ist."; return $true }
+    # Waehrend eines Updates traegt die AGENTS.md schon die neue Version, MEIN-SYSTEM.md noch die alte. Eine
+    # Kopie aus dem alten Tag passt dann nicht zu den Eintraegen, die dieses Skript schreibt (gefunden in der
+    # Pruefung von 6.0: aus v5.3 kaeme ein Verteiler ohne die neuen Sperren, und jeder Werkzeugaufruf in jedem
+    # Projekt waere gesperrt). Deshalb nur bei eindeutiger Version und erst ab 6.0, wo es diesen Weg gibt.
+    if ($agentsVersion -and $version -ne $agentsVersion) {
+        "Alle Projekte: MEIN-SYSTEM.md nennt $version, die AGENTS.md $agentsVersion (Update noch nicht abgeschlossen). Die Kopie der Sperren bleibt, wie sie ist, bis beide dieselbe Version nennen; die Versionspruefung erneuert sie dann beim naechsten Sessionstart."
+        return $true
+    }
+    if ([version]$version -lt [version]'6.0') { "Alle Projekte: Version $version kennt die Sperren im Benutzerprofil noch nicht (erst ab 6.0); nichts eingerichtet."; return $true }
     $tag = 'v' + $version
     $lokal = @(Invoke-Git @('-C', $repo, 'rev-parse', ($tag + '^{commit}')))[0]
     $fern = $null
@@ -255,12 +267,18 @@ function Richte-Profil-Ein {
         return $true
     }
 
-    # Kopie aus dem Tag; abweichende Dateien zaehlen.
-    $neu = @()
+    # Kopie aus dem Tag; abweichende Dateien zaehlen. Fehlt im Tag eine Datei der Sperren, wird nichts
+    # kopiert und nichts eingetragen: Ein Eintrag ohne passende Kopie sperrt jeden Werkzeugaufruf.
+    $blobs = @{}
     foreach ($rel in $haertungsDateien) {
         $inhalt = Get-GitBlob $repo ($tag + ':' + $rel)
+        if ($null -eq $inhalt) { "Alle Projekte: $rel fehlt im Tag $tag; Kopie der Sperren nicht erneuert, die bisherige bleibt."; return $true }
+        $blobs[$rel] = $inhalt
+    }
+    $neu = @()
+    foreach ($rel in $haertungsDateien) {
+        $inhalt = $blobs[$rel]
         $ziel = Join-Path $prof.kopie $rel
-        if ($null -eq $inhalt) { continue }
         $vorher = if (Test-Path -LiteralPath $ziel) { [System.IO.File]::ReadAllBytes($ziel) } else { $null }
         if ($null -eq $vorher -or [Convert]::ToBase64String($vorher) -ne [Convert]::ToBase64String($inhalt)) {
             $neu += $rel

@@ -183,7 +183,7 @@ Pruef "41 Danach Stand fehlt" ($r.out -match 'Stand:\s+fehlt') "True"
 $mini = Join-Path $tmp 'Mini Kind'
 $heimT = Join-Path $tmp 'Heim'
 $sysT = Join-Path $tmp 'kein System'
-foreach ($rel in ($haertungsDateien + @('00_INDEX/scripts/hooks-einrichten.ps1'))) {
+foreach ($rel in ($haertungsDateien + @('00_INDEX/scripts/hooks-einrichten.ps1', '00_INDEX/scripts/version-check.ps1'))) {
     $q = Join-Path $repo $rel; $z = Join-Path $mini $rel
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $z) | Out-Null
     Copy-Item -LiteralPath $q -Destination $z
@@ -211,12 +211,12 @@ $r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini
 Pruef "54 Profil: zweiter Lauf nichts zu tun" $r.code "0"
 Pruef "54b Profil: Versionsmarke 6.0" ([string]((Get-Content -LiteralPath (Join-Path $po.kopie 'version.txt') -Raw).Trim())) "6.0"
 # -NurProfil (Aufruf der Versionspruefung): richtet nur das Profil ein, Projektdateien bleiben.
-$projVorher = (Get-FileHash -LiteralPath (Join-Path $mini '.claude/settings.json')).Hash
+$projVorher = Get-DateiPruefsumme (Join-Path $mini '.claude/settings.json')
 Remove-Item -LiteralPath $po.settings -Force
 $r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`" -NurProfil"
 Pruef "54c NurProfil: Einstellungen wieder da" ([string](Test-Path -LiteralPath $po.settings)) "True"
 Pruef "54d NurProfil: Meldung fuer die Versionspruefung" ([string]($r.out -match 'Alle Projekte: Sperren aus Version [0-9.]+ eingerichtet \(')) "True"
-Pruef "54e NurProfil: Projektdatei unberuehrt" ([string]((Get-FileHash -LiteralPath (Join-Path $mini '.claude/settings.json')).Hash -eq $projVorher)) "True"
+Pruef "54e NurProfil: Projektdatei unberuehrt" ([string]((Get-DateiPruefsumme (Join-Path $mini '.claude/settings.json')) -eq $projVorher)) "True"
 # Der Agent aendert eine Sperre im Repo: Sie gelangt nie in die Kopie.
 Add-Content -LiteralPath (Join-Path $mini '00_INDEX/scripts/guard-read.ps1') -Value 'exit 0 # gelockert'
 $r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`""
@@ -246,6 +246,59 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ortMini.dropin) |
 [System.IO.File]::WriteAllText($ortMini.dropin, '{}', $utf8)
 $r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`""
 Pruef "59 Profil: bei Haertung nichts" ([string]($r.out -match 'Haertung mit Adminrechten ist eingerichtet')) "True"
+
+# --- Ende zu Ende: Versionspruefung beim Sessionstart richtet das Profil ein (seit 6.0) ---------------
+# Wie Claude Code beim Start: version-check -Hook SessionStart, ohne Modell. Das Profil ist ein Testordner
+# unter Temp (-Heim), nie das echte; nur damit darf die Quelle ein lokales Repo sein.
+$heimE = Join-Path $tmp 'Heim E2E'
+$poE = Get-ProfilOrt $mini $heimE
+$miniVc = Join-Path $mini '00_INDEX/scripts/version-check.ps1'
+$keineMitteilung = Join-Path $tmp 'keine-mitteilungen.md'
+$vcArg = "-Hook SessionStart -Quelle `"$mini`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimE`""
+$r = Starte $miniVc $vcArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "60 Sessionstart: Profil eingerichtet" ([string]($r.out -match 'Sperren fuer alle Projekte eingerichtet')) "True"
+$usE = if (Test-Path -LiteralPath $poE.settings) { Get-Content -LiteralPath $poE.settings -Raw -Encoding UTF8 | ConvertFrom-Json } else { $null }
+$eigE = @($usE.hooks.PreToolUse | Where-Object { [string]$_.hooks[0].command -like ('*' + $poE.kopie + '*') })
+Pruef "61 Sessionstart: sechs Sperren eingetragen" $eigE.Count "6"
+$gleich = $true
+foreach ($rel in $haertungsDateien) {
+    $k = Join-Path $poE.kopie $rel
+    if (-not (Test-Path -LiteralPath $k)) { $gleich = $false; continue }
+    $ErrorActionPreference = 'Continue'
+    $tagHash = (& git -C $mini rev-parse ('v6.0:' + $rel) 2>$null)
+    $kopieHash = (& git hash-object -- $k 2>$null)
+    $ErrorActionPreference = 'Stop'
+    if ([string]$tagHash -ne [string]$kopieHash) { $gleich = $false }
+}
+Pruef "62 Sessionstart: Kopie gleich dem Tag" ([string]$gleich) "True"
+# Wie Claude Code die eingetragenen Befehle startet: Jeder startet und entscheidet, keiner sperrt aus Versehen.
+$bashEin = '{"tool_name":"Bash","cwd":"' + ($anderes -replace '\\', '\\') + '","tool_input":{"command":"git status"}}'
+$schlecht = 0
+foreach ($g in $eigE) {
+    if ('Bash' -notmatch ('^(' + [string]$g.matcher + ')$')) { continue }
+    $c = [string]$g.hooks[0].command
+    if ($c -notmatch '-File "([^"]+)" (.*)$') { $schlecht++; continue }
+    $rr = Starte $matches[1] $matches[2] $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+    if ($rr.code -ne 0 -or (Urteil $rr) -ne 'PASS') { $schlecht++ }
+}
+Pruef "63 Profil-Befehle starten, git status frei" $schlecht "0"
+$postEin = '{"tool_name":"Bash","cwd":"x","tool_input":{"command":"curl -X POST https://www.googleapis.com/calendar/v3/calendars/primary/events -d @a.json"}}'
+$fs = @($eigE | Where-Object { [string]$_.hooks[0].command -like '*-Skript guard-fremdsysteme' })[0]
+$null = [string]$fs.hooks[0].command -match '-File "([^"]+)" (.*)$'
+$rr = Starte $matches[1] $matches[2] $postEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "64 Profil: Schreiben in Google gesperrt" (Urteil $rr) "DENY"
+$r = Starte $miniVc $vcArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "65 Zweiter Start: nichts neu eingerichtet" ([string]($r.out -match 'Sperren fuer alle Projekte eingerichtet')) "False"
+# Mitten im Update: AGENTS.md traegt schon 6.0, MEIN-SYSTEM.md noch 5.3. Dann kein Profil aus v5.3.
+$heimM = Join-Path $tmp 'Heim Update'
+$poM = Get-ProfilOrt $mini $heimM
+[System.IO.File]::WriteAllText((Join-Path $mini 'MEIN-SYSTEM.md'), "| Eingespielte Version | 5.3 |`n", $utf8)
+$ErrorActionPreference = 'Continue'; & git -C $mini tag v5.3 'v6.0' 2>&1 | Out-Null; $ErrorActionPreference = 'Stop'
+$r = Starte $miniVc "-Hook SessionStart -Quelle `"$mini`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimM`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "66 Mitten im Update: kein Profil" ([string](Test-Path -LiteralPath $poM.settings)) "False"
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimM`" -Quelle `"$mini`" -System `"$(Join-Path $tmp 'kein System 2')`" -NurProfil"
+Pruef "67 Mitten im Update: Grund genannt" ([string]($r.out -match 'Update noch nicht abgeschlossen')) "True"
+[System.IO.File]::WriteAllText((Join-Path $mini 'MEIN-SYSTEM.md'), "| Eingespielte Version | 6.0 |`n", $utf8)
 
 # --- Nur der Besitzer, nie aus einer Session -------------------------------------------------------
 $r = Starte $haerten "" "j`n"

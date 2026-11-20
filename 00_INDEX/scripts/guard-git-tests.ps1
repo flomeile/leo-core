@@ -96,6 +96,10 @@ $faelle = @(
     @{ n = '36 -C mit /c-Pfad';                erw = 'DENY'; cwd = $kind;   cmd = "git -C `"$fremdPosix`" push origin main" }
     @{ n = '37 lokaler Merge, fetch';          erw = 'PASS'; cwd = $fremd;  cmd = 'git merge --no-ff feature/x; git fetch origin; git status -sb' }
     @{ n = '38 anderes Werkzeug';              erw = 'PASS'; cwd = $kind;   tool = 'Write'; cmd = '' }
+    @{ n = '39 Commit-Text beginnt mit gh';    erw = 'PASS'; cwd = $kind;   cmd = 'git commit -m "gh pr merge ist gesperrt" -- AGENTS.md' }
+    @{ n = '40 bash -c gh pr merge';           erw = 'DENY'; cwd = $kind;   cmd = "bash -c 'gh pr merge 3'" }
+    @{ n = '41 cmd /c push fremd';             erw = 'DENY'; cwd = $kind;   cmd = "cmd /c `"git -C $fremd push origin main`"" }
+    @{ n = '42 iex gh pr merge';               erw = 'DENY'; cwd = $kind;   cmd = 'iex "gh pr merge 3"' }
 )
 
 function Ruf($fall) {

@@ -48,10 +48,18 @@ $grundAdressen = @(
     'app.asana.com/api', 'api.trello.com',
     'api.hubapi.com', 'salesforce.com/services', 'simple_salesforce'
 )
-$schreibMerkmal = '(?i)(-X\s*["'']?(POST|PUT|PATCH|DELETE)\b|--request\s+["'']?(POST|PUT|PATCH|DELETE)\b|(^|\s)(-d|--data(-raw|-binary|-urlencode)?|-F|--form|--json|-T|--upload-file|--post-data|--method=(POST|PUT|PATCH|DELETE))(\s|=|$)|-Method\s+["'']?(Post|Put|Patch|Delete)\b|-Body\b|\.(post|put|patch|delete)\s*\(|method\s*[:=]\s*["''](POST|PUT|PATCH|DELETE)|\.(create|insert|update|patch|delete|batchUpdate|batch_update|append|append_row|append_rows|update_cell|update_acell|insert_row|delete_rows|clear|copy|move|trash|send|modify|add_task|update_task|close_task|delete_task|add_comment|create_page|chat_postMessage|files_upload|upload)\s*\()'
+# Schreibmerkmale. Die Kurzoptionen von curl und wget sind gross-klein-genau (-d schreibt, -D liest; -F
+# schreibt, -f liest), auch in einem Buendel wie -sSd; alles andere ohne Ruecksicht auf Gross-Klein.
+$schreibMerkmal = '(?i)(-X\s*["'']?(POST|PUT|PATCH|DELETE)\b|--request\s+["'']?(POST|PUT|PATCH|DELETE)\b|(^|\s)(?-i:-d|--data(-raw|-binary|-urlencode|-ascii)?|-F|--form(-string)?|--json|-T|--upload-file|--post-data|--post-file|--body-data|--body-file)(\s|=|$)|(^|\s)(?-i:-[A-Za-z]{1,3}[dFT])(\s|$)|--method=(POST|PUT|PATCH|DELETE)\b|-Method[\s:]+["'']?(Post|Put|Patch|Delete)\b|-Body\b|-InFile\b|(^|\s)(http|https|xh)\s+(POST|PUT|PATCH|DELETE)\b|\.(post|put|patch|delete)\s*\(|request\s*\(\s*["''](POST|PUT|PATCH|DELETE)|method\s*[:=]\s*["''](POST|PUT|PATCH|DELETE)|Upload(String|Data|File|Values)(Async)?\s*\(|Request\s*\([^)]*\bdata\s*=|\.(create|insert|update|patch|delete|batchUpdate|batch_update|append|append_row|append_rows|update_cell|update_cells|update_acell|values_update|values_append|values_clear|insert_row|insert_rows|delete_rows|add_worksheet|del_worksheet|share|clear|copy|move|trash|send|modify|add_task|update_task|close_task|delete_task|add_comment|create_page|chat_postMessage|files_upload|upload)\s*\()'
 $modulLaden = '(?i)(import_module|spec_from_file_location|SourceFileLoader|runpy|importlib)'
-$geheimInhalt = '-----BEGIN [A-Z ]*PRIVATE KEY-----|AIza[0-9A-Za-z_\-]{35}|ghp_[0-9A-Za-z]{36}|gho_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{40,}|xox[baprs]-[0-9A-Za-z\-]{10,}|sk-ant-[0-9A-Za-z_\-]{20,}|sk-[A-Za-z0-9]{32,}|ya29\.[0-9A-Za-z_\-]{20,}|AKIA[0-9A-Z]{16}'
-$schluesselName = '(?i)(^\.env(\..*)?$|\.(pem|key|pfx|p12|kdbx|ppk)$|^id_(rsa|ed25519|ecdsa)|token[^\\/]*\.json$|credential[^\\/]*\.json$|client_secret[^\\/]*\.json$|[-_.]key\.txt$|^\.?[^\\/]*-key$)'
+# Ein Werkzeug aus einer Schutzliste gilt nur, wenn der Befehl genau dieses Werkzeug startet: ein Aufruf, kein
+# Verketten mit ; & | oder Zeilenumbruch, kein $( ) und keine Backticks, und vor dem Pfad steht hoechstens ein
+# Interpreter mit Schaltern. Sonst reicht es, den Pfad in einem Kommentar zu erwaehnen.
+$verkettung = '(;|&|\||\r|\n|\$\(|`)'
+$interp = '(python3?|py|pwsh|powershell|node|bash|sh)(\.exe)?'
+$aufrufVor = '^\s*(("[^"]*?' + $interp + '"|''[^'']*?' + $interp + '''|[^\s"'']*?' + $interp + ')(\s+-{1,2}[A-Za-z][^\s"'']*)*\s+)?("[^"]*|''[^'']*|[^\s"'']*)$'
+$geheimInhalt = '-----BEGIN [A-Z ]*PRIVATE KEY-----|AIza[0-9A-Za-z_\-]{35}|ghp_[0-9A-Za-z]{36}|gho_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{40,}|xox[baprs]-[0-9A-Za-z\-]{10,}|(?<![A-Za-z0-9])sk-ant-[0-9A-Za-z_\-]{20,}|(?<![A-Za-z0-9])sk-proj-[0-9A-Za-z_\-]{20,}|(?<![A-Za-z0-9])sk-[A-Za-z0-9]{32,}|ya29\.[0-9A-Za-z_\-]{20,}|(?<![A-Z0-9])AKIA[0-9A-Z]{16}'
+$schluesselName = '(?i)(^\.env(\..*)?$|\.(pem|key|pfx|p12|kdbx|ppk)$|^id_(rsa|ed25519|ecdsa)|token[^\\/]*\.json$|credential[^\\/]*\.json$|client_secret[^\\/]*\.json$|service[-_]?account[^\\/]*\.json$|^\.(netrc|git-credentials|pypirc)$|[-_.]key\.txt$|^\.?[^\\/]*-key$)'
 
 $fremdGrund = "Schreiben in ein Fremdsystem ist gesperrt: '{0}' wird nur ueber ein Werkzeug mit Freigabefenster beschrieben, nie mit einem eigenen Aufruf, Skript oder Code im Browser (AGENTS.md Abschnitt 16). Lesen bleibt frei. Gibt es fuer diesen Dienst ein Werkzeug (eine Firmenschicht nennt es in ihrer README.md und in schutzliste.txt), nimm es. Sonst sag [NAME] in zwei Saetzen, was du schreiben wolltest und dass es dafuer ein Werkzeug mit Freigabefenster braucht; such keinen anderen Weg."
 $schluesselGrund = "Gesperrt: '{0}' ist eine Schluesseldatei aus einer Schutzliste. Du liest, schreibst und nennst sie nie; das Werkzeug, das sie braucht, liest sie selbst (AGENTS.md Abschnitte 16 und 18)."
@@ -139,9 +147,13 @@ try {
     if (-not $treffer) { exit 0 }
     if ($text -notmatch $schreibMerkmal) { exit 0 }
     if ($tool -match '^(Bash|PowerShell)$' -and $text -notmatch $modulLaden) {
-        $norm = $text -replace '\\', '/'
-        foreach ($w in @($stand.werkzeuge)) {
-            if ($w -and $norm.ToLower().Contains(([string]$w).ToLower())) { exit 0 }
+        $norm = (($text -replace '\\', '/').Trim()) -replace '^&\s*', ''
+        if ($norm -notmatch $verkettung) {
+            foreach ($w in @($stand.werkzeuge)) {
+                if (-not $w) { continue }
+                $i = $norm.ToLower().IndexOf(([string]$w).ToLower())
+                if ($i -ge 0 -and $norm.Substring(0, $i) -match $aufrufVor) { exit 0 }
+            }
         }
     }
     Write-Deny ($fremdGrund -f $treffer)

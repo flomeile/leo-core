@@ -479,9 +479,15 @@ function Get-HaertungsStand([string]$repo, $ort) {
         $kda = Test-Path -LiteralPath $k
         if (-not $qda -and -not $kda) { continue }
         if ($qda -ne $kda) { $ab += $rel; continue }
-        $hq = (Get-FileHash -LiteralPath $q -Algorithm SHA256).Hash
-        $hk = (Get-FileHash -LiteralPath $k -Algorithm SHA256).Hash
-        if ($hq -ne $hk) { $ab += $rel }
+        if ((Get-DateiPruefsumme $q) -ne (Get-DateiPruefsumme $k)) { $ab += $rel }
     }
     return @{ stand = $(if ($ab.Count -eq 0) { 'aktuell' } else { 'veraltet' }); abweichend = $ab }
+}
+
+# SHA-256 einer Datei ueber .NET statt Get-FileHash: Startet PowerShell 7 ein Windows PowerShell 5.1 (oder
+# Claude Code, das aus einem PowerShell-7-Fenster kam, einen Hook), erbt 5.1 den Modulpfad von 7 und findet
+# Get-FileHash nicht (gefunden in der Pruefung von 6.0).
+function Get-DateiPruefsumme([string]$p) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($sha.ComputeHash([System.IO.File]::ReadAllBytes($p))) } finally { $sha.Dispose() }
 }

@@ -46,8 +46,12 @@ param(
     [string]$Repo = '',
     [string]$Quelle = 'https://github.com/flomeile/leo-core',
     [string]$Mitteilungen = 'https://raw.githubusercontent.com/flomeile/leo-core/main/MITTEILUNGEN.md',
-    [int]$Stunden = 24
+    [int]$Stunden = 24,
+    [string]$Heim = ''
 )
+# -Heim (Testparameter seit 6.0): ein Testordner unter dem Temp-Verzeichnis statt des Benutzerprofils fuer die
+# Sperren aller Projekte. Nur damit darf die Quelle etwas anderes sein als das Grundgeruest auf GitHub; das
+# echte Profil wird nur aus dem echten Grundgeruest befuellt.
 $ErrorActionPreference = 'Continue'
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch { }
 
@@ -141,16 +145,26 @@ try {
     # nach; deshalb richtet ihn dieser Hook selbst ein: wenn die Kopie fehlt oder eine andere Version
     # traegt, sonst hoechstens einmal je $Stunden mit Netz. Nicht mit der Haertung (dann gelten die
     # verwalteten Hooks) und nur gegen das echte Grundgeruest, nie in einer Testreihe mit eigener Quelle.
-    if ($Hook -and $eingespielt -and $Quelle -eq 'https://github.com/flomeile/leo-core') {
+    $testHeim = $false
+    if ($Heim) {
         try {
             . (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
-            $po = Get-ProfilOrt $root
+            $testHeim = (Test-PathWithin $Heim $tempPath) -and -not (Test-PathWithin $homePath $Heim)
+        } catch { $testHeim = $false }
+        if (-not $testHeim) { $Heim = '' }
+    }
+    if ($Hook -and $eingespielt -and ($Quelle -eq 'https://github.com/flomeile/leo-core' -or $testHeim)) {
+        try {
+            . (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
+            $po = Get-ProfilOrt $root $Heim
             $marke = Join-Path $po.kopie 'version.txt'
             $kopieVersion = if (Test-Path -LiteralPath $marke) { ([System.IO.File]::ReadAllText($marke)).Trim() } else { '' }
             $he = Join-Path $PSScriptRoot 'hooks-einrichten.ps1'
             if (-not (Test-Path -LiteralPath (Get-HaertungsOrt $root).dropin) -and (Test-Path -LiteralPath $he) -and ($frisch -or $kopieVersion -ne $eingespielt)) {
                 $exe = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { 'powershell' } else { Join-Path $PSHOME 'pwsh' }
-                $aus = & $exe -NoProfile -ExecutionPolicy Bypass -File $he -NurProfil 2>&1 | Out-String
+                $zusatz = @()
+                if ($testHeim) { $zusatz = @('-Heim', $Heim, '-Quelle', $Quelle) }
+                $aus = & $exe -NoProfile -ExecutionPolicy Bypass -File $he -NurProfil @zusatz 2>&1 | Out-String
                 if ($aus -match 'Alle Projekte: Sperren aus Version [0-9.]+ eingerichtet \(') {
                     $zeilen.Add('Sperren fuer alle Projekte eingerichtet oder erneuert (ohne Modell, hooks-einrichten.ps1, AGENTS.md Abschnitt 18). Sag der Person in einer Zeile, dass sie ab dem naechsten Start von Claude Code auch in anderen Projekten gelten.')
                 }

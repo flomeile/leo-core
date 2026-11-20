@@ -203,9 +203,13 @@ function Test-Befehle([string]$text, [string]$cwd, $erlaubt, [int]$tiefe) {
     foreach ($roh in (Get-Abschnitte $text)) {
         $w = Remove-Umleitungen $roh
         if ($w.Count -eq 0) { continue }
-        # Eingebettete Befehle in Anfuehrungszeichen (pwsh -c "...", bash -c '...', iex "...") selbst pruefen.
-        foreach ($t in $w) {
-            if ($t.q -and $t.t -match '(?i)\b(git|gh)\b|gh-[\w-]+\.ps1') { Test-Befehle $t.t $cwd $erlaubt ($tiefe + 1) }
+        # Eingebettete Befehle in Anfuehrungszeichen (pwsh -c "...", bash -c '...', cmd /c "...", iex "...") selbst
+        # pruefen, aber nur hinter einem solchen Aufruf: Eine Commit-Botschaft (-m "gh pr merge ...") ist kein Befehl.
+        for ($x = 0; $x -lt $w.Count; $x++) {
+            $t = $w[$x]
+            if (-not $t.q -or $t.t -notmatch '(?i)\b(git|gh)\b|gh-[\w-]+\.ps1') { continue }
+            $vor = if ($x -gt 0) { ([string]$w[$x - 1].t).ToLower() } else { '' }
+            if ($x -eq 0 -or $vor -in @('-c', '-command', '/c', '/k', 'iex', 'invoke-expression', 'eval', 'exec')) { Test-Befehle $t.t $cwd $erlaubt ($tiefe + 1) }
         }
         $k = 0
         while ($k -lt $w.Count -and -not $w[$k].q -and ($w[$k].t -match '^[A-Za-z_][A-Za-z0-9_]*=' -or $w[$k].t -in @('env', 'command', 'time', 'nohup', 'exec', 'sudo'))) { $k++ }
