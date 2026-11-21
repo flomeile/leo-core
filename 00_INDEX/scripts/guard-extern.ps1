@@ -35,15 +35,20 @@ $gesperrt = @(
 # Seit der Zweitpruefung von 6.0 zaehlt nicht nur die genaue Endung: Connectoren nennen dasselbe Werkzeug
 # verschieden (slack_send_message, gmail_send_email, sendMessage). Gesperrt ist deshalb jede Endung, die eines
 # dieser Woerter enthaelt (Woerter getrennt an _ und an Grossbuchstaben), dazu weitere Wirkungen nach aussen.
-$sperrWoerter = @('send', 'reply', 'forward', 'trash', 'delete', 'spam', 'share')
+# Seit dem Schlusstest von 6.0 auch post, publish und invite (slack_post_message, chat_postMessage, publish_post,
+# invite_user) und merge (ein Pull Request wird nie vom Agenten gemergt, AGENTS.md Abschnitt 12).
+$sperrWoerter = @('send', 'reply', 'forward', 'trash', 'delete', 'spam', 'share', 'post', 'publish', 'invite', 'merge')
 $gesperrtZusatz = @('request_access', 'create_shared_drive', 'update_shared_drive', 'move_file')
-# Werkzeuge der Desktop-App selbst (Sitzungen, Seitenleiste, geplante Aufgaben) wirken nicht nach aussen; fuer sie
-# gilt nur die genaue Liste oben, nicht die Wortregel.
+function Get-Woerter([string]$endung) {
+    return @((($endung -creplace '([a-z0-9])([A-Z])', '$1_$2').ToLower()) -split '[_\-]+' | Where-Object { $_ })
+}
+# Werkzeuge der Desktop-App selbst (Sitzungen, Seitenleiste, geplante Aufgaben) wirken nicht nach aussen: Eine
+# Nachricht an eine andere Sitzung auf diesem Rechner verlaesst ihn nicht (seit dem Schlusstest von 6.0 frei). Fuer
+# sie gilt nur das Wort merge (Automerge eines Pull Requests).
 function Test-Gesperrt([string]$endung, [string]$server = '') {
+    if ($server -match '^(ccd_.*|scheduled-tasks)$') { return ((Get-Woerter $endung) -contains 'merge') }
     if ($gesperrt -contains $endung -or $gesperrtZusatz -contains $endung) { return $true }
-    if ($server -match '^(ccd_.*|scheduled-tasks)$') { return $false }
-    $woerter = @((($endung -creplace '([a-z0-9])([A-Z])', '$1_$2').ToLower()) -split '[_\-]+' | Where-Object { $_ })
-    foreach ($w in $woerter) { if ($sperrWoerter -contains $w) { return $true } }
+    foreach ($w in (Get-Woerter $endung)) { if ($sperrWoerter -contains $w) { return $true } }
     return $false
 }
 

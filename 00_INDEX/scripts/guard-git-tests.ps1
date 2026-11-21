@@ -55,6 +55,13 @@ G clone -q $remote $kind
 G init -q -b main $archiv
 G clone -q $remote $nested
 New-Item -ItemType Directory -Force -Path $leer | Out-Null
+# Seit dem Schlusstest von 6.0: ein zweites Remote im eigenen Repo und ein fremdes Repo mit eingetragener Push-Regel.
+G -C $kind remote add x $remote
+$fremdRegel = P @('fremd-regel')
+G clone -q $remote $fremdRegel
+G -C $fremdRegel switch -q -c feature/r
+G -C $fremdRegel config remote.origin.push 'HEAD:refs/heads/main'
+$b64 = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes('gh pr merge 1'))
 $fremdPosix = if ($isWindowsHost) { '/' + $fremd.Substring(0, 1).ToLower() + ($fremd.Substring(2) -replace '\\', '/') } else { $fremd }
 
 $faelle = @(
@@ -105,7 +112,8 @@ $faelle = @(
     @{ n = '44 eigen: Push auf ssh-Adresse';   erw = 'DENY'; cwd = $kind;   cmd = 'git push git@example.org:beispiel/x.git HEAD:refs/heads/y' }
     @{ n = '45 eigen: --repo=URL';             erw = 'DENY'; cwd = $kind;   cmd = 'git push --repo=https://example.org/x.git' }
     @{ n = '46 fremd: Push auf Pfad';          erw = 'DENY'; cwd = $fremd;  cmd = 'git push ../anderes feature/x' }
-    @{ n = '47 eigen: Remote als Variable';    erw = 'PASS'; cwd = $kind;   cmd = 'git push $ziel main' }
+    # Seit dem Schlusstest von 6.0 DENY: Im eigenen Repo gilt nur origin, ein Remote aus einer Variable ist im Zweifel ein anderes.
+    @{ n = '47 eigen: Remote als Variable';    erw = 'DENY'; cwd = $kind;   cmd = 'git push $ziel main' }
     @{ n = '48 gh api PUT contents';           erw = 'DENY'; cwd = $kind;   cmd = 'gh api -X PUT repos/o/r/contents/a.md -f message=m -f content=eA==' }
     @{ n = '49 gh api Feld auf git/refs';      erw = 'DENY'; cwd = $kind;   cmd = 'gh api repos/o/r/git/refs -f ref=refs/heads/x -f sha=abc' }
     @{ n = '50 gh api merges';                 erw = 'DENY'; cwd = $kind;   cmd = 'gh api repos/o/r/merges -f base=main -f head=x' }
@@ -134,6 +142,37 @@ $faelle = @(
     @{ n = '73 fremd push --dry-run main';     erw = 'PASS'; cwd = $fremd;  cmd = 'git push --dry-run origin main' }
     @{ n = '74 git add ./a.md';                erw = 'PASS'; cwd = $kind;   cmd = 'git add ./a.md' }
     @{ n = '75 pwsh -c git add :/';            erw = 'DENY'; cwd = $kind;   cmd = 'pwsh -c "git add :/"' }
+    # Schlusstest von 6.0: Umgehungen mit einem Befehl.
+    @{ n = '76 pwsh -File gh-Wrapper merge';   erw = 'DENY'; cwd = $kind;   cmd = 'pwsh -NoProfile -File "C:\Werkzeuge\gh-beispiel.ps1" pr merge 11 --repo o/r --merge' }
+    @{ n = '77 powershell -File Wrapper create'; erw = 'PASS'; cwd = $kind; cmd = 'powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Werkzeuge\gh-beispiel.ps1" pr create --title t --body-file x.txt' }
+    @{ n = '78 cmd /c gh pr merge';            erw = 'DENY'; cwd = $kind;   cmd = 'cmd /c gh pr merge 1' }
+    @{ n = '79 cmd /c git push HEAD:main';     erw = 'DENY'; cwd = $fremdFeature; cmd = 'cmd /c git push origin HEAD:main' }
+    @{ n = '80 powershell -Command gh merge';  erw = 'DENY'; cwd = $kind;   cmd = 'powershell -Command gh pr merge 1' }
+    @{ n = '81 Start-Process gh merge';        erw = 'DENY'; cwd = $kind;   cmd = "Start-Process gh -ArgumentList 'pr','merge','1'" }
+    @{ n = '82 Start-Process git status';      erw = 'PASS'; cwd = $kind;   cmd = "Start-Process git -ArgumentList 'status'" }
+    @{ n = '83 gh alias set';                  erw = 'DENY'; cwd = $kind;   cmd = 'gh alias set mm "pr merge"' }
+    @{ n = '84 -c push.default=matching';      erw = 'DENY'; cwd = $fremdFeature; cmd = 'git -c push.default=matching push' }
+    @{ n = '85 -c remote.origin.push';         erw = 'DENY'; cwd = $fremdFeature; cmd = 'git -c remote.origin.push=HEAD:refs/heads/main push' }
+    @{ n = '86 config remote.origin.push';     erw = 'DENY'; cwd = $fremdFeature; cmd = 'git config remote.origin.push HEAD:refs/heads/main' }
+    @{ n = '87 Push mit Push-Regel';           erw = 'DENY'; cwd = $fremdRegel; cmd = 'git push' }
+    @{ n = '88 --dry-run --no-dry-run';        erw = 'DENY'; cwd = $fremdFeature; cmd = 'git push --dry-run --no-dry-run origin HEAD:main' }
+    @{ n = '89 eigen: remote add y';           erw = 'PASS'; cwd = $kind;   cmd = 'git remote add y https://example.org/y.git' }
+    @{ n = '90 eigen: push auf Remote x';      erw = 'DENY'; cwd = $kind;   cmd = 'git push x HEAD:main' }
+    @{ n = '91 eigen: set-url origin';         erw = 'DENY'; cwd = $kind;   cmd = 'git remote set-url origin https://example.org/x.git' }
+    @{ n = '92 eigen: set-url --push DISABLED'; erw = 'PASS'; cwd = $kind;  cmd = 'git remote set-url --push upstream DISABLED' }
+    @{ n = '93 fremd: remote add upstream';    erw = 'PASS'; cwd = $fremd;  cmd = 'git remote add upstream https://example.org/u.git' }
+    @{ n = '94 gh api GET pulls/1/merge';      erw = 'PASS'; cwd = $kind;   cmd = 'gh api repos/o/r/pulls/1/merge' }
+    @{ n = '95 gh api graphql aus Datei';      erw = 'DENY'; cwd = $kind;   cmd = 'gh api graphql -F query=@q.graphql' }
+    @{ n = '96 gh aus Variable';               erw = 'DENY'; cwd = $kind;   cmd = '$g = "gh"; & $g pr merge 1' }
+    @{ n = '97 powershell -EncodedCommand';    erw = 'DENY'; cwd = $kind;   cmd = "powershell -NoProfile -EncodedCommand $b64" }
+    @{ n = '98 config --get origin url';       erw = 'PASS'; cwd = $kind;   cmd = 'git config --get remote.origin.url' }
+    @{ n = '99 config pushInsteadOf';          erw = 'DENY'; cwd = $kind;   cmd = 'git config --global url.https://example.org/.pushInsteadOf https://github.com/' }
+    @{ n = '100 -c user.name commit';          erw = 'PASS'; cwd = $kind;   cmd = 'git -c user.name=x commit -m "push vorbereitet" -- a.md' }
+    @{ n = '101 cmd /c Commit-Text mit gh';    erw = 'PASS'; cwd = $kind;   cmd = 'cmd /c git commit -m "gh pr merge bleibt gesperrt" -- a.md' }
+    @{ n = '102 env GIT_CONFIG_PARAMETERS';    erw = 'DENY'; cwd = $fremdFeature; cmd = "`$env:GIT_CONFIG_PARAMETERS=`"'remote.origin.push=HEAD:refs/heads/main'`"; git push" }
+    @{ n = '103 eigen: remote rename origin';  erw = 'DENY'; cwd = $kind;   cmd = 'git remote rename origin alt' }
+    @{ n = '104 gh api PUT merge Methode';     erw = 'DENY'; cwd = $kind;   cmd = 'gh api --method=PUT repos/o/r/pulls/1/merge' }
+    @{ n = '105 eigen: push origin feature';   erw = 'PASS'; cwd = $kind;   cmd = 'git push -u origin feature/neu' }
 )
 
 function Ruf($fall) {
