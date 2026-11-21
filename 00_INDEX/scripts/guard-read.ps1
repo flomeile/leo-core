@@ -64,11 +64,11 @@ function Write-Deny([string]$reason) {
 # ".environment" bleiben frei), Endungen nur am Wortende, Ordner nur mit Trenner davor
 # und dahinter. Wer ein Muster ergaenzt, ergaenzt einen Fall in guard-read-tests.ps1.
 $credentialPatterns = @(
-    @{ re = '(?i)(?:^|[\s"''=:(,\\/])\.env(?:rc|\.[A-Za-z0-9_.-]+)?(?=$|[\s"'');|&>)])'; was = ".env-Datei" }
-    @{ re = '(?i)[A-Za-z0-9_.\\/~:-]+\.(?:pem|key|pfx|p12|kdbx|ppk)(?=$|[\s"'');|&>)])'; was = "Schluessel- oder Zertifikatsdatei (.pem, .key, .pfx, .p12, .kdbx, .ppk)" }
-    @{ re = '(?i)(?:^|[\\/])id_(?:rsa|ed25519|ecdsa|dsa)(?:\.pub)?(?=$|[\s"'');|&>)])'; was = "SSH-Schluessel" }
+    @{ re = '(?i)(?:^|[\s"''=:(,\\/])\.env(?:rc|\.[A-Za-z0-9_.-]+)?(?=$|[\s"'');|&>):*?\[])'; was = ".env-Datei" }
+    @{ re = '(?i)[A-Za-z0-9_.\\/~:*?-]+\.(?:pem|key|pfx|p12|kdbx|ppk)(?=$|[\s"'');|&>):*?\[])'; was = "Schluessel- oder Zertifikatsdatei (.pem, .key, .pfx, .p12, .kdbx, .ppk)" }
+    @{ re = '(?i)(?:^|[\\/])id_(?:rsa|ed25519|ecdsa|dsa)(?:\.pub)?(?=$|[\s"'');|&>):*?\[])'; was = "SSH-Schluessel" }
     @{ re = '(?i)(?:^|[\\/~])\.(?:ssh|aws|gnupg|azure|kube)(?=[\\/]|$|[\s"''])'; was = "Credentials-Ordner (.ssh, .aws, .gnupg, .azure, .kube)" }
-    @{ re = '(?i)(?:^|[\s"''=\\/])(?:[.A-Za-z0-9_-]*?[-_.])?(?:tokens?|secrets?|credentials?)(?:[-_.][A-Za-z0-9_-]+)*\.(?:txt|json|ya?ml|ini)(?=$|[\s"'');|&>)])'; was = "Token- oder Secret-Datei" }
+    @{ re = '(?i)(?:^|[\s"''=\\/])(?:[.A-Za-z0-9_-]*?[-_.])?(?:tokens?|secrets?|credentials?)(?:[-_.][A-Za-z0-9_-]+)*\.(?:txt|json|ya?ml|ini)(?=$|[\s"'');|&>):*?\[])'; was = "Token- oder Secret-Datei" }
 )
 
 function Normalize-Text([string]$s) {
@@ -99,11 +99,15 @@ try {
     $text = $null
     $pfade = @()
     $istShell = $false
+    $muster = ''
     switch ($tool) {
         "Read"         { $text = [string]$ti.file_path; $pfade = @(Resolve-TargetPath $text $cwd) }
         "NotebookRead" { $text = [string]$ti.notebook_path; $pfade = @(Resolve-TargetPath $text $cwd) }
         { $_ -in @("Grep", "Glob") } {
             $text = [string]$ti.path
+            # Seit der vierten Pruefung von 6.0 zaehlen Muster und Filter fuer die Zugangsdaten mit: Grep mit glob
+            # ".env" oder "**/*.pem" las sonst Zugangsdaten im Repo. Die Pfadpruefung nimmt weiter path.
+            $muster = (@($ti.glob, $ti.type, $(if ($tool -eq 'Glob') { $ti.pattern })) | Where-Object { $_ }) -join ' '
             if ([string]::IsNullOrWhiteSpace($text)) { $pfade = @(Normalize-AbsolutePath $cwd) }
             else { $pfade = @(Resolve-TargetPath $text $cwd) }
             if ($tool -eq "Glob") {
@@ -122,9 +126,10 @@ try {
     $ab = Get-Arbeitsbereich $(if ($Repo) { $Repo } else { Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }) (Split-Path -Parent $PSScriptRoot)
 
     # (1) Zugangsdaten, eingebaut, gelten ueberall.
-    if (-not [string]::IsNullOrWhiteSpace($text)) {
+    $pruefText = (@($text, $muster) | Where-Object { $_ }) -join ' '
+    if (-not [string]::IsNullOrWhiteSpace($pruefText)) {
         foreach ($p in $credentialPatterns) {
-            if ($text -match $p.re) {
+            if ($pruefText -match $p.re) {
                 Write-Deny ("Lesen gesperrt: " + $p.was + " im Aufruf. Zugangsdaten gehoeren nie in den Kontext eines Modells; was einmal drin war, gilt als kompromittiert (AGENTS.md Abschnitt 18). Diese Sperre gilt ueberall, auch im Repo und in einem freigegebenen Ordner, und kein Befehl hebt sie auf. Sag [NAME] das in einem Satz. Braucht ein Skript den Wert, liest das Skript ihn selbst aus dem Benutzerprofil; nenne hoechstens den Namen der Variable, nie ihren Wert.")
             }
         }

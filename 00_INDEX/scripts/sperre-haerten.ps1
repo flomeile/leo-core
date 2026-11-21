@@ -111,6 +111,24 @@ if (-not $test -and -not $Erhoeht) {
         "    abschalten, und nie eine Rechteabfrage bestaetigen, die du nicht selbst ausgeloest hast."
     }
     ""
+    # Die Listen kommen aus dem Repo, das der Agent beschreiben kann (seit der vierten Pruefung von 6.0): Jede Zeile, die
+    # sich gegenueber der geltenden Kopie aendert, steht vor der Bestaetigung hier, damit keine Freigabe unbemerkt mitgeht.
+    if (-not $Entfernen -and -not $NurListen) {
+        $hinweis = $false
+        foreach ($rel in $haertungsListen) {
+            $q = Join-Path $repo $rel; $k = Join-Path $ort.kopie $rel
+            $qz = @(if (Test-Path -LiteralPath $q) { Get-Content -LiteralPath $q -Encoding UTF8 | ForEach-Object { ($_ -split '#')[0].Trim() } | Where-Object { $_ } })
+            $kz = @(if (Test-Path -LiteralPath $k) { Get-Content -LiteralPath $k -Encoding UTF8 | ForEach-Object { ($_ -split '#')[0].Trim() } | Where-Object { $_ } })
+            $plus = @($qz | Where-Object { $kz -notcontains $_ }); $minus = @($kz | Where-Object { $qz -notcontains $_ })
+            if ($plus.Count -or $minus.Count) {
+                $hinweis = $true
+                "  Neu geltend in $rel" + ":"
+                foreach ($z in $plus) { "    + $z" }
+                foreach ($z in $minus) { "    - $z" }
+            }
+        }
+        if ($hinweis) { "  Steht oben eine Zeile, die du nicht selbst eingetragen hast, antworte n."; "" }
+    }
     # Beim Uebernehmen der Listen hat der Besitzer in freigeben.ps1 schon bestaetigt.
     if (-not $NurListen) {
         $antwort = Read-Host "Fortfahren? Danach fragt dein System nach Administratorrechten. (j/n)"

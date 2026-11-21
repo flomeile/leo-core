@@ -35,6 +35,28 @@ $tempPath = [System.IO.Path]::GetTempPath().TrimEnd($pathSeparators)
 $quotedPattern = '"([^"\r\n]+)"|''([^''\r\n]+)'''
 $parentPattern = if ($isWindowsHost) { '(?:^|[\\/])\.\.(?:[\\/]|$)' } else { '(?:^|/)\.\.(?:/|$)' }
 
+# 8.3-Kurznamen (seit der vierten Pruefung von 6.0): C:\Users\ANNA~1\.claude\SETTIN~1.JSO ist dieselbe Datei wie
+# ...\settings.json, sah fuer die Pruefung aber anders aus. Jeder Teil mit ~Ziffer wird ueber das Dateisystem in den
+# langen Namen aufgeloest, soweit er existiert (FindFirstFile unter Windows PowerShell 5.1 vergleicht auch die
+# Kurzform). Kostet nur etwas, wenn ein Pfad eine Tilde mit Ziffer traegt.
+function Expand-Kurznamen([string]$p) {
+    if (-not $isWindowsHost -or $p -notmatch '~\d' -or $p -notmatch '^[a-zA-Z]:\\') { return $p }
+    try {
+        $teile = $p.TrimEnd('\').Split('\')
+        $akt = $teile[0]
+        for ($i = 1; $i -lt $teile.Count; $i++) {
+            $t = $teile[$i]
+            if ($t -match '~\d' -and [System.IO.Directory]::Exists($akt + '\')) {
+                $treffer = @([System.IO.Directory]::GetFileSystemEntries($akt + '\', $t))
+                if ($treffer.Count -eq 1) { $t = [System.IO.Path]::GetFileName($treffer[0]) }
+            }
+            $akt = $akt + '\' + $t
+        }
+        if ($akt -match '^[a-zA-Z]:$') { $akt += '\' }
+        return $akt
+    } catch { return $p }
+}
+
 function Normalize-AbsolutePath([string]$path) {
     if ([string]::IsNullOrWhiteSpace($path)) { return $null }
     $p = $path.Trim().Trim('"').Trim("'")
@@ -65,7 +87,15 @@ function Normalize-AbsolutePath([string]$path) {
         if ($p -notmatch '^[a-zA-Z]:\\' -and $p -notmatch '^\\\\') { return $null }
     } elseif ($p -notmatch '^/') { return $null }
     if (-not [System.IO.Path]::IsPathRooted($p)) { return $null }
+    # Datenstroeme (seit der vierten Pruefung von 6.0): "datei::$DATA" oder "datei:strom" ist dieselbe Datei.
+    # Windows PowerShell 5.1 wirft bei GetFullPath darauf einen Fehler, der Pfad galt dann als relativ und
+    # wurde gar nicht geprueft (Write auf ~/.claude/settings.json::$DATA ging durch). Geprueft wird die Datei.
+    if ($isWindowsHost -and $p.Length -gt 2) {
+        $i = $p.IndexOf(':', 2)
+        if ($i -ge 0) { $p = $p.Substring(0, $i) }
+    }
     try { $p = [System.IO.Path]::GetFullPath($p) } catch { return $null }
+    $p = Expand-Kurznamen $p
     # Eine Laufwerkswurzel behaelt ihren Trenner: "C:" ohne Trenner heisst unter Windows
     # "aktuelles Verzeichnis auf C:", nicht die Wurzel.
     if ($isWindowsHost -and $p -match '^[a-zA-Z]:\\$') { return $p }

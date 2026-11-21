@@ -92,7 +92,7 @@ $matcherJe = @{
     'guard-git'          = 'Bash|PowerShell'
     'guard-mail'         = 'Bash|PowerShell'
     'guard-read'         = 'Read|Grep|Glob|NotebookRead|Bash|PowerShell'
-    'guard-fremdsysteme' = 'Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*javascript.*'
+    'guard-fremdsysteme' = 'Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*(javascript|browser_batch|navigate).*'
     'guard-extern'       = 'mcp__.*'
 }
 
@@ -274,9 +274,12 @@ if ($Reparatur) {
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ziel) | Out-Null
             [System.IO.File]::WriteAllBytes($ziel, $blobs[$rel])
         }
+        # Die Listen nur, wo sie in der Kopie fehlen (seit der vierten Pruefung von 6.0): Eine Liste im Repo, die der Agent
+        # beschrieben haben koennte, ersetzt nie eine Liste, die der Besitzer mit freigeben.ps1 in die Kopie gelegt hat.
         foreach ($rel in $haertungsListen) {
             $q = Join-Path $repo $rel
-            if (Test-Path -LiteralPath $q) { $ziel = Join-Path $prof.kopie $rel; New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ziel) | Out-Null; Copy-Item -LiteralPath $q -Destination $ziel -Force }
+            $ziel = Join-Path $prof.kopie $rel
+            if ((Test-Path -LiteralPath $q) -and -not (Test-Path -LiteralPath $ziel)) { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ziel) | Out-Null; Copy-Item -LiteralPath $q -Destination $ziel -Force }
         }
         if ($Version) { [System.IO.File]::WriteAllText((Join-Path $prof.kopie 'version.txt'), $Version) }
         "Die Kopie der Sperren fuer alle Projekte war unvollstaendig ($($fehlend -join ', ')) und ist ohne Netz aus dem beim Einrichten auf GitHub geprueften Stand $Version wiederhergestellt (hooks-einrichten.ps1 -Reparatur). Sag es der Person in einer Zeile."
@@ -383,17 +386,18 @@ function Richte-Profil-Ein {
             }
         }
     }
+    # Die Listen kommen nur in die Kopie, wo sie dort noch fehlen (seit der vierten Pruefung von 6.0). Danach traegt sie
+    # allein freigeben.ps1 ein, das der Besitzer in seinem eigenen Fenster startet. Vorher ueberschrieb jeder Lauf dieses
+    # Skripts (auch der automatische beim Sessionstart) die Kopie mit der Liste im Repo, und eine Liste, die der Agent im
+    # Repo beschrieben hatte, wurde so zur gueltigen Freigabe.
     foreach ($rel in $haertungsListen) {
         $q = Join-Path $repo $rel
         $ziel = Join-Path $prof.kopie $rel
-        $qT = if (Test-Path -LiteralPath $q) { [System.IO.File]::ReadAllText($q) } else { $null }
-        $zT = if (Test-Path -LiteralPath $ziel) { [System.IO.File]::ReadAllText($ziel) } else { $null }
-        if ($qT -ne $zT) {
+        if ((Test-Path -LiteralPath $q) -and -not (Test-Path -LiteralPath $ziel)) {
             $neu += $rel
-            if (-not $Pruefen) {
-                if ($null -eq $qT) { Remove-Item -LiteralPath $ziel -Force }
-                else { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ziel) | Out-Null; Copy-Item -LiteralPath $q -Destination $ziel -Force }
-            }
+            if (-not $Pruefen) { New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ziel) | Out-Null; Copy-Item -LiteralPath $q -Destination $ziel -Force }
+        } elseif ((Test-Path -LiteralPath $q) -and ([System.IO.File]::ReadAllText($q) -ne [System.IO.File]::ReadAllText($ziel))) {
+            "Alle Projekte: $rel im Repo weicht von der Kopie der Sperren ab. Gueltig ist die Kopie; eine Freigabe traegt nur freigeben.ps1 ein, das der Besitzer selbst ausfuehrt."
         }
     }
 

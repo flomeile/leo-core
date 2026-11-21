@@ -38,7 +38,10 @@ $gesperrt = @(
 # Seit dem Schlusstest von 6.0 auch post, publish und invite (slack_post_message, chat_postMessage, publish_post,
 # invite_user) und merge (ein Pull Request wird nie vom Agenten gemergt, AGENTS.md Abschnitt 12).
 $sperrWoerter = @('send', 'reply', 'forward', 'trash', 'delete', 'spam', 'share', 'post', 'publish', 'invite', 'merge')
-$gesperrtZusatz = @('request_access', 'create_shared_drive', 'update_shared_drive', 'move_file')
+# Seit der vierten Pruefung von 6.0: run_in_terminal (das Terminal der Desktop-App tippt einen Befehl in die eigene
+# Shell des Besitzers, an allen Shell-Sperren vorbei; gemessen), file_upload und upload_image (eine lokale Datei geht in
+# eine Webseite, also hinaus, ohne dass die Lesesperre sie sieht). Befehle laufen ueber Bash oder PowerShell.
+$gesperrtZusatz = @('request_access', 'create_shared_drive', 'update_shared_drive', 'move_file', 'run_in_terminal', 'file_upload', 'upload_image')
 function Get-Woerter([string]$endung) {
     return @((($endung -creplace '([a-z0-9])([A-Z])', '$1_$2').ToLower()) -split '[_\-]+' | Where-Object { $_ })
 }

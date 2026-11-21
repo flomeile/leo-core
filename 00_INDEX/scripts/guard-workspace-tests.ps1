@@ -209,11 +209,25 @@ $profilFaelle = @(
     @{ n = "95 settings.local.json Shell";  erw = "DENY"; tool = "PowerShell"; cmd = "Copy-Item a.json `"$(Join-Path $claudeDir 'settings.local.json')`""; repo = $claudeDir; cwd = $claudeDir }
     @{ n = "96 Kopie der Sperren";          erw = "DENY"; tool = "Write"; file = (Join-Path (Join-Path $sperrKopie 'x') 'guard-git.ps1'); repo = $sperrKopie; cwd = $sperrKopie }
     @{ n = "97 ~/.claude lesen frei";       erw = "PASS"; tool = "PowerShell"; cmd = "Get-Content settings.json"; repo = $claudeDir; cwd = $claudeDir }
+    # Vierte Pruefung von 6.0: Datenstrom, Notebook, Schreiben ohne bekanntes Verb, disableAllHooks.
+    @{ n = "98 Datenstrom ::DATA";          erw = "DENY"; tool = "Write"; file = ((Join-Path $claudeDir 'settings.json') + '::$DATA') }
+    @{ n = "99 Datenstrom im Repo-Umweg";   erw = "DENY"; tool = "Write"; file = ($repo + '\..\aussen.txt:strom') }
+    @{ n = "100 NotebookEdit ausserhalb";   erw = "DENY"; tool = "NotebookEdit"; ti = @{ notebook_path = "$up\Desktop\x.ipynb"; new_source = 'x' } }
+    @{ n = "101 NotebookEdit im Repo";      erw = "PASS"; tool = "NotebookEdit"; ti = @{ notebook_path = "$repo\90_Inbox\x.ipynb"; new_source = 'x' } }
+    @{ n = "102 python -c auf settings";    erw = "DENY"; tool = "Bash"; cmd = "python -c `"open(r'$(Join-Path $claudeDir 'settings.json')','w').write('{}')`"" }
+    @{ n = "103 node -e auf Sperrkopie";    erw = "DENY"; tool = "Bash"; cmd = "node -e `"require('fs').rmSync('$($sperrKopie -replace '\\','/')',{recursive:true})`"" }
+    @{ n = "104 disableAllHooks Projekt";   erw = "DENY"; tool = "Write"; ti = @{ file_path = "$repo\.claude\settings.local.json"; content = '{"disableAllHooks":true}' } }
+    @{ n = "105 disableAllHooks Shell";     erw = "DENY"; tool = "Bash"; cmd = "echo '{`"disableAllHooks`":true}' > .claude/settings.local.json" }
+    @{ n = "106 settings lesen mit cat";    erw = "PASS"; tool = "Bash"; cmd = "cat `"$(Join-Path $claudeDir 'settings.json')`"" }
+    @{ n = "107 Commit nennt Sperrkopie";   erw = "PASS"; tool = "Bash"; cmd = "git commit -m `"Kopie .leo-sperren erklaert`"" }
+    @{ n = "109 python -c auf Freigabeliste"; erw = "DENY"; tool = "Bash"; cmd = "python -c `"open('00_INDEX/freigegebene-pfade.txt','a').write('x')`"" }
+    @{ n = "110 Freigabeliste lesen frei";  erw = "PASS"; tool = "Bash"; cmd = "cat 00_INDEX/freigegebene-pfade.txt" }
+    @{ n = "108 cat dann tee auf settings";erw = "DENY"; tool = "Bash"; cmd = "cat a.json | tee `"$(Join-Path $claudeDir 'settings.json')`"" }
 )
 $faelle = @(if ($isWindowsHost) { $windowsFaelle } else { $posixFaelle }) + $folgeFaelle + $freigabeFaelle + $profilFaelle
 
 function Ruf($skript, $fall, $exe, $cwd) {
-    $ti = if ($fall.tool -in @("Write","Edit")) { @{ file_path = $fall.file } } else { @{ command = $fall.cmd } }
+    $ti = if ($fall.ContainsKey('ti')) { $fall.ti } elseif ($fall.tool -in @("Write","Edit")) { @{ file_path = $fall.file } } else { @{ command = $fall.cmd } }
     $json = @{ session_id = "test"; hook_event_name = "PreToolUse"; cwd = $cwd; tool_name = $fall.tool; tool_input = $ti } | ConvertTo-Json -Depth 5 -Compress
     # Seit 5.0 als UTF-8-Bytes ueber ProcessStartInfo statt per Pipe: Ein Pipe kodiert je nach
     # Version anders, und die Faelle mit Umlaut im Pfad wuerden unter 5.1 am Treiber scheitern

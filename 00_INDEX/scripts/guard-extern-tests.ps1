@@ -72,6 +72,12 @@ Pruef '28 invite_user'                    (Ruf 'mcp__s2__invite_user') 'DENY'
 Pruef '29 merge_pull_request'             (Ruf 'mcp__gh__merge_pull_request') 'DENY'
 Pruef '30 App: Automerge setzen'          (Ruf 'mcp__ccd_pr__set_auto_merge') 'DENY'
 Pruef '31 Beitraege lesen (posts)'        (Ruf 'mcp__b7__list_posts') 'PASS'
+# Vierte Pruefung von 6.0: Terminal der App und Hochladen in eine Webseite.
+Pruef '32 Terminal der App'               (Ruf 'mcp__terminal__run_in_terminal') 'DENY'
+Pruef '33 leeres Terminal oeffnen'        (Ruf 'mcp__terminal__open_terminal_tab') 'PASS'
+Pruef '34 Terminal lesen'                 (Ruf 'mcp__terminal__read_terminal') 'PASS'
+Pruef '35 Datei in Webseite hochladen'    (Ruf 'mcp__claude-in-chrome__file_upload') 'DENY'
+Pruef '36 Bild in Webseite hochladen'     (Ruf 'mcp__claude-in-chrome__upload_image') 'DENY'
 [System.IO.File]::WriteAllLines($liste, [string[]]@('# Test', 'create_event   # Kalender erlaubt', 'mcp__d4__create_file'), $utf8)
 Pruef '9 freigegebene Endung'             (Ruf 'mcp__c3__create_event') 'PASS'
 Pruef '10 freigegebener voller Name'      (Ruf 'mcp__d4__create_file') 'PASS'

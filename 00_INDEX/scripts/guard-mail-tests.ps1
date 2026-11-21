@@ -36,6 +36,13 @@ $faelle = @(
     @{ n = "12 anderes Python-Skript";         erw = "PASS"; tool = "Bash";       cmd = "python `"$repo\00_INDEX\scripts\session-kosten.py`"" }
     @{ n = "13 Wort Mail im Commit-Text";      erw = "PASS"; tool = "Bash";       cmd = "git commit -m `"Mailregeln dokumentiert`"" }
     @{ n = "14 anderes Werkzeug";              erw = "PASS"; tool = "Write";      file = "$repo\90_Inbox\x.md" }
+    # Vierte Pruefung von 6.0: weitere Mailer.
+    @{ n = "15 yagmail";                       erw = "DENY"; tool = "Bash";       cmd = "python -c `"import yagmail; yagmail.SMTP('a').send('b')`"" }
+    @{ n = "16 curl smtps";                    erw = "DENY"; tool = "Bash";       cmd = "curl --url smtps://smtp.example.org:465 --upload-file m.txt" }
+    @{ n = "17 swaks";                         erw = "DENY"; tool = "Bash";       cmd = "swaks --to a@example.org --server smtp.example.org" }
+    @{ n = "18 mailx als Befehl";              erw = "DENY"; tool = "Bash";       cmd = "echo x | mailx -s Betreff a@example.org" }
+    @{ n = "19 Send-MgUserMail";               erw = "DENY"; tool = "PowerShell"; cmd = "Send-MgUserMail -UserId me -BodyParameter `$p" }
+    @{ n = "20 Wort mail im Text frei";        erw = "PASS"; tool = "Bash";       cmd = "grep -n mail 10_System/Technik.md" }
 )
 
 function Ruf($skript, $fall, $exe) {

@@ -38,7 +38,7 @@
         ]
       },
       {
-        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*javascript.*",
+        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*(javascript|browser_batch|navigate).*",
         "hooks": [
           {
             "type": "command",

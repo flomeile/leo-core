@@ -221,6 +221,18 @@ Pruef "54e NurProfil: Projektdatei unberuehrt" ([string]((Get-DateiPruefsumme (J
 Add-Content -LiteralPath (Join-Path $mini '00_INDEX/scripts/guard-read.ps1') -Value 'exit 0 # gelockert'
 $r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`""
 Pruef "55 Profil: Aenderung im Repo bleibt draussen" ([string]((Get-Content -LiteralPath (Join-Path $po.kopie '00_INDEX/scripts/guard-read.ps1') -Raw) -notmatch 'gelockert')) "True"
+# Vierte Pruefung von 6.0: Eine Freigabe, die der Agent in die Liste im Repo schreibt, gelangt nie in eine bestehende Kopie.
+$listeKopie = Join-Path $po.kopie '00_INDEX/freigegebene-pfade.txt'
+$listeRepo = Join-Path $mini '00_INDEX/freigegebene-pfade.txt'
+$repoAlt = if (Test-Path -LiteralPath $listeRepo) { [System.IO.File]::ReadAllText($listeRepo) } else { $null }
+$kopieAlt = if (Test-Path -LiteralPath $listeKopie) { [System.IO.File]::ReadAllText($listeKopie) } else { $null }
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $listeKopie) | Out-Null
+[System.IO.File]::WriteAllText($listeKopie, "# Liste des Besitzers`r`n", $utf8)
+[System.IO.File]::WriteAllText($listeRepo, "# Liste des Besitzers`r`nlesen-und-schreiben: C:\Users`r`n", $utf8)
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`" -NurProfil"
+Pruef "55b Profil: Freigabe aus dem Repo bleibt draussen" ([string]([System.IO.File]::ReadAllText($listeKopie) -notmatch 'C:\\Users')) "True"
+if ($null -eq $repoAlt) { Remove-Item -LiteralPath $listeRepo -Force } else { [System.IO.File]::WriteAllText($listeRepo, $repoAlt, $utf8) }
+if ($null -eq $kopieAlt) { Remove-Item -LiteralPath $listeKopie -Force } else { [System.IO.File]::WriteAllText($listeKopie, $kopieAlt, $utf8) }
 # Ein Tag, der lokal auf einen anderen Commit zeigt als auf der Quelle: keine Erneuerung.
 $fremdQ = Join-Path $tmp 'Quelle anders'
 $ErrorActionPreference = 'Continue'

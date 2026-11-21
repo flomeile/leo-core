@@ -232,7 +232,17 @@ $ti   = $in.tool_input
 
 # --- 1) Dateiwerkzeuge: der Zielpfad steht direkt im Aufruf -------------------
 if ($tool -in @("Write", "Edit", "NotebookEdit", "MultiEdit")) {
-    $target = Resolve-TargetPath ([string]$ti.file_path) ([string]$in.cwd)
+    # NotebookEdit meldet sein Ziel als notebook_path (seit der vierten Pruefung von 6.0; vorher galt jedes Notebook
+    # als erlaubt, weil file_path leer war).
+    $roh = [string]$ti.file_path
+    if (-not $roh) { $roh = [string]$ti.notebook_path }
+    $target = Resolve-TargetPath $roh ([string]$in.cwd)
+    # Ein Ziel, das sich nicht pruefen laesst, wird nicht geschrieben (vorher: durchgelassen).
+    if ($roh -and -not $target) { Write-Decision "deny" ("Schreiben gesperrt: Der Zielpfad '" + $roh + "' laesst sich nicht pruefen. Nenne einen gewoehnlichen absoluten Pfad im Arbeitsbereich.") }
+    # Der Schalter, der alle Hooks abschaltet (disableAllHooks), gehoert in keine Einstellungsdatei, die der Agent
+    # schreibt: In einer Projektdatei schaltete er ohne Haertung die Sperren fuer jede Session in diesem Projekt ab.
+    $inhalt = (@($ti.content, $ti.new_string, $ti.new_source) + @(@($ti.edits) | ForEach-Object { if ($_) { $_.new_string } }) | Where-Object { $_ }) -join "`n"
+    if ($inhalt -match '(?i)disableAllHooks') { Write-Decision "deny" ("Schreiben gesperrt: '" + $target + "' wuerde disableAllHooks setzen und damit die Sperren abschalten. " + $immerGrund) }
     if (Test-PolicyDatei $target) {
         Write-Decision "deny" ("Schreiben gesperrt: " + $target + ". " + $policyGrund)
     }
@@ -257,6 +267,26 @@ if ($tool -in @("Bash", "PowerShell")) {
     # Agent ausloest, bestaetigt der Besitzer sonst womoeglich, ohne zu wissen, wofuer.
     if ($cmd -match '(?i)(Start-Process[^\r\n;|]*-Verb\s*[''"]?RunAs|\bsudo\b|\bgsudo\b|\brunas(\.exe)?\s|\bdoas\b|with\s+administrator\s+privileges|\bpkexec\b)') {
         Write-Decision "deny" "Gesperrt: Der Befehl wuerde Administratorrechte anfordern (Benutzerkontensteuerung, sudo, runas). Ein Agent fordert nie selbst erhoehte Rechte an, auch nicht auf Wunsch von [NAME] (AGENTS.md Abschnitt 18). Braucht eine Aufgabe Adminrechte, sag ihm in ein, zwei Saetzen, wozu, und gib ihm den Befehl in einem Codeblock, den er selbst in seinem eigenen Fenster ausfuehrt. Erinnere ihn dabei an die Regel: nie eine Abfrage der Benutzerkontensteuerung oder ein Passwortfenster bestaetigen, das er nicht selbst ausgeloest hat."
+    }
+    # Die Einstellungen von Claude Code und die Kopie der Sperren, unabhaengig vom Befehl (seit der vierten Pruefung
+    # von 6.0): Die Liste der Schreibverben unten kennt python -c, node -e, robocopy und Verwandte nicht, und ein
+    # einziger solcher Aufruf mit dem Pfad im Klartext trug die Sperren fuer alle Projekte aus. Gesperrt ist jedes
+    # Segment, das einen dieser Orte oder disableAllHooks nennt und nicht mit einem reinen Lesebefehl beginnt.
+    $cmdS = Expand-BekannteVariablen $cmd
+    $schutzRx = @('(?i)disableAllHooks')
+    foreach ($g in $immerGesperrt) {
+        if (-not $g) { continue }
+        $schutzRx += ('(?i)' + ([regex]::Escape(($g -replace '\\', '/')) -replace '/', '[\\/]+'))
+    }
+    $schutzRx += '(?i)\.leo-sperren'
+    $schutzRx += $policyRx
+    $leser = '(?i)^\s*(?:git\s+(?:log|show|diff|status|blame|grep|ls-files|commit)|cat|type|gc|get-content|head|tail|less|more|select-string|sls|grep|rg|findstr|test-path|get-item|gi|get-childitem|gci|ls|dir|wc|jq|get-filehash|sha256sum|code|notepad\+\+)(?:\.exe)?(?=\s|$)'
+    foreach ($seg in [regex]::Split($cmdS, '\r?\n|;|&&|\|\||\|')) {
+        foreach ($rx in $schutzRx) {
+            if ($seg -match $rx -and $seg -notmatch $leser) {
+                Write-Decision "deny" ("Gesperrt: Der Befehl beruehrt die Einstellungen von Claude Code oder die Kopie der Sperren und beginnt nicht mit einem reinen Lesebefehl. " + $immerGrund)
+            }
+        }
     }
     if (Test-FreigebenAufruf $cmd 'sperre-haerten\.ps1') {
         Write-Decision "deny" ("Gesperrt: sperre-haerten.ps1 fuehrt nur [NAME] selbst aus, in seinem eigenen Fenster, weil es Administratorrechte braucht und er sie dort bewusst bestaetigt (AGENTS.md Abschnitt 18). Erklaer ihm in ein, zwei Saetzen, was die Haertung bewirkt, und gib ihm den Befehl in einem Codeblock, mit vollem Pfad: " + $(if ($isWindowsHost) { 'powershell -NoProfile -ExecutionPolicy Bypass -File "' } else { 'sudo pwsh -NoProfile -File "' }) + (Join-Path (Join-Path (Join-Path $repo '00_INDEX') 'scripts') 'sperre-haerten.ps1') + '"')
