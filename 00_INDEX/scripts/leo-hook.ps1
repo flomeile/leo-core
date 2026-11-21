@@ -30,6 +30,17 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+
+# Unvollstaendige Kopie (seit 6.0, Zweitpruefung): Statt mit einem Ladefehler zu enden, sperrt der Verteiler mit
+# einer Meldung, die sagt, wie die Kopie heilt. Exit 2 zeigt Claude Code die Meldung als Sperrgrund an.
+$teile = @('lib\arbeitsbereich.ps1', 'lib\schutzliste.ps1', 'lib\eingehaengt-ausschluss.ps1', 'guard-read.ps1', 'guard-workspace.ps1', 'guard-git.ps1', 'guard-mail.ps1', 'guard-fremdsysteme.ps1', 'guard-extern.ps1')
+$fehlt = @($teile | Where-Object { -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot ($_ -replace '\\', [string][System.IO.Path]::DirectorySeparatorChar))) })
+if ($fehlt.Count -gt 0) {
+    $imSystem = $PSScriptRoot -notmatch '[\\/]\.leo-sperren[\\/]'
+    $weg = if ($imSystem) { 'Der Besitzer fuehrt sperre-haerten.ps1 in seinem eigenen Fenster erneut aus (Adminrechte).' } else { "Claude Code neu starten: Der Sessionstart stellt die Kopie ohne Netz wieder her. Sonst fuehrt der Besitzer in seinem eigenen Fenster aus: powershell -NoProfile -ExecutionPolicy Bypass -File `"$Repo\00_INDEX\scripts\hooks-einrichten.ps1`" -NurProfil" }
+    [Console]::Error.WriteLine("Die Kopie der Sperren ist unvollstaendig (" + ($fehlt -join ', ') + " fehlt in $PSScriptRoot). Bis sie repariert ist, bleibt jeder Werkzeugaufruf gesperrt, absichtlich. $weg Sag das der Person in zwei Saetzen; du kannst es nicht selbst beheben.")
+    exit 2
+}
 . (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
 
 $kind = (Normalize-AbsolutePath $Repo)

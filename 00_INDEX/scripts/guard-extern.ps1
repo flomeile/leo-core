@@ -32,6 +32,21 @@ $gesperrt = @(
     'create_file', 'update_file', 'copy_file'                         # Drive: in Google schreiben
 )
 
+# Seit der Zweitpruefung von 6.0 zaehlt nicht nur die genaue Endung: Connectoren nennen dasselbe Werkzeug
+# verschieden (slack_send_message, gmail_send_email, sendMessage). Gesperrt ist deshalb jede Endung, die eines
+# dieser Woerter enthaelt (Woerter getrennt an _ und an Grossbuchstaben), dazu weitere Wirkungen nach aussen.
+$sperrWoerter = @('send', 'reply', 'forward', 'trash', 'delete', 'spam', 'share')
+$gesperrtZusatz = @('request_access', 'create_shared_drive', 'update_shared_drive', 'move_file')
+# Werkzeuge der Desktop-App selbst (Sitzungen, Seitenleiste, geplante Aufgaben) wirken nicht nach aussen; fuer sie
+# gilt nur die genaue Liste oben, nicht die Wortregel.
+function Test-Gesperrt([string]$endung, [string]$server = '') {
+    if ($gesperrt -contains $endung -or $gesperrtZusatz -contains $endung) { return $true }
+    if ($server -match '^(ccd_.*|scheduled-tasks)$') { return $false }
+    $woerter = @((($endung -creplace '([a-z0-9])([A-Z])', '$1_$2').ToLower()) -split '[_\-]+' | Where-Object { $_ })
+    foreach ($w in $woerter) { if ($sperrWoerter -contains $w) { return $true } }
+    return $false
+}
+
 function Write-Deny([string]$reason) {
     @{ hookSpecificOutput = @{ hookEventName = 'PreToolUse'; permissionDecision = 'deny'; permissionDecisionReason = $reason } } | ConvertTo-Json -Depth 5 -Compress
     exit 0
@@ -45,7 +60,8 @@ try {
     $tool = [string]($raw | ConvertFrom-Json).tool_name
     if ($tool -notmatch '^mcp__') { exit 0 }
     $suffix = ($tool -split '__')[-1]
-    if ($gesperrt -notcontains $suffix) { exit 0 }
+    $server = [string](($tool -split '__')[1])
+    if (-not (Test-Gesperrt $suffix $server)) { exit 0 }
 
     $datei = Join-Path (Split-Path -Parent $PSScriptRoot) 'extern-freigaben.txt'
     if (Test-Path -LiteralPath $datei) {
@@ -55,6 +71,6 @@ try {
     $befehl = 'powershell -NoProfile -ExecutionPolicy Bypass -File "<Repo>\00_INDEX\scripts\freigeben.ps1" -Werkzeug ' + $suffix
     Write-Deny ("Wirkung nach aussen gesperrt: '" + $suffix + "' versendet, loescht, teilt oder schreibt in einem externen System, und das ist nicht rueckrollbar (AGENTS.md Abschnitt 16). Schreiben in Google und vergleichbare Dienste laeuft nur ueber ein Werkzeug mit Freigabefenster; nennt eine eingehaengte Firmenschicht eines (README.md, schutzliste.txt), nimm es. Sonst sag [NAME] in zwei Saetzen, was du tun wolltest. Will er dieses Werkzeug dauerhaft erlauben, fuehrt nur er selbst in seinem eigenen Fenster aus (Repo-Pfad einsetzen): " + $befehl + " . Du schreibst die Freigabeliste nie und suchst keinen anderen Weg.")
 } catch {
-    if ($gesperrt -contains $suffix) { Write-Deny ("Die Connector-Sperre konnte den Aufruf nicht pruefen (" + $_.Exception.Message + ") und sperrt deshalb '" + $suffix + "'.") }
+    if ($suffix -and (Test-Gesperrt $suffix ([string](($tool -split '__')[1])))) { Write-Deny ("Die Connector-Sperre konnte den Aufruf nicht pruefen (" + $_.Exception.Message + ") und sperrt deshalb '" + $suffix + "'.") }
     exit 0
 }

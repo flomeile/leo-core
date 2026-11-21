@@ -300,6 +300,47 @@ $r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimM`" -Quelle `"$mini
 Pruef "67 Mitten im Update: Grund genannt" ([string]($r.out -match 'Update noch nicht abgeschlossen')) "True"
 [System.IO.File]::WriteAllText((Join-Path $mini 'MEIN-SYSTEM.md'), "| Eingespielte Version | 6.0 |`n", $utf8)
 
+# --- Notausgang: unvollstaendige oder fehlende Kopie heilt ohne Netz (seit 6.0, Zweitpruefung) -------------
+$usE = Get-Content -LiteralPath $poE.settings -Raw -Encoding UTF8 | ConvertFrom-Json
+$rep = @(@($usE.hooks.SessionStart) | ForEach-Object { @($_.hooks) } | Where-Object { [string]$_.command -match '-Reparatur -Stand [0-9a-f]{40} -Version 6\.0' })
+Pruef "68 Reparatur-Eintrag beim Sessionstart" $rep.Count "1"
+$null = [string]$rep[0].command -match '-File "([^"]+)" (.*)$'
+$repSkript = $matches[1]; $repArg = $matches[2]
+$vpE = Join-Path (Join-Path (Join-Path $poE.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
+Remove-Item -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/lib/schutzliste.ps1') -Force
+$r = Starte $vpE "-Repo `"$mini`" -Skript guard-read" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "69 Unvollstaendige Kopie: Exit 2 mit Weg" ([string]($r.code -eq 2 -and $r.out -match 'unvollstaendig' -and $r.out -match 'neu starten')) "True"
+$r = Starte $repSkript $repArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "70 Reparatur ohne Netz: wiederhergestellt" ([string]($r.out -match 'wiederhergestellt' -and (Test-Path -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/lib/schutzliste.ps1')))) "True"
+$r = Starte $vpE "-Repo `"$mini`" -Skript guard-read" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "71 Danach: git status wieder frei" ([string]($r.code -eq 0 -and (Urteil $r) -eq 'PASS')) "True"
+Remove-Item -LiteralPath $poE.kopie -Recurse -Force
+$r = Starte $repSkript $repArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "72 Ganze Kopie geloescht: wiederhergestellt" ([string]((Test-Path -LiteralPath $vpE) -and $r.out -match 'wiederhergestellt')) "True"
+$r = Starte $repSkript $repArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "73 Vollstaendige Kopie: Reparatur schweigt" ([string]([string]::IsNullOrWhiteSpace($r.out))) "True"
+Remove-Item -LiteralPath $poE.kopie -Recurse -Force
+$r = Starte $repSkript $repArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "74 Im Kind selbst: Reparatur ueberlaesst es der Versionspruefung" ([string](Test-Path -LiteralPath $vpE)) "False"
+$offline = Join-Path $tmp 'gibt es nicht.git'
+$r = Starte $miniVc "-Hook SessionStart -Quelle `"$offline`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimE`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "75 Sessionstart ohne Netz: Kopie aus geprueftem Stand" ([string]((Test-Path -LiteralPath $vpE) -and $r.out -notmatch 'stehen auf diesem Rechner nicht')) "True"
+$heimO = Join-Path $tmp 'Heim offline'
+$r = Starte $miniVc "-Hook SessionStart -Quelle `"$offline`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimO`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "76 Erstes Einrichten ohne Netz: Meldung statt Stille" ([string]($r.out -match 'stehen auf diesem Rechner nicht')) "True"
+# Notausgang aus ANLEITUNG.md (Teil 5, Schritt 7c), gegen eine Kopie der Testeinstellungen: entfernt nur die Eintraege
+# der Sperren, fremde Eintraege bleiben, und die Datei bleibt gueltiges JSON ohne BOM.
+$notPfad = Join-Path $tmp 'notausgang-settings.json'
+Copy-Item -LiteralPath $poE.settings -Destination $notPfad
+$j0 = Get-Content -LiteralPath $notPfad -Raw | ConvertFrom-Json
+$j0.hooks.PreToolUse = @(@($j0.hooks.PreToolUse) + [pscustomobject]@{ matcher = 'Bash'; hooks = @([pscustomobject]@{ type = 'command'; command = 'echo eigener' }) })
+[System.IO.File]::WriteAllText($notPfad, ($j0 | ConvertTo-Json -Depth 30), $utf8)
+$notBefehl = '$p = "' + $notPfad + '"; $j = Get-Content $p -Raw | ConvertFrom-Json; foreach ($e in ''PreToolUse'',''SessionStart'') { if ($j.hooks.$e) { $j.hooks.$e = @($j.hooks.$e | Where-Object { -not ($_.hooks.command -match ''leo-sperren|-Reparatur -Stand'') }) } }; [IO.File]::WriteAllText($p, ($j | ConvertTo-Json -Depth 30))'
+$ErrorActionPreference = 'Continue'; & $psExe -NoProfile -Command $notBefehl 2>&1 | Out-Null; $ErrorActionPreference = 'Stop'
+$j1 = Get-Content -LiteralPath $notPfad -Raw | ConvertFrom-Json
+$roh = [System.IO.File]::ReadAllBytes($notPfad)
+Pruef "77 Notausgang: nur eigener Hook bleibt" ([string]((@($j1.hooks.PreToolUse).Count -eq 1) -and ([string]@($j1.hooks.PreToolUse)[0].hooks[0].command -eq 'echo eigener') -and (@($j1.hooks.SessionStart | Where-Object { $_ }).Count -eq 0) -and $roh[0] -ne 0xEF)) "True"
+
 # --- Nur der Besitzer, nie aus einer Session -------------------------------------------------------
 $r = Starte $haerten "" "j`n"
 # Im Repo des Herausgebers (Release-Gate gesetzt) bricht es schon davor ab, mit Exit 3.

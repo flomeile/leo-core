@@ -10,8 +10,8 @@
 #   werkzeug: <pfad im Repo>           das Werkzeug mit Freigabefenster, ueber das geschrieben werden darf
 # Schluessel selbst liegen nie in einem Repo, nur ihr Dateiname steht hier.
 # Gelesen wird die Fassung auf GitHub (upstream, sonst origin; Zweig HEAD, main oder master), nicht die
-# Arbeitskopie: Was der Agent im Ordner aendert, lockert die Liste nicht. Nur wenn diese Fassung lokal
-# fehlt (noch nie abgeglichen), gilt die Datei im Ordner.
+# Arbeitskopie: Was der Agent im Ordner aendert, lockert die Liste nicht. Die Datei im Ordner kann sie nur
+# verschaerfen (ihre Adressen und Schluessel gelten zusaetzlich, ihre Werkzeuge nie).
 #
 # FIRMENSCHICHT: Setzt eine Organisation in ihrer zentralen Richtlinie die Umgebungsvariable
 # LEO_FIRMENSCHICHT (Adresse oder organisation/repo), muss dieses Repo eingehaengt sein (AGENTS.md
@@ -62,21 +62,22 @@ function ConvertFrom-SchutzlisteText([string]$text) {
     return $e
 }
 
-function Read-SchutzlisteText([string]$ordner) {
+# Die Fassung der Schutzliste auf GitHub (Remote-Stand upstream, sonst origin; HEAD, main oder master).
+# $null, wenn das Repo noch nie abgeglichen wurde (kein Remote-Stand); '' bei Stand ohne Datei.
+function Read-SchutzlisteRemote([string]$ordner) {
     $remote = if (Invoke-SchutzGit $ordner @('remote', 'get-url', 'upstream')) { 'upstream' } else { 'origin' }
     foreach ($ref in @("$remote/HEAD", "$remote/main", "$remote/master")) {
         $t = Invoke-SchutzGit $ordner @('show', ($ref + ':schutzliste.txt'))
         if ($null -ne $t) { return $t }
         if ($null -ne (Invoke-SchutzGit $ordner @('rev-parse', '--verify', '--quiet', $ref))) { return '' }
     }
-    $datei = Join-Path $ordner 'schutzliste.txt'
-    if (Test-Path -LiteralPath $datei) { return [System.IO.File]::ReadAllText($datei) }
-    return ''
+    return $null
 }
 
 function Get-SchutzStand([string]$repo, [switch]$Frisch) {
     $slug = ($repo -replace '[^A-Za-z0-9]', '-').Trim('-')
-    $datei = Join-Path $schutzCacheOrdner ($slug + '.json')
+    # -v2: seit der Zweitpruefung von 6.0 tragen die Werkzeuge ihren vollen Pfad und die Repos den Abgleich.
+    $datei = Join-Path $schutzCacheOrdner ($slug + '-v2.json')
     if (-not $Frisch -and (Test-Path -LiteralPath $datei)) {
         try {
             $alter = ((Get-Date) - (Get-Item -LiteralPath $datei).LastWriteTime).TotalMinutes
@@ -90,11 +91,20 @@ function Get-SchutzStand([string]$repo, [switch]$Frisch) {
     foreach ($o in @(Get-EingehaengteOrdner $repo)) {
         $url = Invoke-SchutzGit $o @('remote', 'get-url', 'upstream')
         if (-not $url) { $url = Invoke-SchutzGit $o @('remote', 'get-url', 'origin') }
-        $stand.repos += [pscustomobject]@{ pfad = [string]$o; quelle = (Get-RepoKurzname $url) }
-        $l = ConvertFrom-SchutzlisteText (Read-SchutzlisteText $o)
-        $stand.adressen += $l.adressen
-        $stand.schluessel += $l.schluessel
-        $stand.werkzeuge += $l.werkzeuge
+        $fern = Read-SchutzlisteRemote $o
+        $stand.repos += [pscustomobject]@{ pfad = [string]$o; quelle = (Get-RepoKurzname $url); abgeglichen = ($null -ne $fern) }
+        # Die Datei im Ordner kann die Liste nur verschaerfen: Adressen und Schluessel aus ihr gelten zusaetzlich,
+        # Werkzeuge (der Durchlass) nur aus der Fassung auf GitHub. Ein Werkzeug gilt mit seinem vollen Pfad
+        # im eingehaengten Repo, nicht ueber das Ende eines beliebigen Pfads.
+        $datei1 = Join-Path $o 'schutzliste.txt'
+        $lokal = if (Test-Path -LiteralPath $datei1) { ConvertFrom-SchutzlisteText ([System.IO.File]::ReadAllText($datei1)) } else { ConvertFrom-SchutzlisteText '' }
+        $l = ConvertFrom-SchutzlisteText ([string]$fern)
+        $stand.adressen += @($l.adressen) + @($lokal.adressen)
+        $stand.schluessel += @($l.schluessel) + @($lokal.schluessel)
+        foreach ($w in @($l.werkzeuge)) {
+            if (-not $w -or $w -match '(^|/)\.\.(/|$)' -or $w -match '^([A-Za-z]:|/)') { continue }
+            try { $stand.werkzeuge += (([System.IO.Path]::GetFullPath((Join-Path $o $w))) -replace '\\', '/') } catch { }
+        }
     }
     try {
         New-Item -ItemType Directory -Force -Path $schutzCacheOrdner | Out-Null
@@ -110,6 +120,8 @@ function Get-FirmenschichtSoll { return (Get-RepoKurzname ([string]$env:LEO_FIRM
 function Test-FirmenschichtFehlt($stand) {
     $soll = Get-FirmenschichtSoll
     if (-not $soll) { return $false }
-    foreach ($r in @($stand.repos)) { if ([string]$r.quelle -eq $soll) { return $false } }
+    # Eingehaengt heisst: ein Klon mit Remote-Stand, nicht nur ein Ordner mit passender Adresse (git init plus
+    # remote add genuegt nicht).
+    foreach ($r in @($stand.repos)) { if ([string]$r.quelle -eq $soll -and $r.abgeglichen -eq $true) { return $false } }
     return $true
 }

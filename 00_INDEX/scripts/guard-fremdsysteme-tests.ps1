@@ -44,6 +44,15 @@ $nested = Join-Path (Join-Path $kind '20_Team') 'fachagent'
 G clone -q $fern $nested
 # Lokal wird die Schutzliste geleert: Massgeblich bleibt die Fassung auf dem Ersatz fuer GitHub.
 [System.IO.File]::WriteAllText((Join-Path $nested 'schutzliste.txt'), "# lokal geleert`n", $utf8)
+# Seit der Zweitpruefung von 6.0: ein eingehaengtes Repo ohne Abgleich, dessen lokale Schutzliste einen
+# Durchlass eintragen will, und eine Attrappe der Firmenschicht (git init plus remote add, ohne Klon).
+$lokal = Join-Path $kind '40_Lokal'
+G init -q -b main $lokal
+New-Item -ItemType Directory -Force -Path (Join-Path $lokal 'tools') | Out-Null
+[System.IO.File]::WriteAllText((Join-Path $lokal 'schutzliste.txt'), "werkzeug: tools/frei.py`nadresse: lokal.example.org`n", $utf8)
+$attrappe = Join-Path $kind '50_Attrappe'
+G init -q -b main $attrappe
+G -C $attrappe remote add origin https://github.com/beispiel-org/attrappe.git
 $scratch = Join-Path (Join-Path $temp 'claude') 'guard-fremd-tests'
 $heim = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
 $fsKurz = ((Split-Path -Leaf $b) + '/fachagent').ToLower()
@@ -115,6 +124,24 @@ Pruef '39 .netrc ins Repo'                    (Ruf 'Write' (W (Join-Path $kind '
 Pruef '40 Commit-Botschaft nennt Adresse'     (Ruf 'Bash' (B 'git commit -m "Sperre fuer googleapis.com erweitert" -- notiz.md')) 'PASS'
 Pruef '41 Mailwerkzeug des Kerns starten'     (Ruf 'Bash' (B 'python 00_INDEX/scripts/lib/gmail-senden.py --an a@example.org --betreff x --text-datei y.txt')) 'PASS'
 Pruef '42 Wort mit sk- ist kein Schluessel'   (Ruf 'Write' (W (Join-Path $kind 'z.md') ('task-' + ('a' * 40)))) 'PASS'
+# Seit der Zweitpruefung von 6.0: Schreibmerkmale ohne Leerzeichen, abgekuerzte Parameter, weitere Dienste,
+# der Durchlass nur fuer das echte Werkzeug, lokale Schutzliste nur verschaerfend; dazu Kontrollen gegen Fehlsperren.
+Pruef '43 curl -d@datei'                      (Ruf 'Bash' (B 'curl -d@daten https://api.notion.com/v1/pages')) 'DENY'
+Pruef '44 curl -d''{json}'' ohne Leerzeichen' (Ruf 'Bash' (B "curl -d'{`"a`":1}' https://api.notion.com/v1/pages")) 'DENY'
+Pruef '45 curl -Ffile=@x'                     (Ruf 'Bash' (B 'curl -Ffile=@x https://content.dropboxapi.com/2/files/upload')) 'DENY'
+Pruef '46 irm -Met Post -Bo (abgekuerzt)'     (Ruf 'PowerShell' (B 'Invoke-RestMethod https://api.notion.com/v1/pages -Met Post -Bo $b')) 'DENY'
+Pruef '47 irm GET mit -TimeoutSec lesen'      (Ruf 'PowerShell' (B 'Invoke-RestMethod -Uri https://api.notion.com/v1/pages/x -TimeoutSec 10 -Headers $h')) 'PASS'
+Pruef '48 iwr GET mit -OutFile -Force lesen'  (Ruf 'PowerShell' (B 'Invoke-WebRequest https://api.notion.com/v1/pages/x -OutFile a.json -Force')) 'PASS'
+Pruef '49 urllib Request(url, data)'          (Ruf 'Bash' (B "python -c `"import urllib.request as u; u.urlopen(u.Request('https://api.notion.com/v1/pages', b'{}'))`"")) 'DENY'
+Pruef '50 urllib Request mit headers lesen'   (Ruf 'Bash' (B "python -c `"import urllib.request as u; print(u.urlopen(u.Request('https://api.notion.com/v1/x', headers={'a': 'b'})).read())`"")) 'PASS'
+Pruef '51 SharePoint REST POST'               (Ruf 'Bash' (B 'curl -X POST https://firma.sharepoint.com/_api/web/lists -d x')) 'DENY'
+Pruef '52 Teams-Webhook POST'                 (Ruf 'Bash' (B 'curl -X POST https://firma.webhook.office.com/webhookb2/x -d x')) 'DENY'
+Pruef '53 Google-Formular absenden'           (Ruf 'Bash' (B 'curl -X POST https://docs.google.com/forms/d/e/x/formResponse -d entry.1=x')) 'DENY'
+Pruef '54 Werkzeug-Attrappe gleiches Ende'    (Ruf 'Bash' (B "python `"$scratch\tools\erp.py`" --data x https://erp.example.org")) 'DENY'
+Pruef '55 Werkzeug relativ zum Arbeitsordner' (Ruf 'Bash' (B 'python 20_Team/fachagent/tools/erp.py --data x https://erp.example.org')) 'PASS'
+Pruef '56 lokale Schutzliste: kein Durchlass' (Ruf 'Bash' (B "python `"$lokal\tools\frei.py`" --data x https://api.notion.com/v1/pages")) 'DENY'
+Pruef '57 lokale Schutzliste verschaerft'     (Ruf 'Bash' (B 'curl -X POST https://lokal.example.org/x')) 'DENY'
+Pruef '58 Firmenschicht-Attrappe ohne Klon'   (Ruf 'Write' (W (Join-Path $kind 'x.md') 'x') @{ LEO_FIRMENSCHICHT = 'beispiel-org/attrappe' }) 'DENY'
 $pflicht = @{ LEO_FIRMENSCHICHT = 'https://github.com/beispiel-org/firmenschicht' }
 Pruef '19 Firmenschicht fehlt: Datei schreiben' (Ruf 'Write' (W (Join-Path $kind 'x.md') 'x') $pflicht) 'DENY'
 Pruef '20 Firmenschicht fehlt: 00_INDEX frei' (Ruf 'Write' (W (Join-Path (Join-Path $kind '00_INDEX') 'x.md') 'x') $pflicht) 'PASS'

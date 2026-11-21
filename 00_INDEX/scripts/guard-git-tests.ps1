@@ -100,6 +100,40 @@ $faelle = @(
     @{ n = '40 bash -c gh pr merge';           erw = 'DENY'; cwd = $kind;   cmd = "bash -c 'gh pr merge 3'" }
     @{ n = '41 cmd /c push fremd';             erw = 'DENY'; cwd = $kind;   cmd = "cmd /c `"git -C $fremd push origin main`"" }
     @{ n = '42 iex gh pr merge';               erw = 'DENY'; cwd = $kind;   cmd = 'iex "gh pr merge 3"' }
+    # Seit der Zweitpruefung von 6.0: Push auf eine Adresse, gh api am Pull Request vorbei, Umwege und Gleichwerte.
+    @{ n = '43 eigen: Push auf URL main';      erw = 'DENY'; cwd = $kind;   cmd = 'git push https://github.com/beispiel/fremd.git HEAD:main' }
+    @{ n = '44 eigen: Push auf ssh-Adresse';   erw = 'DENY'; cwd = $kind;   cmd = 'git push git@example.org:beispiel/x.git HEAD:refs/heads/y' }
+    @{ n = '45 eigen: --repo=URL';             erw = 'DENY'; cwd = $kind;   cmd = 'git push --repo=https://example.org/x.git' }
+    @{ n = '46 fremd: Push auf Pfad';          erw = 'DENY'; cwd = $fremd;  cmd = 'git push ../anderes feature/x' }
+    @{ n = '47 eigen: Remote als Variable';    erw = 'PASS'; cwd = $kind;   cmd = 'git push $ziel main' }
+    @{ n = '48 gh api PUT contents';           erw = 'DENY'; cwd = $kind;   cmd = 'gh api -X PUT repos/o/r/contents/a.md -f message=m -f content=eA==' }
+    @{ n = '49 gh api Feld auf git/refs';      erw = 'DENY'; cwd = $kind;   cmd = 'gh api repos/o/r/git/refs -f ref=refs/heads/x -f sha=abc' }
+    @{ n = '50 gh api merges';                 erw = 'DENY'; cwd = $kind;   cmd = 'gh api repos/o/r/merges -f base=main -f head=x' }
+    @{ n = '51 gh api GET contents';           erw = 'PASS'; cwd = $kind;   cmd = 'gh api repos/o/r/contents/a.md --jq .sha' }
+    @{ n = '52 gh api graphql Commit';         erw = 'DENY'; cwd = $kind;   cmd = "gh api graphql -f query='mutation { createCommitOnBranch(input: {}) { commit { oid } } }'" }
+    @{ n = '53 gh api PATCH Issue';            erw = 'PASS'; cwd = $kind;   cmd = 'gh api -X PATCH repos/o/r/issues/3 -f state=closed' }
+    @{ n = '54 gh repo sync mit Repo';         erw = 'DENY'; cwd = $kind;   cmd = 'gh repo sync beispiel/fork --force' }
+    @{ n = '55 gh repo sync lokal';            erw = 'PASS'; cwd = $kind;   cmd = 'gh repo sync' }
+    @{ n = '56 env:GIT_DIR vor Push';          erw = 'DENY'; cwd = $kind;   cmd = "`$env:GIT_DIR='C:\x\.git'; git push origin main" }
+    @{ n = '57 GIT_DIR= vor Push';             erw = 'DENY'; cwd = $kind;   cmd = 'GIT_DIR=/tmp/x/.git git push origin main' }
+    @{ n = '58 -c alias push';                 erw = 'DENY'; cwd = $fremd;  cmd = 'git -c alias.p=push p origin main' }
+    @{ n = '59 config alias push';             erw = 'DENY'; cwd = $kind;   cmd = 'git config alias.p "push origin main"' }
+    @{ n = '60 -c user.name Themenzweig';      erw = 'PASS'; cwd = $fremdFeature; cmd = 'git -c user.name=x push origin feature/x' }
+    @{ n = '61 subtree push main fremd';       erw = 'DENY'; cwd = $fremd;  cmd = 'git subtree push --prefix=docs origin main' }
+    @{ n = '62 subtree push Themenzweig';      erw = 'PASS'; cwd = $fremd;  cmd = 'git subtree push --prefix=docs origin feature/y' }
+    @{ n = '63 send-pack';                     erw = 'DENY'; cwd = $kind;   cmd = 'git send-pack ../x main' }
+    @{ n = '64 git add ./';                    erw = 'DENY'; cwd = $kind;   cmd = 'git add ./' }
+    @{ n = '65 git add :/';                    erw = 'DENY'; cwd = $kind;   cmd = 'git add :/' }
+    @{ n = '66 git add *';                     erw = 'DENY'; cwd = $kind;   cmd = 'git add *' }
+    @{ n = '67 git stage -A';                  erw = 'DENY'; cwd = $kind;   cmd = 'git stage -A' }
+    @{ n = '68 git add -Av Buendel';           erw = 'DENY'; cwd = $kind;   cmd = 'git add -Av' }
+    @{ n = '69 git add -u bleibt frei';        erw = 'PASS'; cwd = $kind;   cmd = 'git add -u' }
+    @{ n = '70 git commit -am bleibt frei';    erw = 'PASS'; cwd = $kind;   cmd = 'git commit -am "x"' }
+    @{ n = '71 Botschaft mit Zeile add -A';    erw = 'PASS'; cwd = $kind;   cmd = "git commit -m `"Regel`ngit add -A ist gesperrt`"" }
+    @{ n = '72 bash -lc git add -A';           erw = 'DENY'; cwd = $kind;   cmd = "bash -lc 'git add -A'" }
+    @{ n = '73 fremd push --dry-run main';     erw = 'PASS'; cwd = $fremd;  cmd = 'git push --dry-run origin main' }
+    @{ n = '74 git add ./a.md';                erw = 'PASS'; cwd = $kind;   cmd = 'git add ./a.md' }
+    @{ n = '75 pwsh -c git add :/';            erw = 'DENY'; cwd = $kind;   cmd = 'pwsh -c "git add :/"' }
 )
 
 function Ruf($fall) {

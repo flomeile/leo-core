@@ -160,13 +160,21 @@ try {
             $marke = Join-Path $po.kopie 'version.txt'
             $kopieVersion = if (Test-Path -LiteralPath $marke) { ([System.IO.File]::ReadAllText($marke)).Trim() } else { '' }
             $he = Join-Path $PSScriptRoot 'hooks-einrichten.ps1'
-            if (-not (Test-Path -LiteralPath (Get-HaertungsOrt $root).dropin) -and (Test-Path -LiteralPath $he) -and ($frisch -or $kopieVersion -ne $eingespielt)) {
+            # Seit der Zweitpruefung von 6.0 auch, wenn der Kopie eine Datei fehlt, und mit Meldung, wenn die Sperren
+            # danach nicht stehen (vorher blieb das still, und der Agent arbeitete in anderen Projekten ungesperrt).
+            $unvollstaendig = @($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $po.kopie $_)) }).Count -gt 0
+            if (-not (Test-Path -LiteralPath (Get-HaertungsOrt $root).dropin) -and (Test-Path -LiteralPath $he) -and ($frisch -or $kopieVersion -ne $eingespielt -or $unvollstaendig)) {
                 $exe = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { 'powershell' } else { Join-Path $PSHOME 'pwsh' }
                 $zusatz = @()
                 if ($testHeim) { $zusatz = @('-Heim', $Heim, '-Quelle', $Quelle) }
                 $aus = & $exe -NoProfile -ExecutionPolicy Bypass -File $he -NurProfil @zusatz 2>&1 | Out-String
                 if ($aus -match 'Alle Projekte: Sperren aus Version [0-9.]+ eingerichtet \(') {
                     $zeilen.Add('Sperren fuer alle Projekte eingerichtet oder erneuert (ohne Modell, hooks-einrichten.ps1, AGENTS.md Abschnitt 18). Sag der Person in einer Zeile, dass sie ab dem naechsten Start von Claude Code auch in anderen Projekten gelten.')
+                }
+                $stehen = (Test-Path -LiteralPath $po.settings) -and ([System.IO.File]::ReadAllText($po.settings)).Contains((ConvertTo-Json $po.kopie).Trim('"')) -and (@($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $po.kopie $_)) }).Count -eq 0)
+                if (-not $stehen) {
+                    $grund = @(($aus -split "`r?`n") | Where-Object { $_ -match '^Alle Projekte:' } | Select-Object -First 1)
+                    $zeilen.Add('Die Sperren fuer alle Projekte stehen auf diesem Rechner nicht (' + $(if ($grund) { $grund[0].Trim() } else { 'Grund unbekannt' }) + '). In anderen Projekten arbeitet der Agent damit ohne Sperre. Sag es der Person in einer Zeile; der naechste Versuch kommt beim naechsten Sessionstart, mit Netz.')
                 }
             }
         } catch { }

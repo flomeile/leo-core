@@ -56,10 +56,18 @@ param(
     [string]$Quelle = 'https://github.com/flomeile/leo-core',
     [string]$System = '',
     [switch]$OhneProfil,
-    [switch]$NurProfil
+    [switch]$NurProfil,
+    [switch]$Reparatur,
+    [string]$Stand = '',
+    [string]$Version = ''
 )
 # -NurProfil (seit 6.0): nur die Sperren fuer alle Projekte, ohne die Projektdateien. So ruft es die
 # Versionspruefung beim Sessionstart auf, ohne Modell, hoechstens einmal je Tag (version-check.ps1).
+# -Reparatur -Stand <commit> -Version <X.Y> (seit 6.0, Zweitpruefung): der Sessionstart in JEDEM Projekt, aus den
+# persoenlichen Einstellungen. Fehlt in der Kopie der Sperren eine Datei, sperrt jeder Werkzeugaufruf in jedem
+# Projekt; dieser Aufruf stellt sie ohne Netz und ohne Modell wieder her, aus genau dem Commit, der beim
+# Einrichten auf GitHub geprueft wurde (er steht in den persoenlichen Einstellungen, die der Agent nicht schreiben
+# kann). Ist die Kopie vollstaendig, tut er nichts und sagt nichts.
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
@@ -198,6 +206,55 @@ function Get-GitBlob([string]$repoPfad, [string]$objekt) {
     return ,$ms.ToArray()
 }
 
+# Der beim Einrichten auf GitHub gepruefte Stand, wie er im Reparatur-Eintrag der persoenlichen Einstellungen
+# steht (dort kann der Agent nicht schreiben): @{ stand = <commit>; version = <X.Y> } oder $null.
+function Get-GespeicherterStand($prof) {
+    if (-not (Test-Path -LiteralPath $prof.settings)) { return $null }
+    try { $s = Get-Content -LiteralPath $prof.settings -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return $null }
+    if (-not $s.hooks -or -not $s.hooks.PSObject.Properties['SessionStart']) { return $null }
+    $heRx = [regex]::Escape((Join-Path (Join-Path (Join-Path $repo '00_INDEX') 'scripts') 'hooks-einrichten.ps1'))
+    foreach ($g in @($s.hooks.SessionStart)) {
+        foreach ($h in @($g.hooks)) {
+            $c = [string]$h.command
+            if ($c -match $heRx -and $c -match '-Reparatur\s+-Stand\s+([0-9a-f]{40})\s+-Version\s+([0-9]+\.[0-9]+)') { return @{ stand = $matches[1]; version = $matches[2] } }
+        }
+    }
+    return $null
+}
+
+# --- Reparatur beim Sessionstart in jedem Projekt (seit 6.0, Zweitpruefung) -------------------------------
+if ($Reparatur) {
+    $ErrorActionPreference = 'Stop'
+    $prof = Get-ProfilOrt $repo $Heim
+    try {
+        if ($env:CLAUDE_PROJECT_DIR -and (Test-PathWithin $env:CLAUDE_PROJECT_DIR $repo)) { exit 0 }
+        if (Test-Path -LiteralPath (Get-HaertungsOrt $repo $System).dropin) { exit 0 }
+        $fehlend = @($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $prof.kopie $_)) })
+        if ($fehlend.Count -eq 0) { exit 0 }
+        if ($Stand -notmatch '^[0-9a-f]{40}$') { throw 'kein gepruefter Stand im Reparatur-Eintrag' }
+        $blobs = @{}
+        foreach ($rel in $haertungsDateien) {
+            $inhalt = Get-GitBlob $repo ($Stand + ':' + $rel)
+            if ($null -eq $inhalt) { throw "$rel fehlt im Stand $Stand (Repo verschoben oder geloescht?)" }
+            $blobs[$rel] = $inhalt
+        }
+        foreach ($rel in $haertungsDateien) {
+            $ziel = Join-Path $prof.kopie $rel
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ziel) | Out-Null
+            [System.IO.File]::WriteAllBytes($ziel, $blobs[$rel])
+        }
+        foreach ($rel in $haertungsListen) {
+            $q = Join-Path $repo $rel
+            if (Test-Path -LiteralPath $q) { $ziel = Join-Path $prof.kopie $rel; New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ziel) | Out-Null; Copy-Item -LiteralPath $q -Destination $ziel -Force }
+        }
+        if ($Version) { [System.IO.File]::WriteAllText((Join-Path $prof.kopie 'version.txt'), $Version) }
+        "Die Kopie der Sperren fuer alle Projekte war unvollstaendig ($($fehlend -join ', ')) und ist ohne Netz aus dem beim Einrichten auf GitHub geprueften Stand $Version wiederhergestellt (hooks-einrichten.ps1 -Reparatur). Sag es der Person in einer Zeile."
+    } catch {
+        "Die Kopie der Sperren fuer alle Projekte ist unvollstaendig und liess sich nicht wiederherstellen ($($_.Exception.Message)). Bis dahin sperrt Claude Code jeden Werkzeugaufruf, in jedem Projekt. Sag der Person in zwei Saetzen, dass sie in ihrem eigenen PowerShell-Fenster mit Netz ausfuehrt: powershell -NoProfile -ExecutionPolicy Bypass -File `"$repo\00_INDEX\scripts\hooks-einrichten.ps1`" -NurProfil ; gibt es das Repo nicht mehr, steht der Notausgang in ANLEITUNG.md, Teil 5, Schritt 7c (Sperren aus den persoenlichen Einstellungen entfernen)."
+    }
+    exit 0
+}
+
 $fehlt = $false
 if ($NurProfil) { }
 elseif (Test-Path -LiteralPath $Datei) {
@@ -261,6 +318,12 @@ function Richte-Profil-Ein {
         if ($z -match ('^([0-9a-f]{40})\s+refs/tags/' + [regex]::Escape($tag) + '\^\{\}$')) { $fern = $matches[1] }
     }
     if (-not $fern) { foreach ($z in @($zeilen)) { if ($z -match ('^([0-9a-f]{40})\s+refs/tags/' + [regex]::Escape($tag) + '$')) { $fern = $matches[1] } } }
+    # Ohne Netz (seit 6.0, Zweitpruefung): Zeigt der lokale Tag auf genau den Commit, der beim letzten Einrichten
+    # auf GitHub geprueft wurde, gilt er als geprueft; so kann eine unvollstaendige Kopie auch offline heilen.
+    if ($lokal -and -not $fern) {
+        $gesp = Get-GespeicherterStand $prof
+        if ($gesp -and $gesp.version -eq $version -and $gesp.stand -eq $lokal) { $fern = $lokal }
+    }
     if (-not $lokal -or -not $fern -or $lokal -ne $fern) {
         $grund = if (-not $lokal) { "Tag $tag fehlt lokal" } elseif (-not $fern) { "Tag $tag auf dem Grundgeruest nicht erreichbar (kein Netz?)" } else { "Tag $tag zeigt lokal auf einen anderen Commit als auf dem Grundgeruest" }
         "Alle Projekte: Kopie der Sperren nicht erneuert ($grund). Die bisherige Kopie bleibt; naechster Versuch beim naechsten Aufruf."
@@ -325,7 +388,18 @@ function Richte-Profil-Ein {
     $denyAlt = @()
     if ($us.permissions.PSObject.Properties['deny']) { $denyAlt = @($us.permissions.deny) }
     $denyNeu = @($denyAlt + @($deny | Where-Object { $denyAlt -notcontains $_ }))
-    $einstellungNeu = ($vorherJson -ne $nachherJson) -or ($denyNeu.Count -ne $denyAlt.Count)
+    # Reparatur-Eintrag beim Sessionstart in jedem Projekt, mit dem gerade geprueften Commit (seit 6.0, Zweitpruefung).
+    $hePfad = Join-Path (Join-Path (Join-Path $repo '00_INDEX') 'scripts') 'hooks-einrichten.ps1'
+    $heRx = [regex]::Escape($hePfad)
+    $reparaturBefehl = $exe + ' "' + $hePfad + '" -NurProfil -Reparatur -Stand ' + $lokal + ' -Version ' + $version
+    if ($Heim) { $reparaturBefehl += ' -Heim "' + $Heim + '"' }
+    $ssAlt = @()
+    if ($us.hooks.PSObject.Properties['SessionStart']) { $ssAlt = @($us.hooks.SessionStart) }
+    $ssBehalten = @($ssAlt | Where-Object { -not (@($_.hooks) | Where-Object { [string]$_.command -match $heRx -and [string]$_.command -match '-Reparatur' }) })
+    $ssNeu = @($ssBehalten) + @([pscustomobject]@{ hooks = @([pscustomobject]@{ type = 'command'; timeout = 60; command = $reparaturBefehl }) })
+    $ssVorherJson = ConvertTo-Json @($ssAlt) -Depth 10 -Compress
+    $ssNachherJson = ConvertTo-Json @($ssNeu) -Depth 10 -Compress
+    $einstellungNeu = ($vorherJson -ne $nachherJson) -or ($denyNeu.Count -ne $denyAlt.Count) -or ($ssVorherJson -ne $ssNachherJson)
     if ($einstellungNeu) { $neu += $prof.settings }
     if ($neu.Count -eq 0) { "Alle Projekte: Sperren aus Version $version eingerichtet, nichts zu tun ($($prof.kopie))."; return $false }
     if ($Pruefen) { "Alle Projekte: fehlt noch:"; $neu | ForEach-Object { "  $_" }; return $true }
@@ -333,6 +407,8 @@ function Richte-Profil-Ein {
     else { $us.hooks | Add-Member -NotePropertyName PreToolUse -NotePropertyValue $nachher }
     if ($us.permissions.PSObject.Properties['deny']) { $us.permissions.deny = $denyNeu }
     else { $us.permissions | Add-Member -NotePropertyName deny -NotePropertyValue $denyNeu }
+    if ($us.hooks.PSObject.Properties['SessionStart']) { $us.hooks.SessionStart = $ssNeu }
+    else { $us.hooks | Add-Member -NotePropertyName SessionStart -NotePropertyValue $ssNeu }
     Schreibe-Json $us $prof.settings
     [System.IO.File]::WriteAllText((Join-Path $prof.kopie 'version.txt'), $version)
     "Alle Projekte: Sperren aus Version $version eingerichtet ($($prof.kopie), $($prof.settings)):"

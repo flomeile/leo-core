@@ -46,18 +46,24 @@ $grundAdressen = @(
     'api.dropboxapi.com', 'content.dropboxapi.com',
     'api.airtable.com', 'pyairtable',
     'app.asana.com/api', 'api.trello.com',
-    'api.hubapi.com', 'salesforce.com/services', 'simple_salesforce'
+    'api.hubapi.com', 'salesforce.com/services', 'simple_salesforce',
+    # Seit der Zweitpruefung von 6.0: SharePoint und OneDrive for Business (REST), Teams- und Power-Automate-
+    # Webhooks, Formulare von Google und Microsoft.
+    'sharepoint.com', 'webhook.office.com', 'logic.azure.com', 'api.powerplatform.com',
+    'docs.google.com/forms', 'forms.office.com'
 )
 # Schreibmerkmale. Die Kurzoptionen von curl und wget sind gross-klein-genau (-d schreibt, -D liest; -F
 # schreibt, -f liest), auch in einem Buendel wie -sSd; alles andere ohne Ruecksicht auf Gross-Klein.
-$schreibMerkmal = '(?i)(-X\s*["'']?(POST|PUT|PATCH|DELETE)\b|--request\s+["'']?(POST|PUT|PATCH|DELETE)\b|(^|\s)(?-i:-d|--data(-raw|-binary|-urlencode|-ascii)?|-F|--form(-string)?|--json|-T|--upload-file|--post-data|--post-file|--body-data|--body-file)(\s|=|$)|(^|\s)(?-i:-[A-Za-z]{1,3}[dFT])(\s|$)|--method=(POST|PUT|PATCH|DELETE)\b|-Method[\s:]+["'']?(Post|Put|Patch|Delete)\b|-Body\b|-InFile\b|(^|\s)(http|https|xh)\s+(POST|PUT|PATCH|DELETE)\b|\.(post|put|patch|delete)\s*\(|request\s*\(\s*["''](POST|PUT|PATCH|DELETE)|method\s*[:=]\s*["''](POST|PUT|PATCH|DELETE)|Upload(String|Data|File|Values)(Async)?\s*\(|Request\s*\([^)]*\bdata\s*=|\.(create|insert|update|patch|delete|batchUpdate|batch_update|append|append_row|append_rows|update_cell|update_cells|update_acell|values_update|values_append|values_clear|insert_row|insert_rows|delete_rows|add_worksheet|del_worksheet|share|clear|copy|move|trash|send|modify|add_task|update_task|close_task|delete_task|add_comment|create_page|chat_postMessage|files_upload|upload)\s*\()'
+# Seit der Zweitpruefung von 6.0 auch ohne Leerzeichen (-d@datei, -d'{...}', -Ffeld=@x), die abgekuerzten
+# PowerShell-Parameter (-Me Post, -Bo, -B) und urllib mit Daten als zweitem Argument.
+$schreibMerkmal = '(?i)(-X\s*["'']?(POST|PUT|PATCH|DELETE)\b|--request\s+["'']?(POST|PUT|PATCH|DELETE)\b|(^|\s)(?-i:-d|--data(-raw|-binary|-urlencode|-ascii)?|-F|--form(-string)?|--json|-T|--upload-file|--post-data|--post-file|--body-data|--body-file)(\s|=|$)|(^|\s)(?-i:-[A-Za-z]{1,3}[dFT])(\s|$)|(^|\s)(?-i:-[A-Za-z]{0,3}d)[@''"{\[]|(^|\s)(?-i:-d)[A-Za-z0-9_.]+=|(^|\s)(?-i:-F)[A-Za-z0-9_.\[\]-]+=|--method=(POST|PUT|PATCH|DELETE)\b|-Me(t(h(o(d)?)?)?)?[\s:]+["'']?(Post|Put|Patch|Delete)\b|-Body\b|-Bo(d)?(\s|:|$)|(^|\s)-B(\s|:)|-InF(i(l(e)?)?)?\b|\burlopen\s*\(\s*[^,()]+,\s*(?![A-Za-z_]+\s*=)[^)\s]|\bRequest\s*\(\s*[^,()]+,\s*(?![A-Za-z_]+\s*=)[^)\s]|(^|\s)(http|https|xh)\s+(POST|PUT|PATCH|DELETE)\b|\.(post|put|patch|delete)\s*\(|request\s*\(\s*["''](POST|PUT|PATCH|DELETE)|method\s*[:=]\s*["''](POST|PUT|PATCH|DELETE)|Upload(String|Data|File|Values)(Async)?\s*\(|Request\s*\([^)]*\bdata\s*=|\.(create|insert|update|patch|delete|batchUpdate|batch_update|append|append_row|append_rows|update_cell|update_cells|update_acell|values_update|values_append|values_clear|insert_row|insert_rows|delete_rows|add_worksheet|del_worksheet|share|clear|copy|move|trash|send|modify|add_task|update_task|close_task|delete_task|add_comment|create_page|chat_postMessage|files_upload|upload)\s*\()'
 $modulLaden = '(?i)(import_module|spec_from_file_location|SourceFileLoader|runpy|importlib)'
 # Ein Werkzeug aus einer Schutzliste gilt nur, wenn der Befehl genau dieses Werkzeug startet: ein Aufruf, kein
 # Verketten mit ; & | oder Zeilenumbruch, kein $( ) und keine Backticks, und vor dem Pfad steht hoechstens ein
 # Interpreter mit Schaltern. Sonst reicht es, den Pfad in einem Kommentar zu erwaehnen.
 $verkettung = '(;|&|\||\r|\n|\$\(|`)'
 $interp = '(python3?|py|pwsh|powershell|node|bash|sh)(\.exe)?'
-$aufrufVor = '^\s*(("[^"]*?' + $interp + '"|''[^'']*?' + $interp + '''|[^\s"'']*?' + $interp + ')(\s+-{1,2}[A-Za-z][^\s"'']*)*\s+)?("[^"]*|''[^'']*|[^\s"'']*)$'
+$aufrufSkript = '^\s*(?:(?:"[^"]*?' + $interp + '"|''[^'']*?' + $interp + '''|[^\s"'']*?' + $interp + ')(?:\s+-{1,2}[A-Za-z][^\s"'']*)*\s+)?(?:"(?<sq>[^"]+)"|''(?<se>[^'']+)''|(?<so>[^\s"'']+))'
 $geheimInhalt = '-----BEGIN [A-Z ]*PRIVATE KEY-----|AIza[0-9A-Za-z_\-]{35}|ghp_[0-9A-Za-z]{36}|gho_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{40,}|xox[baprs]-[0-9A-Za-z\-]{10,}|(?<![A-Za-z0-9])sk-ant-[0-9A-Za-z_\-]{20,}|(?<![A-Za-z0-9])sk-proj-[0-9A-Za-z_\-]{20,}|(?<![A-Za-z0-9])sk-[A-Za-z0-9]{32,}|ya29\.[0-9A-Za-z_\-]{20,}|(?<![A-Z0-9])AKIA[0-9A-Z]{16}'
 $schluesselName = '(?i)(^\.env(\..*)?$|\.(pem|key|pfx|p12|kdbx|ppk)$|^id_(rsa|ed25519|ecdsa)|token[^\\/]*\.json$|credential[^\\/]*\.json$|client_secret[^\\/]*\.json$|service[-_]?account[^\\/]*\.json$|^\.(netrc|git-credentials|pypirc)$|[-_.]key\.txt$|^\.?[^\\/]*-key$)'
 
@@ -148,11 +154,20 @@ try {
     if ($text -notmatch $schreibMerkmal) { exit 0 }
     if ($tool -match '^(Bash|PowerShell)$' -and $text -notmatch $modulLaden) {
         $norm = (($text -replace '\\', '/').Trim()) -replace '^&\s*', ''
-        if ($norm -notmatch $verkettung) {
+        # Das gestartete Skript wird aufgeloest (relativ zum Arbeitsordner) und muss genau ein Werkzeug aus der
+        # Schutzliste sein, mit vollem Pfad im eingehaengten Repo; ein gleichnamiges Skript anderswo gilt nicht.
+        if ($norm -notmatch $verkettung -and $norm -match $aufrufSkript) {
+            $skriptPfad = @($matches['sq'], $matches['se'], $matches['so']) | Where-Object { $_ } | Select-Object -First 1
+            $basis = [string]$in.cwd
+            if (-not $basis) { $basis = [string]$env:CLAUDE_PROJECT_DIR }
+            $voll = ''
+            try {
+                if ([System.IO.Path]::IsPathRooted($skriptPfad)) { $voll = [System.IO.Path]::GetFullPath($skriptPfad) }
+                elseif ($basis) { $voll = [System.IO.Path]::GetFullPath((Join-Path $basis $skriptPfad)) }
+            } catch { $voll = '' }
+            $voll = $voll -replace '\\', '/'
             foreach ($w in @($stand.werkzeuge)) {
-                if (-not $w) { continue }
-                $i = $norm.ToLower().IndexOf(([string]$w).ToLower())
-                if ($i -ge 0 -and $norm.Substring(0, $i) -match $aufrufVor) { exit 0 }
+                if ($w -and $voll -and $voll.Equals([string]$w, [System.StringComparison]::OrdinalIgnoreCase)) { exit 0 }
             }
         }
     }
