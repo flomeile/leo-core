@@ -222,7 +222,12 @@ $profilFaelle = @(
     @{ n = "107 Commit nennt Sperrkopie";   erw = "PASS"; tool = "Bash"; cmd = "git commit -m `"Kopie .leo-sperren erklaert`"" }
     @{ n = "109 python -c auf Freigabeliste"; erw = "DENY"; tool = "Bash"; cmd = "python -c `"open('00_INDEX/freigegebene-pfade.txt','a').write('x')`"" }
     @{ n = "110 Freigabeliste lesen frei";  erw = "PASS"; tool = "Bash"; cmd = "cat 00_INDEX/freigegebene-pfade.txt" }
-    @{ n = "108 cat dann tee auf settings";erw = "DENY"; tool = "Bash"; cmd = "cat a.json | tee `"$(Join-Path $claudeDir 'settings.json')`"" }
+    @{ n = "111 Write auf .git/config";     erw = "DENY"; tool = "Write"; file = "$repo\.git\config" }
+    @{ n = "112 Anhaengen an .git/config";  erw = "DENY"; tool = "Bash"; cmd = "printf '[remote `"origin`"]\n\tpushurl = x\n' >> .git/config" }
+    @{ n = "113 Write in .git/hooks";       erw = "DENY"; tool = "Write"; file = "$repo\.git\hooks\pre-push" }
+    @{ n = "114 .git/config lesen frei";    erw = "PASS"; tool = "Bash"; cmd = "cat .git/config" }
+    @{ n = "115 .gitignore frei";           erw = "PASS"; tool = "Write"; file = "$repo\.gitignore" }
+    @{ n = "108 cat dann tee auf settings"; erw = "DENY"; tool = "Bash"; cmd = "cat a.json | tee `"$(Join-Path $claudeDir 'settings.json')`"" }
 )
 $faelle = @(if ($isWindowsHost) { $windowsFaelle } else { $posixFaelle }) + $folgeFaelle + $freigabeFaelle + $profilFaelle
 

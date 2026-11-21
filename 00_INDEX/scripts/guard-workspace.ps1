@@ -123,9 +123,18 @@ if ($homePath) {
     $immerGesperrt = @(
         (Normalize-AbsolutePath (Join-Path (Join-Path $homePath '.claude') 'settings.json')),
         (Normalize-AbsolutePath (Join-Path (Join-Path $homePath '.claude') 'settings.local.json')),
-        (Normalize-AbsolutePath (Join-Path $homePath '.leo-sperren')))
+        (Normalize-AbsolutePath (Join-Path $homePath '.leo-sperren')),
+        # Seit der vierten Pruefung von 6.0: die globale Git-Einstellung (ein insteadOf dort lenkt Push und den Abgleich
+        # der Versions-Tags um); git config --global prueft guard-git.ps1.
+        (Normalize-AbsolutePath (Join-Path $homePath '.gitconfig')),
+        (Normalize-AbsolutePath (Join-Path (Join-Path (Join-Path $homePath '.config') 'git') 'config')))
 }
 $immerGrund = "Schreiben gesperrt, in jedem Projekt: Die persoenlichen Einstellungen von Claude Code und die Kopie der Sperren (~/.leo-sperren) tragen die Sperren fuer alle Projekte; du aenderst sie nie (AGENTS.md Abschnitt 18). Soll sich dort etwas aendern, sag [NAME] in einem Satz, was und warum; er aendert es selbst oder fuehrt hooks-einrichten.ps1 aus."
+# Das Innere eines Git-Repos (seit der vierten Pruefung von 6.0): .git/config bestimmt, wohin gepusht wird (pushurl,
+# insteadOf), .git/hooks und .git/info laufen bei Git-Befehlen mit, refs/replace aendert, was ein Tag zeigt. Git selbst
+# schreibt dort weiter (git config, git commit); der Agent schreibt diese Dateien nie direkt.
+$gitInternRx = '(?i)(^|[\s"''\\/=])\.git[\\/]+(config(\.worktree)?\b|hooks[\\/]|info[\\/]|refs[\\/]+replace\b)'
+$gitInternGrund = "Das Innere eines Git-Repos (.git/config, .git/hooks, .git/info, refs/replace) schreibst du nie direkt: Dort entscheidet sich, wohin gepusht wird und welcher Code bei Git-Befehlen mitlaeuft (AGENTS.md Abschnitt 18). Nimm den passenden git-Befehl; soll sich dort etwas aendern, das kein git-Befehl abdeckt, sag [NAME] in einem Satz, was und warum."
 function Test-ImmerGesperrt([string]$path) {
     $p = Normalize-AbsolutePath $path
     if (-not $p) { return $false }
@@ -242,6 +251,7 @@ if ($tool -in @("Write", "Edit", "NotebookEdit", "MultiEdit")) {
     # Der Schalter, der alle Hooks abschaltet (disableAllHooks), gehoert in keine Einstellungsdatei, die der Agent
     # schreibt: In einer Projektdatei schaltete er ohne Haertung die Sperren fuer jede Session in diesem Projekt ab.
     $inhalt = (@($ti.content, $ti.new_string, $ti.new_source) + @(@($ti.edits) | ForEach-Object { if ($_) { $_.new_string } }) | Where-Object { $_ }) -join "`n"
+    if ($target -and $target -match $gitInternRx) { Write-Decision "deny" ("Schreiben gesperrt: " + $target + ". " + $gitInternGrund) }
     if ($inhalt -match '(?i)disableAllHooks') { Write-Decision "deny" ("Schreiben gesperrt: '" + $target + "' wuerde disableAllHooks setzen und damit die Sperren abschalten. " + $immerGrund) }
     if (Test-PolicyDatei $target) {
         Write-Decision "deny" ("Schreiben gesperrt: " + $target + ". " + $policyGrund)
@@ -280,6 +290,7 @@ if ($tool -in @("Bash", "PowerShell")) {
     }
     $schutzRx += '(?i)\.leo-sperren'
     $schutzRx += $policyRx
+    $schutzRx += $gitInternRx
     $leser = '(?i)^\s*(?:git\s+(?:log|show|diff|status|blame|grep|ls-files|commit)|cat|type|gc|get-content|head|tail|less|more|select-string|sls|grep|rg|findstr|test-path|get-item|gi|get-childitem|gci|ls|dir|wc|jq|get-filehash|sha256sum|code|notepad\+\+)(?:\.exe)?(?=\s|$)'
     foreach ($seg in [regex]::Split($cmdS, '\r?\n|;|&&|\|\||\|')) {
         foreach ($rx in $schutzRx) {

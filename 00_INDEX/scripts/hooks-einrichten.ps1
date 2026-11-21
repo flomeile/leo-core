@@ -87,14 +87,12 @@ if ($Plattform -eq 'posix' -and -not $Pwsh) {
 
 $kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|guard-fremdsysteme|guard-extern|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(.*)$'
 $sperren = @('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'guard-fremdsysteme', 'guard-extern')
-$matcherJe = @{
-    'guard-workspace'    = 'Write|Edit|NotebookEdit|MultiEdit|Bash|PowerShell'
-    'guard-git'          = 'Bash|PowerShell'
-    'guard-mail'         = 'Bash|PowerShell'
-    'guard-read'         = 'Read|Grep|Glob|NotebookRead|Bash|PowerShell'
-    'guard-fremdsysteme' = 'Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*(javascript|browser_batch|navigate).*'
-    'guard-extern'       = 'mcp__.*'
-}
+# $matcherJe steht seit der vierten Pruefung von 6.0 in lib\arbeitsbereich.ps1 (gemeinsam mit sperre-haerten.ps1).
+
+# Ersatzobjekte (git replace) aendern nie, was aus einem Tag gelesen wird (seit der vierten Pruefung von 6.0).
+$env:GIT_NO_REPLACE_OBJECTS = '1'
+# Eine andere Quelle als das Grundgeruest gibt es nur in der Testreihe, mit eigenem Testprofil (wie version-check.ps1).
+if ($Quelle -ne 'https://github.com/flomeile/leo-core' -and -not $Heim) { "Abgebrochen: -Quelle gilt nur zusammen mit -Heim (Testreihe). Nichts geaendert."; exit 2 }
 
 function Neuer-Befehl([string]$name, [string]$rest, [string]$wurzel) {
     if ($Plattform -eq 'windows') {
@@ -120,7 +118,10 @@ function Richte-Ein($json, [string]$wurzel, [switch]$MitOnFailure) {
                     $h.command = $neu
                     $aenderungen += "$($ereignis.Name) / ${name}: Befehl fuer $Plattform"
                 }
-                if ($MitOnFailure -and $ereignis.Name -eq 'PreToolUse' -and $sperren -contains $name) {
+                # onFailure nur, wenn die Sperre im Repo liegt (seit der vierten Pruefung von 6.0): Ein Eintrag mit "block"
+                # fuer ein fehlendes Skript, etwa mitten in einem abgebrochenen Update, sperrte jeden Werkzeugaufruf.
+                $da = Test-Path -LiteralPath (Join-Path (Join-Path (Join-Path $repo '00_INDEX') 'scripts') ($name + '.ps1'))
+                if ($MitOnFailure -and $da -and $ereignis.Name -eq 'PreToolUse' -and $sperren -contains $name) {
                     if ([string]$h.onFailure -ne 'block') {
                         if ($h.PSObject.Properties['onFailure']) { $h.onFailure = 'block' }
                         else { $h | Add-Member -NotePropertyName onFailure -NotePropertyValue 'block' }
@@ -157,6 +158,12 @@ function Ergaenze-Pflicht($json, [string]$wurzel, [switch]$MitOnFailure) {
             }
         }
         if ($da) { continue }
+        # Ein Pflicht-Eintrag nur, wenn sein Skript im Repo liegt (seit der vierten Pruefung von 6.0; sonst sperrt er jeden
+        # Werkzeugaufruf, bis das Update fertig ist).
+        if (-not (Test-Path -LiteralPath (Join-Path (Join-Path (Join-Path $repo '00_INDEX') 'scripts') ($p.name + '.ps1')))) {
+            $aenderungen += "$($p.ereignis) / $($p.name): nicht eingetragen, das Skript fehlt noch (Update nicht fertig)"
+            continue
+        }
         $eintrag = [ordered]@{ type = 'command' }
         if ($p.timeout) { $eintrag.timeout = $p.timeout }
         $eintrag.command = (Neuer-Befehl $p.name $p.rest $wurzel)
@@ -347,7 +354,15 @@ function Richte-Profil-Ein {
     $tag = 'v' + $version
     $lokal = @(Invoke-Git @('-C', $repo, 'rev-parse', ($tag + '^{commit}')))[0]
     $fern = $null
-    $zeilen = Invoke-Git @('ls-remote', '--tags', $Quelle, ('refs/tags/' + $tag), ('refs/tags/' + $tag + '^{}'))
+    # Ausserhalb des Repos und ohne globale Einstellung (seit der vierten Pruefung von 6.0): Ein insteadOf in .git/config
+    # oder ~/.gitconfig lenkte den Abgleich sonst auf eine andere Quelle um.
+    $leerOrdner = Join-Path ([System.IO.Path]::GetTempPath()) ('leo-gitleer-' + [System.Guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Force -Path $leerOrdner | Out-Null
+    [System.IO.File]::WriteAllText((Join-Path $leerOrdner 'leer.gitconfig'), '')
+    $altG = $env:GIT_CONFIG_GLOBAL; $altS = $env:GIT_CONFIG_NOSYSTEM
+    $env:GIT_CONFIG_GLOBAL = Join-Path $leerOrdner 'leer.gitconfig'; $env:GIT_CONFIG_NOSYSTEM = '1'
+    try { $zeilen = Invoke-Git @('-C', $leerOrdner, 'ls-remote', '--tags', $Quelle, ('refs/tags/' + $tag), ('refs/tags/' + $tag + '^{}')) }
+    finally { $env:GIT_CONFIG_GLOBAL = $altG; $env:GIT_CONFIG_NOSYSTEM = $altS; Remove-Item -LiteralPath $leerOrdner -Recurse -Force -ErrorAction SilentlyContinue }
     foreach ($z in @($zeilen)) {
         if ($z -match ('^([0-9a-f]{40})\s+refs/tags/' + [regex]::Escape($tag) + '\^\{\}$')) { $fern = $matches[1] }
     }

@@ -466,6 +466,56 @@ $haertungsDateien = @(
 $haertungsListen = @('00_INDEX/freigegebene-pfade.txt', '00_INDEX/gesperrte-pfade.txt', '00_INDEX/extern-freigaben.txt')
 # Die Sperren als Hook-Namen (seit 6.0 sechs).
 $sperrNamen = @('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'guard-fremdsysteme', 'guard-extern')
+# Die Werkzeuge, bei denen jede Sperre laeuft. Eine Stelle fuer hooks-einrichten.ps1 (Profil und Projektdatei) und
+# sperre-haerten.ps1 (Haertung): Seit der vierten Pruefung von 6.0 nimmt die Haertung die Matcher von hier und nicht
+# aus .claude/settings.json, die der Agent beschreiben kann.
+$matcherJe = @{
+    'guard-workspace'    = 'Write|Edit|NotebookEdit|MultiEdit|Bash|PowerShell'
+    'guard-git'          = 'Bash|PowerShell'
+    'guard-mail'         = 'Bash|PowerShell'
+    'guard-read'         = 'Read|Grep|Glob|NotebookRead|Bash|PowerShell'
+    'guard-fremdsysteme' = 'Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*(javascript|browser_batch|navigate).*'
+    'guard-extern'       = 'mcp__.*'
+}
+
+# Der auf dem Grundgeruest gepruefte Stand der eingespielten Version (seit der vierten Pruefung von 6.0, fuer
+# sperre-haerten.ps1; hooks-einrichten.ps1 prueft gleich). Liefert @{ stand = <commit>; version = <X.Y> } oder
+# @{ grund = <Text> }. Git laeuft ohne Ersatzobjekte (git replace) und ls-remote ausserhalb des Repos mit leerer
+# globaler Einstellung, damit weder refs/replace noch ein insteadOf in .git/config den Abgleich umlenkt.
+function Get-GeprueftStand([string]$repo, [string]$quelle = 'https://github.com/flomeile/leo-core') {
+    $version = $null; $agentsVersion = $null
+    $ms = Join-Path $repo 'MEIN-SYSTEM.md'
+    if (Test-Path -LiteralPath $ms) { if ((Get-Content -LiteralPath $ms -Raw -Encoding UTF8) -match '(?m)^\|\s*Eingespielte Version\s*\|\s*([0-9]+\.[0-9]+)\s*\|') { $version = $matches[1] } }
+    $ag = Join-Path $repo 'AGENTS.md'
+    if (Test-Path -LiteralPath $ag) { if (((Get-Content -LiteralPath $ag -Encoding UTF8 -TotalCount 12) -join "`n") -match '(?m)^version:\s*([0-9]+\.[0-9]+)\s*$') { $agentsVersion = $matches[1] } }
+    if (-not $version) { $version = $agentsVersion }
+    if (-not $version) { return @{ grund = 'keine eingespielte Version lesbar' } }
+    if ($agentsVersion -and $version -ne $agentsVersion) { return @{ grund = "Update nicht abgeschlossen (MEIN-SYSTEM.md $version, AGENTS.md $agentsVersion)" } }
+    $tag = 'v' + $version
+    $altR = $env:GIT_NO_REPLACE_OBJECTS; $altG = $env:GIT_CONFIG_GLOBAL; $altS = $env:GIT_CONFIG_NOSYSTEM
+    $leer = Join-Path ([System.IO.Path]::GetTempPath()) ('leo-gitleer-' + [System.Guid]::NewGuid().ToString('N'))
+    try {
+        $env:GIT_NO_REPLACE_OBJECTS = '1'
+        $altE = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+        $lokal = @(& git -c safe.directory=* -C $repo rev-parse ($tag + '^{commit}') 2>$null)[0]
+        New-Item -ItemType Directory -Force -Path $leer | Out-Null
+        $leereDatei = Join-Path $leer 'leer.gitconfig'
+        [System.IO.File]::WriteAllText($leereDatei, '')
+        $env:GIT_CONFIG_GLOBAL = $leereDatei; $env:GIT_CONFIG_NOSYSTEM = '1'
+        $zeilen = @(& git -C $leer ls-remote --tags $quelle ('refs/tags/' + $tag) ('refs/tags/' + $tag + '^{}') 2>$null)
+        $ErrorActionPreference = $altE
+    } finally {
+        $env:GIT_NO_REPLACE_OBJECTS = $altR; $env:GIT_CONFIG_GLOBAL = $altG; $env:GIT_CONFIG_NOSYSTEM = $altS
+        Remove-Item -LiteralPath $leer -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    $fern = $null
+    foreach ($z in $zeilen) { if ($z -match ('^([0-9a-f]{40})\s+refs/tags/' + [regex]::Escape($tag) + '\^\{\}$')) { $fern = $matches[1] } }
+    if (-not $fern) { foreach ($z in $zeilen) { if ($z -match ('^([0-9a-f]{40})\s+refs/tags/' + [regex]::Escape($tag) + '$')) { $fern = $matches[1] } } }
+    if (-not $lokal) { return @{ grund = "Tag $tag fehlt lokal" } }
+    if (-not $fern) { return @{ grund = "Tag $tag auf dem Grundgeruest nicht erreichbar (kein Netz?)" } }
+    if ($lokal -ne $fern) { return @{ grund = "Tag $tag zeigt lokal auf einen anderen Commit als auf dem Grundgeruest" } }
+    return @{ stand = $lokal; version = $version }
+}
 
 # Ohne Adminrechte (seit 6.0): Die Kopie der Sperren liegt im Benutzerprofil, die Hooks stehen in den
 # persoenlichen Einstellungen von Claude Code und gelten damit in jedem Projekt. Beides liegt ausserhalb des

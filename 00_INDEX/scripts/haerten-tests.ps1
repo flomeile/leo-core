@@ -183,7 +183,7 @@ Pruef "41 Danach Stand fehlt" ($r.out -match 'Stand:\s+fehlt') "True"
 $mini = Join-Path $tmp 'Mini Kind'
 $heimT = Join-Path $tmp 'Heim'
 $sysT = Join-Path $tmp 'kein System'
-foreach ($rel in ($haertungsDateien + @('00_INDEX/scripts/hooks-einrichten.ps1', '00_INDEX/scripts/version-check.ps1'))) {
+foreach ($rel in ($haertungsDateien + @('00_INDEX/scripts/hooks-einrichten.ps1', '00_INDEX/scripts/version-check.ps1', '00_INDEX/scripts/sperre-haerten.ps1'))) {
     $q = Join-Path $repo $rel; $z = Join-Path $mini $rel
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $z) | Out-Null
     Copy-Item -LiteralPath $q -Destination $z
@@ -233,6 +233,24 @@ $r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini
 Pruef "55b Profil: Freigabe aus dem Repo bleibt draussen" ([string]([System.IO.File]::ReadAllText($listeKopie) -notmatch 'C:\\Users')) "True"
 if ($null -eq $repoAlt) { Remove-Item -LiteralPath $listeRepo -Force } else { [System.IO.File]::WriteAllText($listeRepo, $repoAlt, $utf8) }
 if ($null -eq $kopieAlt) { Remove-Item -LiteralPath $listeKopie -Force } else { [System.IO.File]::WriteAllText($listeKopie, $kopieAlt, $utf8) }
+# Vierte Pruefung von 6.0: Die Haertung nimmt Sperren aus dem geprueften Stand und Matcher aus der festen Liste, und
+# eine aus der Projektdatei geloeschte Sperre fehlt trotzdem nicht. guard-read.ps1 im Mini-Kind ist seit Fall 55 veraendert.
+$sysM = Join-Path $tmp 'System Mini'
+$ortM = Get-HaertungsOrt $mini $sysM
+$standMini = (& git -C $mini rev-parse 'v6.0^{commit}' 2>$null | Select-Object -First 1)
+$swM = Join-Path $mini '.claude/settings.json'
+$swAlt = [System.IO.File]::ReadAllText($swM)
+$sj = $swAlt | ConvertFrom-Json
+foreach ($g in @($sj.hooks.PreToolUse)) { if (@($g.hooks | Where-Object { $_.command -like '*guard-workspace*' })) { $g.matcher = 'NieMehr' } }
+$sj.hooks.PreToolUse = @($sj.hooks.PreToolUse | Where-Object { -not @($_.hooks | Where-Object { $_.command -like '*guard-mail*' }) })
+[System.IO.File]::WriteAllText($swM, ($sj | ConvertTo-Json -Depth 30), $utf8)
+$r = Starte (Join-Path $mini '00_INDEX/scripts/sperre-haerten.ps1') "-Ziel `"$sysM`" -Stand $standMini"
+Pruef "55c Haertung: Sperre aus dem geprueften Stand" ([string]((Get-Content -LiteralPath (Join-Path $ortM.kopie '00_INDEX/scripts/guard-read.ps1') -Raw) -notmatch 'gelockert')) "True"
+$dM = Get-Content -LiteralPath $ortM.dropin -Raw -Encoding UTF8 | ConvertFrom-Json
+$gw = @($dM.hooks.PreToolUse | Where-Object { @($_.hooks | Where-Object { $_.command -like '*-Skript guard-workspace' }) })
+Pruef "55d Haertung: Matcher aus der festen Liste" ([string]$gw[0].matcher) $matcherJe['guard-workspace']
+Pruef "55e Haertung: geloeschte Sperre trotzdem da" (@($dM.hooks.PreToolUse | ForEach-Object { $_.hooks } | Where-Object { $_.command -like '*-Skript guard-mail' }).Count) "1"
+[System.IO.File]::WriteAllText($swM, $swAlt, $utf8)
 # Ein Tag, der lokal auf einen anderen Commit zeigt als auf der Quelle: keine Erneuerung.
 $fremdQ = Join-Path $tmp 'Quelle anders'
 $ErrorActionPreference = 'Continue'
@@ -390,6 +408,22 @@ $r = Starte $haerten "" "j`n"
 # Im Repo des Herausgebers (Release-Gate gesetzt) bricht es schon davor ab, mit Exit 3.
 $istHerausgeber = [bool](& git -C $repo config --get leo.releaseGate 2>$null)
 Pruef "42 Nie aus einer Session, nie beim Herausgeber" $r.code $(if ($istHerausgeber) { "3" } else { "2" })
+
+# --- Vierte Pruefung von 6.0: abgebrochenes Update und fremde Quelle --------------------------------
+# Nur hooks-einrichten.ps1 und seine Bibliothek aus 6.0, die neuen Sperren fehlen noch: kein Eintrag fuer sie (sonst
+# sperrte jeder Werkzeugaufruf, bis das Update fertig ist).
+$halb = Join-Path $tmp 'Halb'
+foreach ($rel in @('00_INDEX/scripts/hooks-einrichten.ps1', '00_INDEX/scripts/lib/arbeitsbereich.ps1', '00_INDEX/scripts/lib/schutzliste.ps1', '00_INDEX/scripts/lib/eingehaengt-ausschluss.ps1', '00_INDEX/scripts/guard-read.ps1')) {
+    $z = Join-Path $halb $rel; New-Item -ItemType Directory -Force -Path (Split-Path -Parent $z) | Out-Null; Copy-Item -LiteralPath (Join-Path $repo $rel) -Destination $z
+}
+$swH = Join-Path $tmp 'halb-settings.json'
+[System.IO.File]::WriteAllText($swH, '{ "hooks": { "PreToolUse": [ { "matcher": "Read", "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\guard-read.ps1\"" } ] } ] } }', $utf8)
+$r = Starte (Join-Path $halb '00_INDEX/scripts/hooks-einrichten.ps1') "-OhneProfil -Plattform windows -Datei `"$swH`" -CodexDatei `"$(Join-Path $tmp 'keine.json')`""
+$jh = Get-Content -LiteralPath $swH -Raw -Encoding UTF8 | ConvertFrom-Json
+Pruef "86 Halbes Update: kein Eintrag ohne Skript" (@($jh.hooks.PreToolUse | ForEach-Object { $_.hooks } | Where-Object { [string]$_.command -match 'guard-(fremdsysteme|extern)' }).Count) "0"
+Pruef "87 Halbes Update: vorhandene Sperre mit block" ([string](@($jh.hooks.PreToolUse | ForEach-Object { $_.hooks } | Where-Object { [string]$_.command -match 'guard-read' })[0].onFailure)) "block"
+$r = Starte $einrichten "-NurProfil -Quelle `"$mini`""
+Pruef "88 Fremde Quelle ohne Testprofil abgelehnt" $r.code "2"
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 ""

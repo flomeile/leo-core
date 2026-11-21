@@ -61,6 +61,11 @@ $fremdRegel = P @('fremd-regel')
 G clone -q $remote $fremdRegel
 G -C $fremdRegel switch -q -c feature/r
 G -C $fremdRegel config remote.origin.push 'HEAD:refs/heads/main'
+# Vierte Pruefung von 6.0: ein zweites Kind, dessen "Archiv" ein Klon eines fremden Repos ist (mit Remote).
+$kind2 = P @('Zweit')
+$archiv2 = P @('Zweit Archiv')
+G clone -q $remote $kind2
+G clone -q $remote $archiv2
 $b64 = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes('gh pr merge 1'))
 $fremdPosix = if ($isWindowsHost) { '/' + $fremd.Substring(0, 1).ToLower() + ($fremd.Substring(2) -replace '\\', '/') } else { $fremd }
 
@@ -173,15 +178,41 @@ $faelle = @(
     @{ n = '103 eigen: remote rename origin';  erw = 'DENY'; cwd = $kind;   cmd = 'git remote rename origin alt' }
     @{ n = '104 gh api PUT merge Methode';     erw = 'DENY'; cwd = $kind;   cmd = 'gh api --method=PUT repos/o/r/pulls/1/merge' }
     @{ n = '105 eigen: push origin feature';   erw = 'PASS'; cwd = $kind;   cmd = 'git push -u origin feature/neu' }
+    # Vierte Pruefung von 6.0.
+    @{ n = '106 gh api {owner}/{repo} merge';  erw = 'DENY'; cwd = $kind;   cmd = 'gh api -X PUT repos/{owner}/{repo}/pulls/1/merge' }
+    @{ n = '107 gh api merges -fbase=main';    erw = 'DENY'; cwd = $kind;   cmd = 'gh api repos/o/r/merges -fbase=main -fhead=feature/x' }
+    @{ n = '108 graphql -fquery Mutation';     erw = 'DENY'; cwd = $kind;   cmd = "gh api graphql -fquery='mutation { mergePullRequest(input:{pullRequestId:1}) { clientMutationId } }'" }
+    @{ n = '109 gh pr -R o/r merge';           erw = 'DENY'; cwd = $kind;   cmd = 'gh pr -R o/r merge 1' }
+    @{ n = '110 graphql ueber volle Adresse';  erw = 'DENY'; cwd = $kind;   cmd = "gh api https://api.github.com/graphql -f query='mutation{mergePullRequest(input:{}){clientMutationId}}'" }
+    @{ n = '111 gh repo delete';               erw = 'DENY'; cwd = $kind;   cmd = 'gh repo delete o/r --yes' }
+    @{ n = '112 push HEAD:heads/main';         erw = 'DENY'; cwd = $fremdFeature; cmd = 'git push origin HEAD:heads/main' }
+    @{ n = '113 switch main dann push';        erw = 'DENY'; cwd = $fremdFeature; cmd = 'git switch main && git push' }
+    @{ n = '114 -c include.path push';         erw = 'DENY'; cwd = $fremdFeature; cmd = 'git -c include.path=x.cfg push' }
+    @{ n = '115 fremd: remote set-head';       erw = 'DENY'; cwd = $fremd;  cmd = 'git remote set-head origin -d' }
+    @{ n = '116 Archiv mit Remote ist fremd';  erw = 'DENY'; cwd = $archiv2; repo = $kind2; cmd = 'git push origin main' }
+    @{ n = '117 git replace';                  erw = 'DENY'; cwd = $kind;   cmd = 'git replace abc def' }
+    @{ n = '118 git tag -f v6.0';              erw = 'DENY'; cwd = $kind;   cmd = 'git tag -f v6.0 HEAD' }
+    @{ n = '119 git tag neu frei';             erw = 'PASS'; cwd = $kind;   cmd = 'git tag v6.1' }
+    @{ n = '120 eval git push';                erw = 'DENY'; cwd = $fremd;  cmd = 'eval git push origin main' }
+    @{ n = '121 env -i git push';              erw = 'DENY'; cwd = $fremd;  cmd = 'env -i git push origin main' }
+    @{ n = '122 xargs git push';               erw = 'DENY'; cwd = $fremdFeature; cmd = 'echo main | xargs git push origin' }
+    @{ n = '123 bash liest von stdin';         erw = 'DENY'; cwd = $fremdFeature; cmd = 'bash <<< "git push origin main"' }
+    @{ n = '124 GIT_DIR nur im Commit-Text';   erw = 'PASS'; cwd = $kind;   cmd = 'git commit -m "handle GIT_DIR" -- a.md && git push origin main' }
+    @{ n = '125 push.autoSetupRemote frei';    erw = 'PASS'; cwd = $kind;   cmd = 'git config push.autoSetupRemote true' }
+    @{ n = '126 kaputte Eingabe mit push';     erw = 'DENY'; cwd = $kind;   roh = '{"tool_name":"Bash","tool_input":{"command":"git push origin main"' }
+    @{ n = '127 graphql enqueuePullRequest';   erw = 'DENY'; cwd = $kind;   cmd = "gh api graphql -f query='mutation{enqueuePullRequest(input:{}){clientMutationId}}'" }
+    @{ n = '128 switch, dann Themenzweig';     erw = 'PASS'; cwd = $fremdFeature; cmd = 'git switch feature/x && git push origin feature/x' }
+    @{ n = '129 gh pr view mit -R frei';       erw = 'PASS'; cwd = $kind;   cmd = 'gh pr -R o/r view 1' }
 )
 
 function Ruf($fall) {
     $tool = if ($fall.tool) { $fall.tool } else { 'Bash' }
     $ti = if ($tool -eq 'Write') { @{ file_path = (Join-Path $kind 'x.md') } } else { @{ command = $fall.cmd } }
     $json = @{ session_id = 'test'; hook_event_name = 'PreToolUse'; cwd = $fall.cwd; tool_name = $tool; tool_input = $ti } | ConvertTo-Json -Depth 5 -Compress
+    if ($fall.roh) { $json = $fall.roh }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $psExe
-    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$Skript`" -Repo `"$kind`""
+    $psi.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$Skript`" -Repo `"$(if ($fall.repo) { $fall.repo } else { $kind })`""
     $psi.UseShellExecute = $false
     $psi.RedirectStandardInput = $true; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
     $psi.StandardOutputEncoding = $utf8

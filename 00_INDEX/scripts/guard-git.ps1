@@ -85,6 +85,17 @@ function Resolve-Pfad([string]$p, [string]$basis) {
     try { return [System.IO.Path]::GetFullPath($p).TrimEnd('\', '/') } catch { return $null }
 }
 
+# Eigen ist ein Repo aus der Liste; das Belegarchiv nur ohne Remote (vierte Pruefung von 6.0: ein fremdes Repo, das
+# unter dem Namen "<Repo> Archiv" geklont wurde, galt sonst als eigen). Das erste Element ist das eigene Repo.
+function Test-Eigen([string]$top, $erlaubt) {
+    for ($i = 0; $i -lt @($erlaubt).Count; $i++) {
+        if (-not (Test-Gleich $top $erlaubt[$i])) { continue }
+        if ($i -eq 1 -and (Get-GitWert $top @('remote'))) { return $false }
+        return $true
+    }
+    return $false
+}
+
 function Test-Gleich([string]$a, [string]$b) {
     if (-not $a -or -not $b) { return $false }
     if ($istWindows) { return $a.Equals($b, [System.StringComparison]::OrdinalIgnoreCase) }
@@ -174,8 +185,7 @@ function Test-Push([string]$dir, $argumente, $erlaubt) {
     if (-not $topRoh) { return }
     $top = Resolve-Pfad $topRoh $null
     if (-not $top) { Write-Deny $unklarGrund }
-    $eigen = $false
-    foreach ($e in $erlaubt) { if (Test-Gleich $top $e) { $eigen = $true } }
+    $eigen = Test-Eigen $top $erlaubt
 
     # Im eigenen Repo ist jeder Push frei, ausser auf eine Adresse; in einem fremden gilt die volle Pruefung.
     $pos = @()
@@ -217,6 +227,12 @@ function Test-Push([string]$dir, $argumente, $erlaubt) {
         if ($remote -cne 'origin') { Write-Deny $remoteGrund }
         return
     }
+    # Wechselt ein frueherer Abschnitt desselben Befehls den Zweig (git switch main && git push), gilt der
+    # aktuelle Zweig beim Pruefen nicht mehr (vierte Pruefung von 6.0): ein implizites Ziel ist dann unklar.
+    if ($script:zweigGewechselt) {
+        if ($pos.Count -le 1) { Write-Deny $unklarGrund }
+        foreach ($rs in $pos[1..($pos.Count - 1)]) { if ($rs -match '(^|[+:])(HEAD|@)(:|$)') { Write-Deny $unklarGrund } }
+    }
     $schutz = @('main', 'master')
     $sym = Get-GitWert $top @('symbolic-ref', '--quiet', '--short', ('refs/remotes/' + $remote + '/HEAD'))
     if ($sym -and $sym.Contains('/')) { $schutz += $sym.Substring($sym.IndexOf('/') + 1) }
@@ -238,7 +254,8 @@ function Test-Push([string]$dir, $argumente, $erlaubt) {
             $dst = if ($s.Contains(':')) { $s.Substring($s.IndexOf(':') + 1) } else { $s }
             if ($dst -eq '') { continue }
             if ($dst -in @('HEAD', '@')) { $dst = $aktZweig; if (-not $dst) { continue } }
-            $dst = $dst -replace '^refs/heads/', ''
+            # "heads/main" loest git wie refs/heads/main auf (vierte Pruefung von 6.0).
+            $dst = $dst -creplace '^(refs/)?heads/', ''
             if ($dst -like 'refs/*') { continue }
             $ziele += $dst
         }
@@ -259,16 +276,27 @@ function Test-GhApi($rest) {
         if ($a -match '^--method=(.+)$') { $methode = $matches[1]; continue }
         if ($a -in @('-X', '--method')) { if ($m + 1 -lt $rest.Count) { $methode = [string]$rest[$m + 1] }; $m++; continue }
         if ($a -cin @('-f', '-F', '--field', '--raw-field', '--input')) { $feld = $true; $m++; continue }
+        # Angehaengter Wert (-fbase=main, -Fquery=@q): ebenfalls ein Feld, also POST (vierte Pruefung von 6.0).
+        if ($a -cmatch '^-[fF].') { $feld = $true; continue }
         if ($a -match '^--(field|raw-field|input)=') { $feld = $true; continue }
         if ($a -cin @('-H', '--header', '-q', '--jq', '-t', '--template', '--hostname', '--cache', '-p', '--preview')) { $m++; continue }
         if ($a.StartsWith('-')) { continue }
         if (-not $ziel) { $ziel = $a }
     }
     if (-not $methode) { $methode = if ($feld) { 'POST' } else { 'GET' } }
+    # Volle Adresse und Varianten auf den Pfad zurueckfuehren (https://api.github.com/graphql, graphql/, /repositories/<id>).
+    $ziel = (($ziel -replace '(?i)^https?://[^/]+(/api/v3)?', '') -replace '(?i)(^|/)repositories/\d+/', '$1repos/x/x/').Trim('/')
+    if ($ziel -match '(?i)^graphql$') {
+        if ($text -match '(?i)\b(mergeBranch|mergePullRequest|enablePullRequestAutoMerge|enqueuePullRequest|updatePullRequestBranch)\b') { Write-Deny $mergeGrund }
+        if ($text -match '(?i)\b(createCommitOnBranch|updateRefs?|createRef|deleteRef|updateBranchProtectionRule|deleteBranchProtectionRule|updateRepository|deleteRepository)\b') { Write-Deny $apiGrund }
+        if ($text -match '(?i)(^|\s)(-F|--field)\s*\S*=@|(^|\s)-F[^\s=]*=@|(^|\s)--input\b') { Write-Deny $apiGrund }
+    }
     # Lesen bleibt frei, auch auf .../merge (GET prueft nur, ob gemergt ist; seit dem Schlusstest von 6.0).
     if ($methode.ToUpper() -eq 'GET' -or $methode.ToUpper() -eq 'HEAD') { return }
     if ($ziel -match '(?i)(^|/)repos/[^/]+/[^/]+/(merges\b|merge-upstream\b|pulls/\d+/merge\b)' -or $text -match '(?i)\bmerge_method\b') { Write-Deny $mergeGrund }
-    if ($ziel -match '(?i)(^|/)repos/[^/]+/[^/]+/(contents(/|$)|git/(refs|commits|trees|blobs|tags)\b|branches/[^/]+/rename\b)') { Write-Deny $apiGrund }
+    if ($ziel -match '(?i)(^|/)repos/[^/]+/[^/]+/(contents(/|$)|git/(refs|commits|trees|blobs|tags)\b|branches/[^/]+/(rename|protection)\b|rulesets\b)') { Write-Deny $apiGrund }
+    # Das Repo selbst aendern oder loeschen (Standardzweig umstellen, loeschen): seit der vierten Pruefung von 6.0.
+    if ($ziel -match '(?i)(^|/)repos/[^/]+/[^/]+$' -and $methode.ToUpper() -in @('PATCH', 'DELETE', 'PUT')) { Write-Deny $apiGrund }
     if ($ziel -match '(?i)^/?graphql$') {
         if ($text -match '(?i)\b(mergeBranch|mergePullRequest|enablePullRequestAutoMerge)\b') { Write-Deny $mergeGrund }
         if ($text -match '(?i)\b(createCommitOnBranch|updateRefs?|createRef|deleteRef)\b') { Write-Deny $apiGrund }
@@ -283,7 +311,10 @@ function Get-WortName([string]$t) {
 }
 
 # git config: schreibende Aufrufe auf Schluessel, die das Push-Ziel bestimmen. Lesen bleibt frei.
-$konfigSchluessel = '(?i)^(remote\.[^=\s]+\.(url|pushurl|push|mirror)|remote\.pushdefault|push\.[^=\s]+|branch\.[^=\s]+\.(pushremote|remote)|url\..+\.(insteadof|pushinsteadof))$'
+# Seit der vierten Pruefung von 6.0: push.default statt jeder push.*-Schluessel (push.autoSetupRemote und
+# push.followTags bestimmen kein fremdes Ziel), dazu include.path (eine eingebundene Datei kann alles setzen) und
+# followRemoteHEAD (ohne refs/remotes/<remote>/HEAD kennt die Sperre den Standardzweig nicht).
+$konfigSchluessel = '(?i)^(remote\.[^=\s]+\.(url|pushurl|push|mirror|followremotehead)|remote\.pushdefault|push\.default|branch\.[^=\s]+\.(pushremote|remote)|url\..+\.(insteadof|pushinsteadof)|include\.path|includeif\..+\.path)$'
 function Test-GitConfig($nach) {
     $woerter = @($nach | ForEach-Object { [string]$_.t })
     $pos = @()
@@ -317,10 +348,10 @@ function Test-GitRemote([string]$dir, $nach, $erlaubt) {
     $topRoh = Get-GitWert $dir @('rev-parse', '--show-toplevel')
     if (-not $topRoh) { return }
     $top = Resolve-Pfad $topRoh $null
-    $eigen = $false
-    foreach ($e in $erlaubt) { if (Test-Gleich $top $e) { $eigen = $true } }
-    if (-not $eigen) { return }
+    $eigen = Test-Eigen $top $erlaubt
     $aktion = $woerter[0]
+    # In einem fremden Repo bestimmt refs/remotes/<remote>/HEAD, welcher Zweig geschuetzt ist (vierte Pruefung von 6.0).
+    if (-not $eigen) { if ($aktion -eq 'set-head') { Write-Deny $konfigGrund }; return }
     $name = $woerter[1]
     $originDa = [bool](Get-GitWert $top @('config', '--get', 'remote.origin.url'))
     switch ($aktion) {
@@ -352,10 +383,17 @@ function Test-Befehle([string]$text, [string]$cwd, $erlaubt, [int]$tiefe) {
             $t = $w[$x]
             if (-not $t.q -or $t.t -notmatch '(?i)\b(git|gh)\b|gh-[\w-]+\.ps1') { continue }
             $vor = if ($x -gt 0) { ([string]$w[$x - 1].t).ToLower() } else { '' }
+            # Dazu eine Shell, die von stdin liest (bash <<< "git push ...", echo "git push ..." | bash): seit der vierten Pruefung von 6.0.
             if ($x -eq 0 -or $vor -in @('-c', '-command', '/c', '/k', 'iex', 'invoke-expression', 'eval', 'exec') -or $vor -match '^-[a-z]+c$') { Test-Befehle $t.t $cwd $erlaubt ($tiefe + 1) }
+            elseif ($script:shellLiest -and $vor -notin @('-m', '--message', '-f', '--file', '--body', '-b', '--title', '-t', '--notes')) { Test-Befehle $t.t $cwd $erlaubt ($tiefe + 1) }
         }
         $k = 0
-        while ($k -lt $w.Count -and -not $w[$k].q -and ($w[$k].t -match '^[A-Za-z_][A-Za-z0-9_]*=' -or $w[$k].t -in @('env', 'command', 'time', 'nohup', 'exec', 'sudo', '.'))) { $k++ }
+        # Vorsilben samt ihren Schaltern und Zahlen (env -i, nice -n 10, time -p, command -p; vierte Pruefung von 6.0).
+        $vorsilben = @('env', 'command', 'time', 'nohup', 'exec', 'sudo', '.', 'eval', 'builtin', 'nice', 'ionice', 'stdbuf', 'unbuffer', 'winpty', 'chrt', 'taskset')
+        while ($k -lt $w.Count -and -not $w[$k].q -and ($w[$k].t -match '^[A-Za-z_][A-Za-z0-9_]*=' -or $w[$k].t -in $vorsilben)) {
+            $k++
+            while ($k -lt $w.Count -and -not $w[$k].q -and ($w[$k].t -match '^-' -or $w[$k].t -match '^\d+$')) { $k++ }
+        }
         if ($k -ge $w.Count) { continue }
         $exe = Get-WortName ([string]$w[$k].t)
         $abschnittText = (@($w | Select-Object -Skip $k | ForEach-Object { [string]$_.t }) -join ' ')
@@ -368,6 +406,7 @@ function Test-Befehle([string]$text, [string]$cwd, $erlaubt, [int]$tiefe) {
         # als Befehl geprueft (seit dem Schlusstest von 6.0). Start-Process mit git oder gh ist bei einem Stichwort
         # der Sperren gesperrt, weil seine Argumentliste (Kommas, ein einzelner Text) nicht sicher lesbar ist.
         $starter = @('cmd', 'pwsh', 'powershell', 'bash', 'sh', 'zsh', 'dash', 'wsl', 'start-process', 'saps', 'start', 'iex', 'invoke-expression', 'call', 'xargs', 'timeout', 'runas', 'invoke-command', 'icm')
+        if ($exe -eq 'xargs' -and $abschnittText -match '(?i)\b(git|gh)\b' -and $abschnittText -match '(?i)\b(push|merge)\b') { Write-Deny $startGrund }
         if ($exe -in $starter) {
             if ($exe -in @('pwsh', 'powershell')) {
                 for ($m = $k + 1; $m -lt $w.Count - 1; $m++) {
@@ -410,6 +449,16 @@ function Test-Befehle([string]$text, [string]$cwd, $erlaubt, [int]$tiefe) {
 
         if ($exe -eq 'gh' -or $exe -match '^gh-[\w-]+\.ps1$') {
             $rest = @($w | Select-Object -Skip ($k + 1) | ForEach-Object { [string]$_.t })
+            # Befehlswoerter ohne Schalter: "gh pr -R o/r merge 1" ist gh pr merge (vierte Pruefung von 6.0).
+            $wortFolge = @()
+            for ($m = 0; $m -lt $rest.Count; $m++) {
+                if ($rest[$m] -cin @('-R', '--repo', '--hostname')) { $m++; continue }
+                if ($rest[$m].StartsWith('-')) { continue }
+                $wortFolge += $rest[$m]
+            }
+            if ($wortFolge.Count -ge 2 -and $wortFolge[0] -eq 'pr' -and $wortFolge[1] -eq 'merge') { Write-Deny $mergeGrund }
+            if ($wortFolge.Count -ge 2 -and $wortFolge[0] -eq 'repo' -and $wortFolge[1] -in @('delete', 'rename', 'edit', 'archive')) { Write-Deny $apiGrund }
+            if ($wortFolge.Count -ge 2 -and $wortFolge[0] -eq 'alias' -and $wortFolge[1] -in @('set', 'import')) { Write-Deny $ghAliasGrund }
             for ($m = 0; $m -lt $rest.Count - 1; $m++) {
                 if ($rest[$m] -eq 'pr' -and $rest[$m + 1] -eq 'merge') { Write-Deny $mergeGrund }
                 if ($rest[$m] -eq 'alias' -and $rest[$m + 1] -in @('set', 'import')) { Write-Deny $ghAliasGrund }
@@ -447,7 +496,7 @@ function Test-Befehle([string]$text, [string]$cwd, $erlaubt, [int]$tiefe) {
                     if ($wert -match '(?i)^alias\.' -and $wert -match '(?i)\b(push|subtree|send-pack)\b') { Write-Deny $aliasGrund }
                     # Einstellungen, die das Push-Ziel bestimmen (seit dem Schlusstest von 6.0): push.default=matching,
                     # remote.<name>.push, url.*.pushInsteadOf und Verwandte; gesperrt, sobald damit gepusht wird.
-                    if ($wert -match '(?i)^(push\.|remote\.|branch\.[^=]*\.(remote|pushremote|merge)\b|url\.)') { $pushKonfig = $true }
+                    if ($wert -match '(?i)^(push\.default|remote\.|branch\.[^=]*\.(remote|pushremote|merge)\b|url\.|include\.|includeif\.)') { $pushKonfig = $true }
                     $m += $(if ($o -match '^--config-env=') { 1 } else { 2 })
                     continue
                 }
@@ -465,6 +514,13 @@ function Test-Befehle([string]$text, [string]$cwd, $erlaubt, [int]$tiefe) {
                 Test-Push $dir @($nach | Select-Object -Skip 1) $erlaubt
             } elseif ($sub -eq 'remote') {
                 Test-GitRemote $dir $nach $erlaubt
+            } elseif ($sub -in @('checkout', 'switch', 'branch', 'symbolic-ref', 'update-ref', 'worktree', 'reset', 'rebase', 'pull', 'stash')) {
+                $script:zweigGewechselt = $true
+                if ($sub -eq 'update-ref' -and (($nach | ForEach-Object { [string]$_.t }) -join ' ') -match '(?i)refs/(tags|replace)/') { Write-Deny $versionGrund }
+            } elseif ($sub -eq 'replace') {
+                Write-Deny $versionGrund
+            } elseif ($sub -eq 'tag' -and (($nach | ForEach-Object { [string]$_.t }) -join ' ') -cmatch '(^|\s)(-f|--force|-d|--delete)(\s|$)') {
+                Write-Deny $versionGrund
             } elseif ($sub -in @('send-pack', 'http-push')) {
                 Write-Deny $unklarGrund
             } elseif ($sub -in @('add', 'stage')) {
@@ -478,6 +534,8 @@ function Test-Befehle([string]$text, [string]$cwd, $erlaubt, [int]$tiefe) {
     }
 }
 
+$versionGrund = "Gesperrt: git replace, das Ueberschreiben oder Loeschen eines Tags und update-ref auf Tags aendern, welchen Stand ein Versions-Tag zeigt; davon haengt ab, welche Sperren aus dem geprueften Stand kommen (vierte Pruefung von 6.0). Einen neuen Tag anlegen bleibt frei."
+$script:zweigGewechselt = $false
 $cmd = ''
 try {
     # Eingabe ausdruecklich als UTF-8 lesen: [Console]::In nimmt die OEM-Codepage, und aus einem Umlaut im Pfad werden zwei falsche Zeichen (Meldung #10).
@@ -502,8 +560,12 @@ try {
     if ($ohneZitate -match $muster) { Write-Deny $stageGrund }
 
     # 2. und 3. und die Gleichwerte des Stagens: nur zerlegen, wenn der Text danach aussieht (spart Zeit bei jedem Aufruf).
-    if ($cmd -notmatch '(?i)\b(push|merge|merges|add|stage|subtree|send-pack|http-push|sync|alias|api|config|remote)\b' -and $cmd -notmatch '(?i)\s-e[a-z]*\s+[A-Za-z0-9+/=]{16,}') { exit 0 }
-    $script:gitUmgebung = ($cmd -match '(?i)\bGIT_(DIR|WORK_TREE|COMMON_DIR|CONFIG\w*)\b')
+    if ($cmd -notmatch '(?i)\b(push|merge|merges|add|stage|subtree|send-pack|http-push|sync|alias|api|config|remote|replace|tag|update-ref|repo)\b' -and $cmd -notmatch '(?i)\s-e[a-z]*\s+[A-Za-z0-9+/=]{16,}') { exit 0 }
+    # Nur ausserhalb von Zitaten: Eine Commit-Botschaft, die GIT_DIR erwaehnt, setzt nichts (vierte Pruefung von 6.0).
+    $script:gitUmgebung = ($ohneZitate -match '(?i)\bGIT_(DIR|WORK_TREE|COMMON_DIR|CONFIG\w*|NO_REPLACE\w*)\b')
+    $script:shellLiest = ($ohneZitate -match '(?i)(<<<|\|\s*(bash|sh|zsh|dash|pwsh|powershell|cmd|iex|invoke-expression)(\.exe)?\b)')
+    # gh ersetzt {owner}, {repo} und {branch} selbst; die Klammern sind kein Trenner (vierte Pruefung von 6.0).
+    $cmd = $cmd -replace '\{(owner|repo|branch)\}', 'x'
     if (-not $Repo) { $Repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
     $leo = Resolve-Pfad $Repo $null
     $erlaubt = @($leo, (Resolve-Pfad ($leo + ' Archiv') $null))
@@ -513,6 +575,8 @@ try {
     exit 0
 } catch {
     # Ein eigener Fehler laesst durch, ausser der Befehl will pushen oder mergen: dann wird gesperrt.
+    # Kaputte Eingabe (vierte Pruefung von 6.0): ist der Befehl noch nicht gelesen, zaehlt der Rohtext.
+    if (-not $cmd -and $raw) { $cmd = [string]$raw }
     if ($cmd -match '(?i)\bgit\b[\s\S]*\bpush\b' -or $cmd -match '(?i)\bgh\b[\s\S]*\bmerge') {
         Write-Deny ("Die Push- und Merge-Sperre konnte den Befehl nicht pruefen (" + $_.Exception.Message + ") und sperrt deshalb. Schreib den Befehl einfacher, etwa: git -C <Repo-Pfad> push origin <themenzweig>.")
     }

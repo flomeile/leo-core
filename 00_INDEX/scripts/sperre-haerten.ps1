@@ -34,7 +34,7 @@
 #   macOS:    sudo pwsh -NoProfile -File "<Repo>/00_INDEX/scripts/sperre-haerten.ps1"
 #   -Pruefen     zeigt nur den Stand, braucht keine Adminrechte
 #   -Entfernen   nimmt die Haertung zurueck
-#   -NurListen   uebernimmt nur die beiden Freigabelisten (ruft freigeben.ps1 auf)
+#   -NurListen   uebernimmt nur die drei Freigabelisten (ruft freigeben.ps1 auf)
 #   -Sandbox     macOS/Linux: zusaetzlich die Sandbox fest einschalten (gilt fuer alle Projekte)
 # Testparameter: -Ziel <Ordner> ersetzt den Systemordner und laeuft ohne Rueckfrage und ohne Adminrechte.
 # ASCII-only: laeuft unter Windows PowerShell 5.1 und PowerShell 7.
@@ -45,8 +45,13 @@ param(
     [switch]$Sandbox,
     [string]$Ziel = '',
     [switch]$Erhoeht,
-    [string]$Protokoll = ''
+    [string]$Protokoll = '',
+    [string]$Stand = ''
 )
+# -Stand <commit> (seit der vierten Pruefung von 6.0): der auf dem Grundgeruest gepruefte Commit der eingespielten
+# Version. Die Schutzkopie der Sperren kommt aus diesem Commit, nie aus der Arbeitskopie, die der Agent beschreiben
+# kann. Der Lauf im eigenen Fenster prueft ihn und gibt ihn an den erhoehten Lauf weiter; in der Testreihe (-Ziel)
+# ohne -Stand gilt die Arbeitskopie.
 
 $ErrorActionPreference = 'Stop'
 . (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
@@ -111,6 +116,27 @@ if (-not $test -and -not $Erhoeht) {
         "    abschalten, und nie eine Rechteabfrage bestaetigen, die du nicht selbst ausgeloest hast."
     }
     ""
+    # Der gepruefte Stand der Sperren (seit der vierten Pruefung von 6.0). Ohne ihn wird nichts eingerichtet: Die
+    # Arbeitskopie kann der Agent veraendert haben, und genau davor soll die Haertung schuetzen.
+    if (-not $Entfernen -and -not $NurListen) {
+        $gp = Get-GeprueftStand $repo
+        if (-not $gp.stand) { "Abgebrochen, nichts geaendert: Der gepruefte Stand der Sperren laesst sich nicht feststellen ($($gp.grund)). Mit Netz und abgeschlossenem Update erneut ausfuehren."; exit 1 }
+        $Stand = $gp.stand
+        $abw = @()
+        foreach ($rel in $haertungsDateien) {
+            $q = Join-Path $repo $rel
+            $alt = $ErrorActionPreference; $ErrorActionPreference = 'Continue'
+            $imTag = & git --no-replace-objects -C $repo show ($Stand + ':' + $rel) 2>$null | Out-String
+            $ErrorActionPreference = $alt
+            $hier = if (Test-Path -LiteralPath $q) { [System.IO.File]::ReadAllText($q) } else { '' }
+            if (($imTag -replace '\s', '') -ne ($hier -replace '\s', '')) { $abw += $rel }
+        }
+        if ($abw.Count -gt 0) {
+            "  Diese Sperren weichen im Repo vom geprueften Stand $($gp.version) ab; eingerichtet wird der gepruefte Stand:"
+            foreach ($a in $abw) { "    $a" }
+            ""
+        }
+    }
     # Die Listen kommen aus dem Repo, das der Agent beschreiben kann (seit der vierten Pruefung von 6.0): Jede Zeile, die
     # sich gegenueber der geltenden Kopie aendert, steht vor der Bestaetigung hier, damit keine Freigabe unbemerkt mitgeht.
     if (-not $Entfernen -and -not $NurListen) {
@@ -139,6 +165,7 @@ if (-not $test -and -not $Erhoeht) {
         if ($Entfernen) { $schalter += '-Entfernen' }
         if ($NurListen) { $schalter += '-NurListen' }
         if ($Sandbox) { $schalter += '-Sandbox' }
+        if ($Stand -match '^[0-9a-f]{40}$') { $schalter += ('-Stand ' + $Stand) }
         if ($isWindowsHost) {
             $log = Join-Path ([System.IO.Path]::GetTempPath()) ('leo-haerten-' + [System.Guid]::NewGuid().ToString('N') + '.log')
             $argl = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Erhoeht -Protokoll "' + $log + '" ' + ($schalter -join ' ')
@@ -164,11 +191,35 @@ try {
     }
 
     # --- Schutzkopie ----------------------------------------------------------------------------
+    # Ohne gepruefen Stand richtet nur die Testreihe ein (aus der Arbeitskopie); ein erhoehter Lauf ohne -Stand,
+    # etwa direkt in einem Admin-Fenster gestartet, prueft selbst.
+    if (-not $NurListen -and -not $test -and $Stand -notmatch '^[0-9a-f]{40}$') {
+        $gp = Get-GeprueftStand $repo
+        if (-not $gp.stand) { Melde "Abgebrochen, nichts geaendert: Der gepruefte Stand der Sperren laesst sich nicht feststellen ($($gp.grund))."; exit 1 }
+        $Stand = $gp.stand
+    }
+    $blobs = @{}
+    if (-not $NurListen -and $Stand -match '^[0-9a-f]{40}$') {
+        foreach ($rel in $haertungsDateien) {
+            $psi = New-Object System.Diagnostics.ProcessStartInfo
+            $psi.FileName = 'git'
+            $psi.Arguments = '-c safe.directory=* --no-replace-objects -C "' + $repo + '" cat-file blob "' + $Stand + ':' + $rel + '"'
+            $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+            $p = [System.Diagnostics.Process]::Start($psi)
+            $msB = New-Object System.IO.MemoryStream
+            $p.StandardOutput.BaseStream.CopyTo($msB); [void]$p.StandardError.ReadToEnd(); $p.WaitForExit()
+            if ($p.ExitCode -ne 0) { Melde "Abgebrochen, nichts geaendert: $rel fehlt im geprueften Stand $Stand."; exit 1 }
+            $blobs[$rel] = $msB.ToArray()
+        }
+    }
     $liste = if ($NurListen) { $haertungsListen } else { $haertungsDateien + $haertungsListen }
     foreach ($rel in $liste) {
         $q = Join-Path $repo $rel
         $k = Join-Path $ort.kopie $rel
-        if (Test-Path -LiteralPath $q) {
+        if ($blobs.ContainsKey($rel)) {
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $k) | Out-Null
+            [System.IO.File]::WriteAllBytes($k, $blobs[$rel])
+        } elseif (Test-Path -LiteralPath $q) {
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $k) | Out-Null
             Copy-Item -LiteralPath $q -Destination $k -Force
         } elseif (Test-Path -LiteralPath $k) { Remove-Item -LiteralPath $k -Force }
@@ -200,16 +251,31 @@ try {
             if ($neue.Count -gt 0) {
                 $g = [ordered]@{}
                 if ($gruppe.matcher) { $g.matcher = $gruppe.matcher }
+                # Der Matcher einer Sperre kommt aus lib\arbeitsbereich.ps1, nicht aus der Projektdatei, die der Agent
+                # beschreiben kann (seit der vierten Pruefung von 6.0).
+                $sp = @($neue | ForEach-Object { if ([string]$_.command -match '-Skript (guard-[a-z-]+)') { $matches[1] } } | Select-Object -First 1)
+                if ($ereignis.Name -eq 'PreToolUse' -and $sp.Count -gt 0 -and $matcherJe.ContainsKey($sp[0])) { $g.matcher = $matcherJe[$sp[0]] }
                 $g.hooks = $neue
                 $gruppen += $g
             }
         }
         if ($gruppen.Count -gt 0) { $hooks[$ereignis.Name] = $gruppen }
     }
+    # Jede Sperre steht in der Haertung, auch wenn ihr Eintrag in der Projektdatei fehlt (seit der vierten Pruefung von
+    # 6.0: wer den Eintrag dort loeschte, nahm die Sperre sonst aus der Haertung).
+    $vorhanden = @()
+    if ($hooks.Contains('PreToolUse')) { foreach ($g in @($hooks['PreToolUse'])) { foreach ($h in @($g.hooks)) { if ([string]$h.command -match '-Skript (guard-[a-z-]+)') { $vorhanden += $matches[1] } } } }
+    $ergaenzt = @()
+    foreach ($s in $sperrNamen) {
+        if ($vorhanden -contains $s) { continue }
+        $e = [ordered]@{ type = 'command'; command = ($exe + ' "' + $verteiler + '" -Repo "' + $repo + '" -Skript ' + $s); onFailure = 'block' }
+        $ergaenzt += [ordered]@{ matcher = $matcherJe[$s]; hooks = @($e) }
+    }
+    if ($ergaenzt.Count -gt 0) { $hooks['PreToolUse'] = @(@($hooks['PreToolUse']) + $ergaenzt | Where-Object { $_ }) }
     $deny = @('Read(**/.env)', 'Read(**/.env.*)', 'Read(**/*.pem)', 'Read(**/*.key)', 'Read(**/*.pfx)',
               'Read(**/*.p12)', 'Read(**/*.kdbx)', 'Read(**/*.ppk)', 'Read(**/id_rsa*)', 'Read(**/id_ed25519*)',
               'Read(~/.ssh/**)', 'Read(~/.aws/**)', 'Read(~/.gnupg/**)', 'Read(~/.azure/**)', 'Read(~/.kube/**)',
-              'Edit(**/00_INDEX/freigegebene-pfade.txt)', 'Edit(**/00_INDEX/gesperrte-pfade.txt)')
+              'Edit(**/00_INDEX/freigegebene-pfade.txt)', 'Edit(**/00_INDEX/gesperrte-pfade.txt)', 'Edit(**/00_INDEX/extern-freigaben.txt)')
     $verwaltet = [ordered]@{
         allowManagedHooksOnly = $true
         permissions = [ordered]@{ deny = $deny }
