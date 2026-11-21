@@ -2,7 +2,7 @@
 titel: Mein System (persönliche Ebene)
 zweck: Alles, was an diesem System dir gehört - Name, Pfad, eigene Regeln, eigene Bauten. Wird von Updates nie angefasst.
 type: master-regeln
-stand: 2026-11-09
+stand: 2026-11-21
 ---
 
 # Mein System
