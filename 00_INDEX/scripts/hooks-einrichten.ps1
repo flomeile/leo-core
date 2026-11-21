@@ -242,7 +242,7 @@ function Get-GespeicherterStand($prof, [switch]$Alle) {
 function Test-VerwaisterEintrag([string]$c) {
     $alt = $null
     if ($c -match '[\\/]\.leo-sperren[\\/]' -and $c -match 'leo-hook\.ps1"?\s+-Repo\s+"([^"]+)"') { $alt = $matches[1] }
-    elseif ($c -match '"([^"]+)[\\/]00_INDEX[\\/]scripts[\\/]hooks-einrichten\.ps1"' -and $c -match '-Reparatur') { $alt = $matches[1] }
+    elseif ($c -match '-Reparatur' -and $c -match '"([^"]+)[\\/]00_INDEX[\\/]scripts[\\/]hooks-einrichten\.ps1"') { $alt = $matches[1] }
     if (-not $alt) { return $false }
     return -not (Test-Path -LiteralPath (Join-Path (Join-Path (Join-Path $alt '00_INDEX') 'scripts') 'hooks-einrichten.ps1'))
 }
