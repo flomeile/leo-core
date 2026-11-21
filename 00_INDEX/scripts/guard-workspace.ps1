@@ -115,11 +115,39 @@ if (-not $isWindowsHost) {
     $allowPatterns += @('/dev/null', '/dev/stdout', '/dev/stderr', '/dev/tty')
 }
 
+# Nie ein Schreibziel, in keinem Projekt (seit dem Schlusstest von 6.0): die persoenlichen Einstellungen von Claude
+# Code und die Kopie der Sperren. Mit dem Projektordner ~/.claude (etwa um die globale CLAUDE.md zu bearbeiten) waren
+# sie sonst Teil des Arbeitsbereichs, und der Agent haette die Sperren fuer alle Projekte selbst austragen koennen.
+$immerGesperrt = @()
+if ($homePath) {
+    $immerGesperrt = @(
+        (Normalize-AbsolutePath (Join-Path (Join-Path $homePath '.claude') 'settings.json')),
+        (Normalize-AbsolutePath (Join-Path (Join-Path $homePath '.claude') 'settings.local.json')),
+        (Normalize-AbsolutePath (Join-Path $homePath '.leo-sperren')),
+        # Seit der vierten Pruefung von 6.0: die globale Git-Einstellung (ein insteadOf dort lenkt Push und den Abgleich
+        # der Versions-Tags um); git config --global prueft guard-git.ps1.
+        (Normalize-AbsolutePath (Join-Path $homePath '.gitconfig')),
+        (Normalize-AbsolutePath (Join-Path (Join-Path (Join-Path $homePath '.config') 'git') 'config')))
+}
+$immerGrund = "Schreiben gesperrt, in jedem Projekt: Die persoenlichen Einstellungen von Claude Code und die Kopie der Sperren (~/.leo-sperren) tragen die Sperren fuer alle Projekte; du aenderst sie nie (AGENTS.md Abschnitt 18). Soll sich dort etwas aendern, sag [NAME] in einem Satz, was und warum; er aendert es selbst oder fuehrt hooks-einrichten.ps1 aus."
+# Das Innere eines Git-Repos (seit der vierten Pruefung von 6.0): .git/config bestimmt, wohin gepusht wird (pushurl,
+# insteadOf), .git/hooks und .git/info laufen bei Git-Befehlen mit, refs/replace aendert, was ein Tag zeigt. Git selbst
+# schreibt dort weiter (git config, git commit); der Agent schreibt diese Dateien nie direkt.
+$gitInternRx = '(?i)(^|[\s"''\\/=])\.git[\\/]+(config(\.worktree)?\b|hooks[\\/]|info[\\/]|refs[\\/]+replace\b)'
+$gitInternGrund = "Das Innere eines Git-Repos (.git/config, .git/hooks, .git/info, refs/replace) schreibst du nie direkt: Dort entscheidet sich, wohin gepusht wird und welcher Code bei Git-Befehlen mitlaeuft (AGENTS.md Abschnitt 18). Nimm den passenden git-Befehl; soll sich dort etwas aendern, das kein git-Befehl abdeckt, sag [NAME] in einem Satz, was und warum."
+function Test-ImmerGesperrt([string]$path) {
+    $p = Normalize-AbsolutePath $path
+    if (-not $p) { return $false }
+    foreach ($g in $immerGesperrt) { if ($g -and (Test-PathWithin $p $g)) { return $true } }
+    return $false
+}
+
 function Test-Allowed([string]$path) {
     if ([string]::IsNullOrWhiteSpace($path)) { return $true }
     $p = Normalize-AbsolutePath $path
     # Relative Pfade werden hier nicht bewertet, dafuer zaehlt das Arbeitsverzeichnis.
     if (-not $p) { return $true }
+    if (Test-ImmerGesperrt $p) { return $false }
     foreach ($pat in $allowPatterns) {
         if ($pat -and (($isWindowsHost -and $p -like $pat) -or (-not $isWindowsHost -and $p -clike $pat))) { return $true }
     }
@@ -135,8 +163,8 @@ function Test-Allowed([string]$path) {
 # --- Die Freigaben gehoeren dem Besitzer (seit 5.0) ---------------------------
 # Die beiden Listen schreibt nur freigeben.ps1, und das startet nur der Besitzer in seinem
 # eigenen Terminal. Lesen darf der Agent sie, damit er seine Policy erklaeren kann.
-$policyDateien = @('freigegebene-pfade.txt', 'gesperrte-pfade.txt')
-$policyRx = '(?i)(?:^|[\\/\s"''])(?:freigegebene|gesperrte)-pfade\.txt'
+$policyDateien = @('freigegebene-pfade.txt', 'gesperrte-pfade.txt', 'extern-freigaben.txt')
+$policyRx = '(?i)(?:^|[\\/\s"''])(?:(?:freigegebene|gesperrte)-pfade|extern-freigaben)\.txt'
 $policyGrund = "Diese Liste gehoert [NAME]: Sie legt fest, was du ausserhalb deines Arbeitsbereichs lesen und schreiben darfst (AGENTS.md Abschnitt 18). Du schreibst sie nie, auch nicht auf seinen Wunsch hin und auch nicht ueber Git. Aendern kann er sie nur selbst, mit freigeben.ps1 in seinem eigenen PowerShell-Fenster. Sag ihm das in einem Satz und gib ihm in einem Codeblock den passenden Befehl: Freigeben " + (Get-FreigabeBefehl '<Pfad>' $ab) + " ; Freigabe zuruecknehmen mit -Entziehen; einen Unterordner wieder sperren mit -Sperren, die Sperre aufheben mit -Entsperren; ohne Pfad zeigt der Befehl den aktuellen Stand."
 function Test-PolicyDatei([string]$path) {
     $p = Normalize-AbsolutePath $path
@@ -213,10 +241,22 @@ $ti   = $in.tool_input
 
 # --- 1) Dateiwerkzeuge: der Zielpfad steht direkt im Aufruf -------------------
 if ($tool -in @("Write", "Edit", "NotebookEdit", "MultiEdit")) {
-    $target = Resolve-TargetPath ([string]$ti.file_path) ([string]$in.cwd)
+    # NotebookEdit meldet sein Ziel als notebook_path (seit der vierten Pruefung von 6.0; vorher galt jedes Notebook
+    # als erlaubt, weil file_path leer war).
+    $roh = [string]$ti.file_path
+    if (-not $roh) { $roh = [string]$ti.notebook_path }
+    $target = Resolve-TargetPath $roh ([string]$in.cwd)
+    # Ein Ziel, das sich nicht pruefen laesst, wird nicht geschrieben (vorher: durchgelassen).
+    if ($roh -and -not $target) { Write-Decision "deny" ("Schreiben gesperrt: Der Zielpfad '" + $roh + "' laesst sich nicht pruefen. Nenne einen gewoehnlichen absoluten Pfad im Arbeitsbereich.") }
+    # Der Schalter, der alle Hooks abschaltet (disableAllHooks), gehoert in keine Einstellungsdatei, die der Agent
+    # schreibt: In einer Projektdatei schaltete er ohne Haertung die Sperren fuer jede Session in diesem Projekt ab.
+    $inhalt = (@($ti.content, $ti.new_string, $ti.new_source) + @(@($ti.edits) | ForEach-Object { if ($_) { $_.new_string } }) | Where-Object { $_ }) -join "`n"
+    if ($target -and $target -match $gitInternRx) { Write-Decision "deny" ("Schreiben gesperrt: " + $target + ". " + $gitInternGrund) }
+    if ($inhalt -match '(?i)disableAllHooks') { Write-Decision "deny" ("Schreiben gesperrt: '" + $target + "' wuerde disableAllHooks setzen und damit die Sperren abschalten. " + $immerGrund) }
     if (Test-PolicyDatei $target) {
         Write-Decision "deny" ("Schreiben gesperrt: " + $target + ". " + $policyGrund)
     }
+    if (Test-ImmerGesperrt $target) { Write-Decision "deny" ("Blockierter Pfad: " + $target + ". " + $immerGrund) }
     if (-not (Test-Allowed $target)) {
         Write-Decision "deny" (Get-SperrHinweis "Schreiben" $target $ab)
     }
@@ -237,6 +277,27 @@ if ($tool -in @("Bash", "PowerShell")) {
     # Agent ausloest, bestaetigt der Besitzer sonst womoeglich, ohne zu wissen, wofuer.
     if ($cmd -match '(?i)(Start-Process[^\r\n;|]*-Verb\s*[''"]?RunAs|\bsudo\b|\bgsudo\b|\brunas(\.exe)?\s|\bdoas\b|with\s+administrator\s+privileges|\bpkexec\b)') {
         Write-Decision "deny" "Gesperrt: Der Befehl wuerde Administratorrechte anfordern (Benutzerkontensteuerung, sudo, runas). Ein Agent fordert nie selbst erhoehte Rechte an, auch nicht auf Wunsch von [NAME] (AGENTS.md Abschnitt 18). Braucht eine Aufgabe Adminrechte, sag ihm in ein, zwei Saetzen, wozu, und gib ihm den Befehl in einem Codeblock, den er selbst in seinem eigenen Fenster ausfuehrt. Erinnere ihn dabei an die Regel: nie eine Abfrage der Benutzerkontensteuerung oder ein Passwortfenster bestaetigen, das er nicht selbst ausgeloest hat."
+    }
+    # Die Einstellungen von Claude Code und die Kopie der Sperren, unabhaengig vom Befehl (seit der vierten Pruefung
+    # von 6.0): Die Liste der Schreibverben unten kennt python -c, node -e, robocopy und Verwandte nicht, und ein
+    # einziger solcher Aufruf mit dem Pfad im Klartext trug die Sperren fuer alle Projekte aus. Gesperrt ist jedes
+    # Segment, das einen dieser Orte oder disableAllHooks nennt und nicht mit einem reinen Lesebefehl beginnt.
+    $cmdS = Expand-BekannteVariablen $cmd
+    $schutzRx = @('(?i)disableAllHooks')
+    foreach ($g in $immerGesperrt) {
+        if (-not $g) { continue }
+        $schutzRx += ('(?i)' + ([regex]::Escape(($g -replace '\\', '/')) -replace '/', '[\\/]+'))
+    }
+    $schutzRx += '(?i)\.leo-sperren'
+    $schutzRx += $policyRx
+    $schutzRx += $gitInternRx
+    $leser = '(?i)^\s*(?:git\s+(?:log|show|diff|status|blame|grep|ls-files|commit)|cat|type|gc|get-content|head|tail|less|more|select-string|sls|grep|rg|findstr|test-path|get-item|gi|get-childitem|gci|ls|dir|wc|jq|get-filehash|sha256sum|code|notepad\+\+)(?:\.exe)?(?=\s|$)'
+    foreach ($seg in [regex]::Split($cmdS, '\r?\n|;|&&|\|\||\|')) {
+        foreach ($rx in $schutzRx) {
+            if ($seg -match $rx -and $seg -notmatch $leser) {
+                Write-Decision "deny" ("Gesperrt: Der Befehl beruehrt die Einstellungen von Claude Code oder die Kopie der Sperren und beginnt nicht mit einem reinen Lesebefehl. " + $immerGrund)
+            }
+        }
     }
     if (Test-FreigebenAufruf $cmd 'sperre-haerten\.ps1') {
         Write-Decision "deny" ("Gesperrt: sperre-haerten.ps1 fuehrt nur [NAME] selbst aus, in seinem eigenen Fenster, weil es Administratorrechte braucht und er sie dort bewusst bestaetigt (AGENTS.md Abschnitt 18). Erklaer ihm in ein, zwei Saetzen, was die Haertung bewirkt, und gib ihm den Befehl in einem Codeblock, mit vollem Pfad: " + $(if ($isWindowsHost) { 'powershell -NoProfile -ExecutionPolicy Bypass -File "' } else { 'sudo pwsh -NoProfile -File "' }) + (Join-Path (Join-Path (Join-Path $repo '00_INDEX') 'scripts') 'sperre-haerten.ps1') + '"')
@@ -312,6 +373,11 @@ if ($tool -in @("Bash", "PowerShell")) {
     # Arbeitsverzeichnis zaehlt mit: ein schreibendes Kommando mit relativen
     # Pfaden trifft sonst unbemerkt ein fremdes Verzeichnis.
     $cwd = [string]$in.cwd
+    # Relativ aus ~/.claude heraus (Set-Content settings.json ...): die Einstellungsdateien bleiben gesperrt.
+    if ($homePath -and (Test-PathWithin $cwd (Join-Path $homePath '.claude')) -and $cmd -match '(?i)(^|[\s"''\\/])settings(\.local)?\.json\b') {
+        Write-Decision "deny" ("Schreibendes Kommando auf settings.json im Ordner ~/.claude. " + $immerGrund)
+    }
+    if (Test-ImmerGesperrt $cwd) { Write-Decision "deny" ("Schreibendes Kommando in ~/.leo-sperren. " + $immerGrund) }
     if (-not (Test-Allowed $cwd)) {
         Write-Decision "deny" ("Schreibendes Kommando mit Arbeitsverzeichnis ausserhalb des Arbeitsbereichs. " + (Get-SperrHinweis "Schreiben" (Normalize-AbsolutePath $cwd) $ab))
     }

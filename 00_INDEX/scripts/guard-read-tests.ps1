@@ -122,6 +122,14 @@ $faelle = @(
     @{ n = "26 Marker keine ist kein Pfad";         erw = "PASS"; tool = "Bash"; cmd = "echo keine Aenderung" }
     @{ n = "58 URL ist kein Pfad";                 erw = "PASS"; tool = "Bash"; cmd = "curl -s https://example.org/a/b/c" }
     @{ n = "62 git log HEAD-Tilde";                erw = "PASS"; tool = "Bash"; cmd = "git log HEAD~3 --oneline 2>/dev/null" }
+    # Vierte Pruefung von 6.0: Datenstrom, Platzhalter, Grep-Filter.
+    @{ n = "69 .env ueber ::DATA";                 erw = "DENY"; tool = "Read"; file = "$repo\.env::`$DATA" }
+    @{ n = "70 cat .env-Platzhalter";              erw = "DENY"; tool = "Bash"; cmd = "cat .env*" }
+    @{ n = "71 Get-Content *.pem";                 erw = "DENY"; tool = "PowerShell"; cmd = "Get-Content .\certs\*.pem" }
+    @{ n = "72 Grep mit glob .env";                erw = "DENY"; tool = "Grep"; path = $repo; glob = ".env" }
+    @{ n = "73 Grep mit glob *.pem";               erw = "DENY"; tool = "Grep"; path = $repo; glob = "**/*.pem" }
+    @{ n = "74 Grep mit glob *.md frei";           erw = "PASS"; tool = "Grep"; path = $repo; glob = "*.md" }
+    @{ n = "75 Glob nach .env";                    erw = "DENY"; tool = "Glob"; pattern = "**/.env*" }
 )
 if ($isWindowsHost) {
     $faelle += @(
@@ -141,7 +149,7 @@ function Ruf($skript, $fall, $exe) {
     $ti = switch ($fall.tool) {
         "Read"       { @{ file_path = $fall.file } }
         "Write"      { @{ file_path = $fall.file; content = "x" } }
-        "Grep"       { @{ pattern = "x"; path = $fall.path } }
+        "Grep"       { $g = @{ pattern = "x"; path = $fall.path }; if ($fall.ContainsKey('glob')) { $g.glob = $fall.glob }; $g }
         "Glob"       { @{ pattern = $fall.pattern } }
         default      { @{ command = $fall.cmd } }
     }

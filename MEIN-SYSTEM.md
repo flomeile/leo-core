@@ -2,7 +2,7 @@
 titel: Mein System (persönliche Ebene)
 zweck: Alles, was an diesem System dir gehört - Name, Pfad, eigene Regeln, eigene Bauten. Wird von Updates nie angefasst.
 type: master-regeln
-stand: 2026-11-09
+stand: 2026-11-21
 ---
 
 # Mein System
@@ -74,7 +74,7 @@ Welche Version des Grundgerüsts bei dir eingespielt ist. Der Skill `leo-mechani
 
 | | |
 |---|---|
-| Eingespielte Version | 2.4 |
+| Eingespielte Version | 6.0 |
 | Eingespielt am | *(Datum deiner Einrichtung)* |
 | Quelle | https://github.com/flomeile/leo-core |
 

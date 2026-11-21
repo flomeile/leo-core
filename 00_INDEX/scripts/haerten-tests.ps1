@@ -79,9 +79,9 @@ $alt = @'
 $sw = Join-Path $tmp 'settings-win.json'; [System.IO.File]::WriteAllText($sw, $alt, $utf8)
 $sp = Join-Path $tmp 'settings-posix.json'; [System.IO.File]::WriteAllText($sp, $alt, $utf8)
 $keinCodex = Join-Path $tmp 'gibt-es-nicht.json'
-$r = Starte $einrichten "-Plattform windows -Datei `"$sw`" -CodexDatei `"$keinCodex`" -Pruefen"
+$r = Starte $einrichten "-OhneProfil -Plattform windows -Datei `"$sw`" -CodexDatei `"$keinCodex`" -Pruefen"
 Pruef "1 Pruefen meldet fehlendes onFailure" $r.code "1"
-$r = Starte $einrichten "-Plattform windows -Datei `"$sw`" -CodexDatei `"$keinCodex`""
+$r = Starte $einrichten "-OhneProfil -Plattform windows -Datei `"$sw`" -CodexDatei `"$keinCodex`""
 $j = Get-Content -LiteralPath $sw -Raw -Encoding UTF8 | ConvertFrom-Json
 Pruef "2 Windows: Sperre hat onFailure block" ([string]$j.hooks.PreToolUse[0].hooks[0].onFailure) "block"
 Pruef "3 Windows: Befehl bleibt powershell" ([string]$j.hooks.PreToolUse[0].hooks[0].command -like 'powershell -NoProfile*guard-read.ps1"') "True"
@@ -89,16 +89,16 @@ Pruef "4 Eigener Hook unveraendert" ([string]$j.hooks.PreToolUse[1].hooks[0].com
 Pruef "5 Eigener Hook ohne onFailure" ([string]$j.hooks.PreToolUse[1].hooks[0].onFailure) ""
 Pruef "6 SessionStart ohne onFailure" ([string]$j.hooks.SessionStart[0].hooks[0].onFailure) ""
 Pruef "7 permissions bleiben" ([string]$j.permissions.deny[0]) "Read(**/.env)"
-$r = Starte $einrichten "-Plattform windows -Datei `"$sw`" -CodexDatei `"$keinCodex`" -Pruefen"
+$r = Starte $einrichten "-OhneProfil -Plattform windows -Datei `"$sw`" -CodexDatei `"$keinCodex`" -Pruefen"
 Pruef "8 Zweiter Lauf: nichts mehr zu tun" $r.code "0"
-$r = Starte $einrichten "-Plattform posix -Pwsh /opt/homebrew/bin/pwsh -Datei `"$sp`" -CodexDatei `"$keinCodex`""
+$r = Starte $einrichten "-OhneProfil -Plattform posix -Pwsh /opt/homebrew/bin/pwsh -Datei `"$sp`" -CodexDatei `"$keinCodex`""
 $j = Get-Content -LiteralPath $sp -Raw -Encoding UTF8 | ConvertFrom-Json
 Pruef "9 posix (ungeprueft): Befehl mit pwsh-Pfad" ([string]$j.hooks.PreToolUse[0].hooks[0].command) '"/opt/homebrew/bin/pwsh" -NoProfile -File "${CLAUDE_PROJECT_DIR}/00_INDEX/scripts/guard-read.ps1"'
 Pruef "10 posix (ungeprueft): -Hook bleibt" ([string]$j.hooks.SessionStart[0].hooks[0].command -like '*eingehaengte-repos-aktuell.ps1" -Hook SessionStart') "True"
 Pruef "11 posix (ungeprueft): onFailure block" ([string]$j.hooks.PreToolUse[0].hooks[0].onFailure) "block"
 $cx = Join-Path $tmp 'codex.json'
 [System.IO.File]::WriteAllText($cx, '{ "hooks": { "PreToolUse": [ { "matcher": "Bash", "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"PFAD-ZU-DEINEM-REPO\\00_INDEX\\scripts\\guard-read.ps1\"" } ] } ] } }', $utf8)
-$r = Starte $einrichten "-Plattform windows -Datei `"$sw`" -CodexDatei `"$cx`""
+$r = Starte $einrichten "-OhneProfil -Plattform windows -Datei `"$sw`" -CodexDatei `"$cx`""
 $j = Get-Content -LiteralPath $cx -Raw -Encoding UTF8 | ConvertFrom-Json
 Pruef "12 Codex: Platzhalter durch Repo ersetzt" ([string]$j.hooks.PreToolUse[0].hooks[0].command -like ('*"' + $repo + '\00_INDEX\scripts\guard-read.ps1"')) "True"
 Pruef "13 Codex: kein onFailure" ([string]$j.hooks.PreToolUse[0].hooks[0].onFailure) ""
@@ -130,8 +130,26 @@ $r = Starte $verteiler "-Repo `"$repo`" -Skript guard-read" $eingabe @{ CLAUDE_P
 Pruef "30 Leo-Kind: Lesen ausserhalb gesperrt" (Urteil $r) "DENY"
 $r = Starte $verteiler "-Repo `"$repo`" -Skript version-check -Hook SessionStart" '{"source":"compact"}' @{ CLAUDE_PROJECT_DIR = $repo }
 Pruef "30b Verteiler startet die Versionspruefung (seit 5.3)" $r.code "0"
-$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-read" $eingabe @{ CLAUDE_PROJECT_DIR = (Join-Path $tmp 'anderes Projekt') }
-Pruef "31 Anderes Projekt: nichts gesperrt" (Urteil $r) "PASS"
+$anderes = Join-Path $tmp 'anderes Projekt'
+$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-read" $eingabe @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "31 Anderes Projekt: Lesen ausserhalb gesperrt (6.0)" (Urteil $r) "DENY"
+$eingabeP = (@{ tool_name = 'Write'; cwd = $anderes; tool_input = @{ file_path = (Join-Path $anderes 'a.md') } } | ConvertTo-Json -Compress -Depth 5)
+$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-workspace" $eingabeP @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "31b Anderes Projekt: im Projekt schreiben frei" (Urteil $r) "PASS"
+$eingabeR = (@{ tool_name = 'Write'; cwd = $anderes; tool_input = @{ file_path = (Join-Path $repo 'x.md') } } | ConvertTo-Json -Compress -Depth 5)
+$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-workspace" $eingabeR @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "31c Anderes Projekt: ins Leo-Kind schreiben zu" (Urteil $r) "DENY"
+$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-read" '{"tool_name":"Bash","cwd":"x","tool_input":{"command":"cat .env"}}' @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "31d Anderes Projekt: Zugangsdaten zu" (Urteil $r) "DENY"
+$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-git" '{"tool_name":"Bash","cwd":"x","tool_input":{"command":"gh pr merge 3"}}' @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "31e Anderes Projekt: Mergen zu" (Urteil $r) "DENY"
+$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-extern" '{"tool_name":"mcp__x__send_message","tool_input":{}}' @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "31f Anderes Projekt: Connector-Versand zu" (Urteil $r) "DENY"
+$r = Starte $verteiler "-Repo `"$repo`" -Skript version-check -Hook SessionStart" '{"source":"compact"}' @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "31g Anderes Projekt: keine Kern-Hooks" ([string]($r.code -eq 0 -and -not $r.out.Trim())) "True"
+$eingabeD = (@{ tool_name = 'Write'; cwd = $homePath; tool_input = @{ file_path = (Join-Path $desktop 'x.md') } } | ConvertTo-Json -Compress -Depth 5)
+$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-workspace" $eingabeD @{ CLAUDE_PROJECT_DIR = $homePath }
+Pruef "31h Projekt = Benutzerordner: kein Arbeitsbereich" (Urteil $r) "DENY"
 $r = Starte $verteiler "-Repo `"$repo`" -Skript guard-read" $eingabe @{ CLAUDE_PROJECT_DIR = (Join-Path (Join-Path $repo '.claude') 'worktrees\a') }
 Pruef "32 Arbeitsbaum im Repo: gesperrt" (Urteil $r) "DENY"
 $frei = Join-Path $tmp 'Freigabe Test'
@@ -159,11 +177,253 @@ Pruef "40 Entfernen" ((Test-Path -LiteralPath $ort.dropin) -or (Test-Path -Liter
 $r = Starte $haerten "-Ziel `"$sys`" -Pruefen"
 Pruef "41 Danach Stand fehlt" ($r.out -match 'Stand:\s+fehlt') "True"
 
+# --- Ohne Adminrechte: Sperren aus dem Versionsstand im Benutzerprofil (seit 6.0) ------------------
+# Ein Mini-Kind mit den Kern-Skripten aus dem Arbeitsstand, committet und mit Tag v6.0; die Quelle ist das
+# Kind selbst (gleicher Tag, gleicher Commit). Das Profil ist ein Testordner, nie das echte.
+$mini = Join-Path $tmp 'Mini Kind'
+$heimT = Join-Path $tmp 'Heim'
+$sysT = Join-Path $tmp 'kein System'
+foreach ($rel in ($haertungsDateien + @('00_INDEX/scripts/hooks-einrichten.ps1', '00_INDEX/scripts/version-check.ps1', '00_INDEX/scripts/sperre-haerten.ps1'))) {
+    $q = Join-Path $repo $rel; $z = Join-Path $mini $rel
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $z) | Out-Null
+    Copy-Item -LiteralPath $q -Destination $z
+}
+New-Item -ItemType Directory -Force -Path (Join-Path $mini '.claude') | Out-Null
+Copy-Item -LiteralPath (Join-Path $repo '.claude/settings.json') -Destination (Join-Path $mini '.claude/settings.json')
+[System.IO.File]::WriteAllText((Join-Path $mini 'MEIN-SYSTEM.md'), "| Eingespielte Version | 6.0 |`n", $utf8)
+[System.IO.File]::WriteAllText((Join-Path $mini 'AGENTS.md'), "---`nversion: 6.0`n---`n", $utf8)
+$ErrorActionPreference = 'Continue'
+& git init -q -b main $mini 2>&1 | Out-Null
+& git -C $mini add -- . 2>&1 | Out-Null
+& git -C $mini -c user.email=t@example.org -c user.name=t commit -q -m mini 2>&1 | Out-Null
+& git -C $mini tag v6.0 2>&1 | Out-Null
+$ErrorActionPreference = 'Stop'
+$miniEinrichten = Join-Path $mini '00_INDEX/scripts/hooks-einrichten.ps1'
+$po = Get-ProfilOrt $mini $heimT
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`""
+Pruef "50 Profil: Kopie der Sperren angelegt" ([string]((Test-Path -LiteralPath (Join-Path $po.kopie '00_INDEX/scripts/guard-fremdsysteme.ps1')) -and (Test-Path -LiteralPath (Join-Path $po.kopie '00_INDEX/scripts/leo-hook.ps1')))) "True"
+$us = Get-Content -LiteralPath $po.settings -Raw -Encoding UTF8 | ConvertFrom-Json
+$eig = @($us.hooks.PreToolUse | Where-Object { [string]$_.hooks[0].command -like ('*' + $po.kopie + '*') })
+Pruef "51 Profil: sechs Sperren in den Einstellungen" $eig.Count "6"
+Pruef "52 Profil: mit onFailure block" (@($eig | Where-Object { $_.hooks[0].onFailure -eq 'block' }).Count) "6"
+Pruef "53 Profil: Leseverbote dazu" ([string](@($us.permissions.deny) -contains 'Read(~/.ssh/**)')) "True"
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`" -Pruefen"
+Pruef "54 Profil: zweiter Lauf nichts zu tun" $r.code "0"
+Pruef "54b Profil: Versionsmarke 6.0" ([string]((Get-Content -LiteralPath (Join-Path $po.kopie 'version.txt') -Raw).Trim())) "6.0"
+# -NurProfil (Aufruf der Versionspruefung): richtet nur das Profil ein, Projektdateien bleiben.
+$projVorher = Get-DateiPruefsumme (Join-Path $mini '.claude/settings.json')
+Remove-Item -LiteralPath $po.settings -Force
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`" -NurProfil"
+Pruef "54c NurProfil: Einstellungen wieder da" ([string](Test-Path -LiteralPath $po.settings)) "True"
+Pruef "54d NurProfil: Meldung fuer die Versionspruefung" ([string]($r.out -match 'Alle Projekte: Sperren aus Version [0-9.]+ eingerichtet \(')) "True"
+Pruef "54e NurProfil: Projektdatei unberuehrt" ([string]((Get-DateiPruefsumme (Join-Path $mini '.claude/settings.json')) -eq $projVorher)) "True"
+# Der Agent aendert eine Sperre im Repo: Sie gelangt nie in die Kopie.
+Add-Content -LiteralPath (Join-Path $mini '00_INDEX/scripts/guard-read.ps1') -Value 'exit 0 # gelockert'
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`""
+Pruef "55 Profil: Aenderung im Repo bleibt draussen" ([string]((Get-Content -LiteralPath (Join-Path $po.kopie '00_INDEX/scripts/guard-read.ps1') -Raw) -notmatch 'gelockert')) "True"
+# Vierte Pruefung von 6.0: Eine Freigabe, die der Agent in die Liste im Repo schreibt, gelangt nie in eine bestehende Kopie.
+$listeKopie = Join-Path $po.kopie '00_INDEX/freigegebene-pfade.txt'
+$listeRepo = Join-Path $mini '00_INDEX/freigegebene-pfade.txt'
+$repoAlt = if (Test-Path -LiteralPath $listeRepo) { [System.IO.File]::ReadAllText($listeRepo) } else { $null }
+$kopieAlt = if (Test-Path -LiteralPath $listeKopie) { [System.IO.File]::ReadAllText($listeKopie) } else { $null }
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $listeKopie) | Out-Null
+[System.IO.File]::WriteAllText($listeKopie, "# Liste des Besitzers`r`n", $utf8)
+[System.IO.File]::WriteAllText($listeRepo, "# Liste des Besitzers`r`nlesen-und-schreiben: C:\Users`r`n", $utf8)
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`" -NurProfil"
+Pruef "55b Profil: Freigabe aus dem Repo bleibt draussen" ([string]([System.IO.File]::ReadAllText($listeKopie) -notmatch 'C:\\Users')) "True"
+if ($null -eq $repoAlt) { Remove-Item -LiteralPath $listeRepo -Force } else { [System.IO.File]::WriteAllText($listeRepo, $repoAlt, $utf8) }
+if ($null -eq $kopieAlt) { Remove-Item -LiteralPath $listeKopie -Force } else { [System.IO.File]::WriteAllText($listeKopie, $kopieAlt, $utf8) }
+# Vierte Pruefung von 6.0: Die Haertung nimmt Sperren aus dem geprueften Stand und Matcher aus der festen Liste, und
+# eine aus der Projektdatei geloeschte Sperre fehlt trotzdem nicht. guard-read.ps1 im Mini-Kind ist seit Fall 55 veraendert.
+$sysM = Join-Path $tmp 'System Mini'
+$ortM = Get-HaertungsOrt $mini $sysM
+$standMini = (& git -C $mini rev-parse 'v6.0^{commit}' 2>$null | Select-Object -First 1)
+$swM = Join-Path $mini '.claude/settings.json'
+$swAlt = [System.IO.File]::ReadAllText($swM)
+$sj = $swAlt | ConvertFrom-Json
+foreach ($g in @($sj.hooks.PreToolUse)) { if (@($g.hooks | Where-Object { $_.command -like '*guard-workspace*' })) { $g.matcher = 'NieMehr' } }
+$sj.hooks.PreToolUse = @($sj.hooks.PreToolUse | Where-Object { -not @($_.hooks | Where-Object { $_.command -like '*guard-mail*' }) })
+[System.IO.File]::WriteAllText($swM, ($sj | ConvertTo-Json -Depth 30), $utf8)
+$r = Starte (Join-Path $mini '00_INDEX/scripts/sperre-haerten.ps1') "-Ziel `"$sysM`" -Stand $standMini"
+Pruef "55c Haertung: Sperre aus dem geprueften Stand" ([string]((Get-Content -LiteralPath (Join-Path $ortM.kopie '00_INDEX/scripts/guard-read.ps1') -Raw) -notmatch 'gelockert')) "True"
+$dM = Get-Content -LiteralPath $ortM.dropin -Raw -Encoding UTF8 | ConvertFrom-Json
+$gw = @($dM.hooks.PreToolUse | Where-Object { @($_.hooks | Where-Object { $_.command -like '*-Skript guard-workspace' }) })
+Pruef "55d Haertung: Matcher aus der festen Liste" ([string]$gw[0].matcher) $matcherJe['guard-workspace']
+Pruef "55e Haertung: geloeschte Sperre trotzdem da" (@($dM.hooks.PreToolUse | ForEach-Object { $_.hooks } | Where-Object { $_.command -like '*-Skript guard-mail' }).Count) "1"
+[System.IO.File]::WriteAllText($swM, $swAlt, $utf8)
+# Ein Tag, der lokal auf einen anderen Commit zeigt als auf der Quelle: keine Erneuerung.
+$fremdQ = Join-Path $tmp 'Quelle anders'
+$ErrorActionPreference = 'Continue'
+& git init -q -b main $fremdQ 2>&1 | Out-Null
+& git -C $fremdQ -c user.email=t@example.org -c user.name=t commit -q --allow-empty -m anders 2>&1 | Out-Null
+& git -C $fremdQ tag v6.0 2>&1 | Out-Null
+$ErrorActionPreference = 'Stop'
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$fremdQ`" -System `"$sysT`""
+Pruef "56 Profil: falscher Tag, nicht erneuert" ([string]($r.out -match 'nicht erneuert')) "True"
+# Fremde Eintraege in den persoenlichen Einstellungen bleiben.
+$us.hooks.PreToolUse = @(@($us.hooks.PreToolUse) + [pscustomobject]@{ matcher = 'Bash'; hooks = @([pscustomobject]@{ type = 'command'; command = 'echo eigener' }) })
+[System.IO.File]::WriteAllText($po.settings, ($us | ConvertTo-Json -Depth 20), $utf8)
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`""
+$us = Get-Content -LiteralPath $po.settings -Raw -Encoding UTF8 | ConvertFrom-Json
+Pruef "57 Profil: eigener Hook bleibt, keine Doppel" ([string](@($us.hooks.PreToolUse).Count)) "7"
+# Der Verteiler aus der Profil-Kopie sperrt in einem anderen Projekt.
+$vp = Join-Path (Join-Path (Join-Path $po.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
+$r = Starte $vp "-Repo `"$mini`" -Skript guard-read" $eingabe @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "58 Profil-Verteiler: anderes Projekt gesperrt" (Urteil $r) "DENY"
+# Mit Haertung braucht es das Profil nicht.
+$ortMini = Get-HaertungsOrt $mini $sysT
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ortMini.dropin) | Out-Null
+[System.IO.File]::WriteAllText($ortMini.dropin, '{}', $utf8)
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`""
+Pruef "59 Profil: bei Haertung nichts" ([string]($r.out -match 'Haertung mit Adminrechten ist eingerichtet')) "True"
+
+# --- Ende zu Ende: Versionspruefung beim Sessionstart richtet das Profil ein (seit 6.0) ---------------
+# Wie Claude Code beim Start: version-check -Hook SessionStart, ohne Modell. Das Profil ist ein Testordner
+# unter Temp (-Heim), nie das echte; nur damit darf die Quelle ein lokales Repo sein.
+$heimE = Join-Path $tmp 'Heim E2E'
+$poE = Get-ProfilOrt $mini $heimE
+$miniVc = Join-Path $mini '00_INDEX/scripts/version-check.ps1'
+$keineMitteilung = Join-Path $tmp 'keine-mitteilungen.md'
+$vcArg = "-Hook SessionStart -Quelle `"$mini`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimE`""
+$r = Starte $miniVc $vcArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "60 Sessionstart: Profil eingerichtet" ([string]($r.out -match 'Sperren fuer alle Projekte eingerichtet')) "True"
+$usE = if (Test-Path -LiteralPath $poE.settings) { Get-Content -LiteralPath $poE.settings -Raw -Encoding UTF8 | ConvertFrom-Json } else { $null }
+$eigE = @($usE.hooks.PreToolUse | Where-Object { [string]$_.hooks[0].command -like ('*' + $poE.kopie + '*') })
+Pruef "61 Sessionstart: sechs Sperren eingetragen" $eigE.Count "6"
+$gleich = $true
+foreach ($rel in $haertungsDateien) {
+    $k = Join-Path $poE.kopie $rel
+    if (-not (Test-Path -LiteralPath $k)) { $gleich = $false; continue }
+    $ErrorActionPreference = 'Continue'
+    $tagHash = (& git -C $mini rev-parse ('v6.0:' + $rel) 2>$null)
+    $kopieHash = (& git hash-object -- $k 2>$null)
+    $ErrorActionPreference = 'Stop'
+    if ([string]$tagHash -ne [string]$kopieHash) { $gleich = $false }
+}
+Pruef "62 Sessionstart: Kopie gleich dem Tag" ([string]$gleich) "True"
+# Wie Claude Code die eingetragenen Befehle startet: Jeder startet und entscheidet, keiner sperrt aus Versehen.
+$bashEin = '{"tool_name":"Bash","cwd":"' + ($anderes -replace '\\', '\\') + '","tool_input":{"command":"git status"}}'
+$schlecht = 0
+foreach ($g in $eigE) {
+    if ('Bash' -notmatch ('^(' + [string]$g.matcher + ')$')) { continue }
+    $c = [string]$g.hooks[0].command
+    if ($c -notmatch '-File "([^"]+)" (.*)$') { $schlecht++; continue }
+    $rr = Starte $matches[1] $matches[2] $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+    if ($rr.code -ne 0 -or (Urteil $rr) -ne 'PASS') { $schlecht++ }
+}
+Pruef "63 Profil-Befehle starten, git status frei" $schlecht "0"
+$postEin = '{"tool_name":"Bash","cwd":"x","tool_input":{"command":"curl -X POST https://www.googleapis.com/calendar/v3/calendars/primary/events -d @a.json"}}'
+$fs = @($eigE | Where-Object { [string]$_.hooks[0].command -like '*-Skript guard-fremdsysteme' })[0]
+$null = [string]$fs.hooks[0].command -match '-File "([^"]+)" (.*)$'
+$rr = Starte $matches[1] $matches[2] $postEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "64 Profil: Schreiben in Google gesperrt" (Urteil $rr) "DENY"
+$r = Starte $miniVc $vcArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "65 Zweiter Start: nichts neu eingerichtet" ([string]($r.out -match 'Sperren fuer alle Projekte eingerichtet')) "False"
+# Mitten im Update: AGENTS.md traegt schon 6.0, MEIN-SYSTEM.md noch 5.3. Dann kein Profil aus v5.3.
+$heimM = Join-Path $tmp 'Heim Update'
+$poM = Get-ProfilOrt $mini $heimM
+[System.IO.File]::WriteAllText((Join-Path $mini 'MEIN-SYSTEM.md'), "| Eingespielte Version | 5.3 |`n", $utf8)
+$ErrorActionPreference = 'Continue'; & git -C $mini tag v5.3 'v6.0' 2>&1 | Out-Null; $ErrorActionPreference = 'Stop'
+$r = Starte $miniVc "-Hook SessionStart -Quelle `"$mini`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimM`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "66 Mitten im Update: kein Profil" ([string](Test-Path -LiteralPath $poM.settings)) "False"
+$r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimM`" -Quelle `"$mini`" -System `"$(Join-Path $tmp 'kein System 2')`" -NurProfil"
+Pruef "67 Mitten im Update: Grund genannt" ([string]($r.out -match 'Update noch nicht abgeschlossen')) "True"
+[System.IO.File]::WriteAllText((Join-Path $mini 'MEIN-SYSTEM.md'), "| Eingespielte Version | 6.0 |`n", $utf8)
+
+# --- Notausgang: unvollstaendige oder fehlende Kopie heilt ohne Netz (seit 6.0, Zweitpruefung) -------------
+$usE = Get-Content -LiteralPath $poE.settings -Raw -Encoding UTF8 | ConvertFrom-Json
+$rep = @(@($usE.hooks.SessionStart) | ForEach-Object { @($_.hooks) } | Where-Object { [string]$_.command -match '-Reparatur -Stand [0-9a-f]{40} -Version 6\.0' })
+Pruef "68 Reparatur-Eintrag beim Sessionstart" $rep.Count "1"
+$null = [string]$rep[0].command -match '-File "([^"]+)" (.*)$'
+$repSkript = $matches[1]; $repArg = $matches[2]
+$vpE = Join-Path (Join-Path (Join-Path $poE.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
+Remove-Item -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/lib/schutzliste.ps1') -Force
+$r = Starte $vpE "-Repo `"$mini`" -Skript guard-read" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "69 Unvollstaendige Kopie: Exit 2 mit Weg" ([string]($r.code -eq 2 -and $r.out -match 'unvollstaendig' -and $r.out -match 'neu starten')) "True"
+$r = Starte $repSkript $repArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "70 Reparatur ohne Netz: wiederhergestellt" ([string]($r.out -match 'wiederhergestellt' -and (Test-Path -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/lib/schutzliste.ps1')))) "True"
+$r = Starte $vpE "-Repo `"$mini`" -Skript guard-read" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "71 Danach: git status wieder frei" ([string]($r.code -eq 0 -and (Urteil $r) -eq 'PASS')) "True"
+Remove-Item -LiteralPath $poE.kopie -Recurse -Force
+$r = Starte $repSkript $repArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "72 Ganze Kopie geloescht: wiederhergestellt" ([string]((Test-Path -LiteralPath $vpE) -and $r.out -match 'wiederhergestellt')) "True"
+$r = Starte $repSkript $repArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "73 Vollstaendige Kopie: Reparatur schweigt" ([string]([string]::IsNullOrWhiteSpace($r.out))) "True"
+Remove-Item -LiteralPath $poE.kopie -Recurse -Force
+$r = Starte $repSkript $repArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "74 Im Kind selbst: Reparatur ueberlaesst es der Versionspruefung" ([string](Test-Path -LiteralPath $vpE)) "False"
+$offline = Join-Path $tmp 'gibt es nicht.git'
+$r = Starte $miniVc "-Hook SessionStart -Quelle `"$offline`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimE`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "75 Sessionstart ohne Netz: Kopie aus geprueftem Stand" ([string]((Test-Path -LiteralPath $vpE) -and $r.out -notmatch 'stehen auf diesem Rechner nicht')) "True"
+$heimO = Join-Path $tmp 'Heim offline'
+$r = Starte $miniVc "-Hook SessionStart -Quelle `"$offline`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimO`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "76 Erstes Einrichten ohne Netz: Meldung statt Stille" ([string]($r.out -match 'stehen auf diesem Rechner nicht')) "True"
+# Schlusstest von 6.0, Befund 2: Im Kind verweigert -NurProfil (Update halb fertig, Tag lokal abweichend); die
+# Versionspruefung faellt dann auf die Reparatur aus dem gespeicherten Stand zurueck, statt gesperrt zu bleiben.
+[System.IO.File]::WriteAllText((Join-Path $mini 'MEIN-SYSTEM.md'), "| Eingespielte Version | 5.3 |`n", $utf8)
+Remove-Item -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/guard-extern.ps1') -Force
+$r = Starte $miniVc $vcArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "78 Kind, Update halb fertig: Kopie wiederhergestellt" ([string]((Test-Path -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/guard-extern.ps1')) -and $r.out -match 'wiederhergestellt')) "True"
+[System.IO.File]::WriteAllText((Join-Path $mini 'MEIN-SYSTEM.md'), "| Eingespielte Version | 6.0 |`n", $utf8)
+Remove-Item -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/guard-mail.ps1') -Force
+$r = Starte $miniVc "-Hook SessionStart -Quelle `"$fremdQ`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimE`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "79 Kind, Tag abweichend: Kopie wiederhergestellt" ([string]((Test-Path -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/guard-mail.ps1')) -and $r.out -notmatch 'stehen auf diesem Rechner nicht')) "True"
+$r = Starte $vpE "-Repo `"$mini`" -Skript guard-read" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "80 Danach: Verteiler entscheidet wieder" ([string]($r.code -eq 0 -and (Urteil $r) -eq 'PASS')) "True"
+# Schlusstest von 6.0, Befund 1: Repo verschoben, alte Kopie unvollstaendig. Der Start im verschobenen Repo (hier
+# ohne Netz, ueber den gespeicherten Stand des alten Orts) richtet die Sperren dort ein und raeumt die alten ab.
+$miniNeu = Join-Path $tmp 'Mini Kind verschoben'
+Move-Item -LiteralPath $mini -Destination $miniNeu
+Remove-Item -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/guard-read.ps1') -Force
+$r = Starte $vpE "-Repo `"$mini`" -Skript guard-workspace" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "81 Verschoben: Exit 2, Meldung nennt den neuen Ort" ([string]($r.code -eq 2 -and $r.out -match 'gibt es dort nicht mehr' -and $r.out -match 'neuen Ort')) "True"
+$poN = Get-ProfilOrt $miniNeu $heimE
+$r = Starte (Join-Path $miniNeu '00_INDEX/scripts/version-check.ps1') "-Hook SessionStart -Quelle `"$offline`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimE`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $miniNeu }
+$usN = Get-Content -LiteralPath $poE.settings -Raw -Encoding UTF8 | ConvertFrom-Json
+$preN = @(@($usN.hooks.PreToolUse) | ForEach-Object { @($_.hooks) } | ForEach-Object { [string]$_.command } | Where-Object { $_ -match 'leo-sperren' })
+$ssN = @(@($usN.hooks.SessionStart) | ForEach-Object { @($_.hooks) } | ForEach-Object { [string]$_.command } | Where-Object { $_ -match '-Reparatur' })
+Pruef "82 Verschoben: nur noch die sechs Eintraege des neuen Orts" ([string]($preN.Count -eq 6 -and @($preN | Where-Object { $_ -like ('*' + $poN.kopie + '*') }).Count -eq 6)) "True"
+Pruef "83 Verschoben: ein Reparatur-Eintrag, am neuen Ort" ([string]($ssN.Count -eq 1 -and $ssN[0] -like ('*' + $miniNeu + '*'))) "True"
+$vpN = Join-Path (Join-Path (Join-Path $poN.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
+$r = Starte $vpN "-Repo `"$miniNeu`" -Skript guard-read" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "84 Verschoben: anderes Projekt wieder frei" ([string]($r.code -eq 0 -and (Urteil $r) -eq 'PASS')) "True"
+# Notausgang aus ANLEITUNG.md (Teil 5, Schritt 7c), gegen eine Kopie der Testeinstellungen: entfernt nur die Eintraege
+# der Sperren, fremde Eintraege bleiben, und die Datei bleibt gueltiges JSON ohne BOM.
+$notPfad = Join-Path $tmp 'notausgang-settings.json'
+Copy-Item -LiteralPath $poE.settings -Destination $notPfad
+$j0 = Get-Content -LiteralPath $notPfad -Raw | ConvertFrom-Json
+# Seit dem Schlusstest von 6.0 mit einem Umlaut im eigenen Hook und unter beiden Interpretern (Befund: unter 5.1 ging er
+# ohne -Encoding UTF8 verloren); der Befehl ist der aus der ANLEITUNG.
+$eigen = 'echo M' + [char]0xFC + 'ller'
+$j0.hooks.PreToolUse = @(@($j0.hooks.PreToolUse) + [pscustomobject]@{ matcher = 'Bash'; hooks = @([pscustomobject]@{ type = 'command'; command = $eigen }) })
+[System.IO.File]::WriteAllText($notPfad, ($j0 | ConvertTo-Json -Depth 30), $utf8)
+$notBefehl = '$p = "' + $notPfad + '"; $j = Get-Content $p -Raw -Encoding UTF8 | ConvertFrom-Json; foreach ($e in ''PreToolUse'',''SessionStart'') { if ($j.hooks.$e) { $j.hooks.$e = @($j.hooks.$e | Where-Object { -not ($_.hooks.command -match ''leo-sperren|-Reparatur -Stand'') }) } }; [IO.File]::WriteAllText($p, ($j | ConvertTo-Json -Depth 30), (New-Object System.Text.UTF8Encoding($false)))'
+$ErrorActionPreference = 'Continue'; & $psExe -NoProfile -Command $notBefehl 2>&1 | Out-Null; $ErrorActionPreference = 'Stop'
+$j1 = [System.IO.File]::ReadAllText($notPfad, $utf8) | ConvertFrom-Json
+$roh = [System.IO.File]::ReadAllBytes($notPfad)
+Pruef "77 Notausgang: nur eigener Hook bleibt, Umlaut heil" ([string]((@($j1.hooks.PreToolUse).Count -eq 1) -and ([string]@($j1.hooks.PreToolUse)[0].hooks[0].command -eq $eigen) -and (@($j1.hooks.SessionStart | Where-Object { $_ }).Count -eq 0) -and $roh[0] -ne 0xEF)) "True"
+
 # --- Nur der Besitzer, nie aus einer Session -------------------------------------------------------
 $r = Starte $haerten "" "j`n"
 # Im Repo des Herausgebers (Release-Gate gesetzt) bricht es schon davor ab, mit Exit 3.
 $istHerausgeber = [bool](& git -C $repo config --get leo.releaseGate 2>$null)
 Pruef "42 Nie aus einer Session, nie beim Herausgeber" $r.code $(if ($istHerausgeber) { "3" } else { "2" })
+
+# --- Vierte Pruefung von 6.0: abgebrochenes Update und fremde Quelle --------------------------------
+# Nur hooks-einrichten.ps1 und seine Bibliothek aus 6.0, die neuen Sperren fehlen noch: kein Eintrag fuer sie (sonst
+# sperrte jeder Werkzeugaufruf, bis das Update fertig ist).
+$halb = Join-Path $tmp 'Halb'
+foreach ($rel in @('00_INDEX/scripts/hooks-einrichten.ps1', '00_INDEX/scripts/lib/arbeitsbereich.ps1', '00_INDEX/scripts/lib/schutzliste.ps1', '00_INDEX/scripts/lib/eingehaengt-ausschluss.ps1', '00_INDEX/scripts/guard-read.ps1')) {
+    $z = Join-Path $halb $rel; New-Item -ItemType Directory -Force -Path (Split-Path -Parent $z) | Out-Null; Copy-Item -LiteralPath (Join-Path $repo $rel) -Destination $z
+}
+$swH = Join-Path $tmp 'halb-settings.json'
+[System.IO.File]::WriteAllText($swH, '{ "hooks": { "PreToolUse": [ { "matcher": "Read", "hooks": [ { "type": "command", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\guard-read.ps1\"" } ] } ] } }', $utf8)
+$r = Starte (Join-Path $halb '00_INDEX/scripts/hooks-einrichten.ps1') "-OhneProfil -Plattform windows -Datei `"$swH`" -CodexDatei `"$(Join-Path $tmp 'keine.json')`""
+$jh = Get-Content -LiteralPath $swH -Raw -Encoding UTF8 | ConvertFrom-Json
+Pruef "86 Halbes Update: kein Eintrag ohne Skript" (@($jh.hooks.PreToolUse | ForEach-Object { $_.hooks } | Where-Object { [string]$_.command -match 'guard-(fremdsysteme|extern)' }).Count) "0"
+Pruef "87 Halbes Update: vorhandene Sperre mit block" ([string](@($jh.hooks.PreToolUse | ForEach-Object { $_.hooks } | Where-Object { [string]$_.command -match 'guard-read' })[0].onFailure)) "block"
+$r = Starte $einrichten "-NurProfil -Quelle `"$mini`""
+Pruef "88 Fremde Quelle ohne Testprofil abgelehnt" $r.code "2"
 
 Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
 ""

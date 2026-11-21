@@ -72,7 +72,10 @@ $sendewege = @(
     'MailKit', 'MimeKit',                # .NET Bibliotheken
     'sendmail', 'msmtp', 'blat\b',       # Kommandozeilen-Mailer
     'NovellGroupWareSession',            # Novell-Mail-Client per COM (Senden ueber den Client)
-    'outlook\.application'               # Outlook COM
+    'outlook\.application',              # Outlook COM
+    # Seit der vierten Pruefung von 6.0: weitere Mailer und Wege.
+    'yagmail', 'nodemailer', '\bswaks\b', 'smtps?://', 'Send-MgUserMail',
+    '(^|[;&|(]\s*)(mailx?|mutt)(\.exe)?\s'
 )
 foreach ($muster in $sendewege) {
     if ($cmd -match $muster) { Write-Decision "deny" $grund }
