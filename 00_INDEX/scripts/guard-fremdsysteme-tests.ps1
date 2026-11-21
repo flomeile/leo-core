@@ -34,7 +34,9 @@ G init -q -b main $seed
 New-Item -ItemType Directory -Force -Path (Join-Path $seed 'tools') | Out-Null
 [System.IO.File]::WriteAllText((Join-Path $seed 'schutzliste.txt'), "# Test`nadresse: erp.example.org`nschluessel: .erp-key*`nwerkzeug: tools/erp.py`n", $utf8)
 [System.IO.File]::WriteAllText((Join-Path $seed 'tools/erp.py'), "print('werkzeug')`n", $utf8)
-G -C $seed add -- schutzliste.txt tools/erp.py
+# Seit dem Schlusstest von 6.0: ein zweites Werkzeug, das nur die Firmenschicht nennt (werkzeug: <org/repo>:<pfad>).
+[System.IO.File]::WriteAllText((Join-Path $seed 'tools/crm.py'), "print('crm')`n", $utf8)
+G -C $seed add -- schutzliste.txt tools/erp.py tools/crm.py
 G -C $seed -c user.email=t@example.org -c user.name=t commit -q -m start
 G -C $seed remote add origin $fern
 G -C $seed push -q origin main
@@ -56,6 +58,21 @@ G -C $attrappe remote add origin https://github.com/beispiel-org/attrappe.git
 $scratch = Join-Path (Join-Path $temp 'claude') 'guard-fremd-tests'
 $heim = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
 $fsKurz = ((Split-Path -Leaf $b) + '/fachagent').ToLower()
+# Firmenschicht (Schlusstest von 6.0): nennt eine Adresse und das Werkzeug tools/crm.py im Repo des Fachagenten, dazu
+# einen Eintrag fuer ein nicht eingehaengtes Repo und einen mit "..".
+$fsFern = Join-Path $b 'firma.git'
+$fsSeed = Join-Path $b 'seed-firma'
+G init -q --bare -b main $fsFern
+G init -q -b main $fsSeed
+New-Item -ItemType Directory -Force -Path (Join-Path $fsSeed 'tools') | Out-Null
+[System.IO.File]::WriteAllText((Join-Path $fsSeed 'schutzliste.txt'), "adresse: crm.example.org`nwerkzeug: ${fsKurz}:tools/crm.py`nwerkzeug: beispiel-org/fehlt:tools/crm.py`nwerkzeug: ${fsKurz}:../firma/tools/crm.py`n", $utf8)
+[System.IO.File]::WriteAllText((Join-Path $fsSeed 'tools/crm.py'), "print('gleichnamig')`n", $utf8)
+G -C $fsSeed add -- schutzliste.txt tools/crm.py
+G -C $fsSeed -c user.email=t@example.org -c user.name=t commit -q -m start
+G -C $fsSeed remote add origin $fsFern
+G -C $fsSeed push -q origin main
+$firma = Join-Path (Join-Path $kind '30_Firma') 'firma'
+G clone -q $fsFern $firma
 
 $fehler = 0; $anzahl = 0
 function Ruf([string]$tool, $ti, [hashtable]$umgebung = @{}) {
@@ -142,6 +159,11 @@ Pruef '55 Werkzeug relativ zum Arbeitsordner' (Ruf 'Bash' (B 'python 20_Team/fac
 Pruef '56 lokale Schutzliste: kein Durchlass' (Ruf 'Bash' (B "python `"$lokal\tools\frei.py`" --data x https://api.notion.com/v1/pages")) 'DENY'
 Pruef '57 lokale Schutzliste verschaerft'     (Ruf 'Bash' (B 'curl -X POST https://lokal.example.org/x')) 'DENY'
 Pruef '58 Firmenschicht-Attrappe ohne Klon'   (Ruf 'Write' (W (Join-Path $kind 'x.md') 'x') @{ LEO_FIRMENSCHICHT = 'beispiel-org/attrappe' }) 'DENY'
+# Schlusstest von 6.0: Werkzeug in einem anderen eingehaengten Repo (werkzeug: <org/repo>:<pfad>).
+Pruef '59 Firmenschicht nennt Werkzeug fremd'  (Ruf 'Bash' (B "python `"$nested\tools\crm.py`" --data x https://crm.example.org/api")) 'PASS'
+Pruef '60 gleichnamig in der Firmenschicht'    (Ruf 'Bash' (B "python `"$firma\tools\crm.py`" --data x https://crm.example.org/api")) 'DENY'
+Pruef '61 crm.py ohne Werkzeug, curl'          (Ruf 'Bash' (B 'curl -X POST https://crm.example.org/api')) 'DENY'
+Pruef '62 nicht genanntes Werkzeug im Repo'    (Ruf 'Bash' (B "python `"$nested\tools\erp.py`" --data x https://crm.example.org/api")) 'PASS'
 $pflicht = @{ LEO_FIRMENSCHICHT = 'https://github.com/beispiel-org/firmenschicht' }
 Pruef '19 Firmenschicht fehlt: Datei schreiben' (Ruf 'Write' (W (Join-Path $kind 'x.md') 'x') $pflicht) 'DENY'
 Pruef '20 Firmenschicht fehlt: 00_INDEX frei' (Ruf 'Write' (W (Join-Path (Join-Path $kind '00_INDEX') 'x.md') 'x') $pflicht) 'PASS'

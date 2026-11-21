@@ -59,8 +59,12 @@ param(
     [switch]$NurProfil,
     [switch]$Reparatur,
     [string]$Stand = '',
-    [string]$Version = ''
+    [string]$Version = '',
+    [switch]$ImKind
 )
+# -Reparatur ohne -Stand (seit dem Schlusstest von 6.0): nimmt den eigenen gespeicherten Stand aus den persoenlichen
+# Einstellungen. -ImKind: laeuft auch im Repo des Kinds; so ruft es die Versionspruefung, wenn -NurProfil die Kopie
+# nicht erneuern darf (Update halb fertig, Tag lokal abweichend), und so fuehrt der Besitzer es von Hand aus.
 # -NurProfil (seit 6.0): nur die Sperren fuer alle Projekte, ohne die Projektdateien. So ruft es die
 # Versionspruefung beim Sessionstart auf, ohne Modell, hoechstens einmal je Tag (version-check.ps1).
 # -Reparatur -Stand <commit> -Version <X.Y> (seit 6.0, Zweitpruefung): der Sessionstart in JEDEM Projekt, aus den
@@ -208,18 +212,38 @@ function Get-GitBlob([string]$repoPfad, [string]$objekt) {
 
 # Der beim Einrichten auf GitHub gepruefte Stand, wie er im Reparatur-Eintrag der persoenlichen Einstellungen
 # steht (dort kann der Agent nicht schreiben): @{ stand = <commit>; version = <X.Y> } oder $null.
-function Get-GespeicherterStand($prof) {
+function Get-GespeicherterStand($prof, [switch]$Alle) {
     if (-not (Test-Path -LiteralPath $prof.settings)) { return $null }
     try { $s = Get-Content -LiteralPath $prof.settings -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return $null }
     if (-not $s.hooks -or -not $s.hooks.PSObject.Properties['SessionStart']) { return $null }
     $heRx = [regex]::Escape((Join-Path (Join-Path (Join-Path $repo '00_INDEX') 'scripts') 'hooks-einrichten.ps1'))
+    $alle = @()
     foreach ($g in @($s.hooks.SessionStart)) {
         foreach ($h in @($g.hooks)) {
             $c = [string]$h.command
-            if ($c -match $heRx -and $c -match '-Reparatur\s+-Stand\s+([0-9a-f]{40})\s+-Version\s+([0-9]+\.[0-9]+)') { return @{ stand = $matches[1]; version = $matches[2] } }
+            if ($c -match 'hooks-einrichten\.ps1' -and $c -match '-Reparatur\s+-Stand\s+([0-9a-f]{40})\s+-Version\s+([0-9]+\.[0-9]+)') {
+                $e = @{ stand = $matches[1]; version = $matches[2] }
+                if ($c -match $heRx -and -not $Alle) { return $e }
+                $alle += $e
+            }
         }
     }
+    # -Alle (seit dem Schlusstest von 6.0): auch die Staende anderer Repos dieses Rechners, etwa des alten Orts eines
+    # verschobenen Repos. Ein Commit, der beim Einrichten auf GitHub geprueft wurde, bleibt geprueft, wo immer er liegt.
+    if ($Alle) { return ,$alle }
     return $null
+}
+
+# Eigene Eintraege eines Repos, das es nicht mehr gibt (seit dem Schlusstest von 6.0): Nach dem Verschieben oder
+# Umbenennen zeigen die alten Eintraege auf ein Repo und eine Kopie, die niemand mehr erneuert; ist die alte Kopie
+# unvollstaendig, sperren sie jeden Werkzeugaufruf. Erkannt an der Kopie unter .leo-sperren und dem Verteiler mit
+# -Repo, bzw. am Reparatur-Aufruf von hooks-einrichten.ps1; verwaist, wenn dessen hooks-einrichten.ps1 fehlt.
+function Test-VerwaisterEintrag([string]$c) {
+    $alt = $null
+    if ($c -match '[\\/]\.leo-sperren[\\/]' -and $c -match 'leo-hook\.ps1"?\s+-Repo\s+"([^"]+)"') { $alt = $matches[1] }
+    elseif ($c -match '"([^"]+)[\\/]00_INDEX[\\/]scripts[\\/]hooks-einrichten\.ps1"' -and $c -match '-Reparatur') { $alt = $matches[1] }
+    if (-not $alt) { return $false }
+    return -not (Test-Path -LiteralPath (Join-Path (Join-Path (Join-Path $alt '00_INDEX') 'scripts') 'hooks-einrichten.ps1'))
 }
 
 # --- Reparatur beim Sessionstart in jedem Projekt (seit 6.0, Zweitpruefung) -------------------------------
@@ -227,11 +251,17 @@ if ($Reparatur) {
     $ErrorActionPreference = 'Stop'
     $prof = Get-ProfilOrt $repo $Heim
     try {
-        if ($env:CLAUDE_PROJECT_DIR -and (Test-PathWithin $env:CLAUDE_PROJECT_DIR $repo)) { exit 0 }
+        # Im Kind selbst uebernimmt das die Versionspruefung (version-check.ps1, mit -ImKind), damit die beiden
+        # Sessionstart-Hooks nicht gleichzeitig in die Kopie schreiben.
+        if (-not $ImKind -and $env:CLAUDE_PROJECT_DIR -and (Test-PathWithin $env:CLAUDE_PROJECT_DIR $repo)) { exit 0 }
         if (Test-Path -LiteralPath (Get-HaertungsOrt $repo $System).dropin) { exit 0 }
         $fehlend = @($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $prof.kopie $_)) })
         if ($fehlend.Count -eq 0) { exit 0 }
-        if ($Stand -notmatch '^[0-9a-f]{40}$') { throw 'kein gepruefter Stand im Reparatur-Eintrag' }
+        if (-not $Stand) {
+            $gesp = Get-GespeicherterStand $prof
+            if ($gesp) { $Stand = $gesp.stand; if (-not $Version) { $Version = $gesp.version } }
+        }
+        if ($Stand -notmatch '^[0-9a-f]{40}$') { throw 'kein gepruefter Stand in den persoenlichen Einstellungen' }
         $blobs = @{}
         foreach ($rel in $haertungsDateien) {
             $inhalt = Get-GitBlob $repo ($Stand + ':' + $rel)
@@ -250,7 +280,7 @@ if ($Reparatur) {
         if ($Version) { [System.IO.File]::WriteAllText((Join-Path $prof.kopie 'version.txt'), $Version) }
         "Die Kopie der Sperren fuer alle Projekte war unvollstaendig ($($fehlend -join ', ')) und ist ohne Netz aus dem beim Einrichten auf GitHub geprueften Stand $Version wiederhergestellt (hooks-einrichten.ps1 -Reparatur). Sag es der Person in einer Zeile."
     } catch {
-        "Die Kopie der Sperren fuer alle Projekte ist unvollstaendig und liess sich nicht wiederherstellen ($($_.Exception.Message)). Bis dahin sperrt Claude Code jeden Werkzeugaufruf, in jedem Projekt. Sag der Person in zwei Saetzen, dass sie in ihrem eigenen PowerShell-Fenster mit Netz ausfuehrt: powershell -NoProfile -ExecutionPolicy Bypass -File `"$repo\00_INDEX\scripts\hooks-einrichten.ps1`" -NurProfil ; gibt es das Repo nicht mehr, steht der Notausgang in ANLEITUNG.md, Teil 5, Schritt 7c (Sperren aus den persoenlichen Einstellungen entfernen)."
+        "Die Kopie der Sperren fuer alle Projekte ist unvollstaendig und liess sich nicht wiederherstellen ($($_.Exception.Message)). Bis dahin sperrt Claude Code jeden Werkzeugaufruf, in jedem Projekt. Sag der Person in zwei Saetzen, dass sie in ihrem eigenen PowerShell-Fenster mit Netz ausfuehrt: powershell -NoProfile -ExecutionPolicy Bypass -File `"$repo\00_INDEX\scripts\hooks-einrichten.ps1`" -NurProfil ; wurde das Repo verschoben, denselben Befehl am neuen Ort (er raeumt die alten Eintraege ab); gibt es das Repo nicht mehr, steht der Notausgang in ANLEITUNG.md, Teil 5, Schritt 7c (Sperren aus den persoenlichen Einstellungen entfernen)."
     }
     exit 0
 }
@@ -321,8 +351,9 @@ function Richte-Profil-Ein {
     # Ohne Netz (seit 6.0, Zweitpruefung): Zeigt der lokale Tag auf genau den Commit, der beim letzten Einrichten
     # auf GitHub geprueft wurde, gilt er als geprueft; so kann eine unvollstaendige Kopie auch offline heilen.
     if ($lokal -and -not $fern) {
-        $gesp = Get-GespeicherterStand $prof
-        if ($gesp -and $gesp.version -eq $version -and $gesp.stand -eq $lokal) { $fern = $lokal }
+        foreach ($gesp in @(Get-GespeicherterStand $prof -Alle)) {
+            if ($gesp -and $gesp.version -eq $version -and $gesp.stand -eq $lokal) { $fern = $lokal }
+        }
     }
     if (-not $lokal -or -not $fern -or $lokal -ne $fern) {
         $grund = if (-not $lokal) { "Tag $tag fehlt lokal" } elseif (-not $fern) { "Tag $tag auf dem Grundgeruest nicht erreichbar (kein Netz?)" } else { "Tag $tag zeigt lokal auf einen anderen Commit als auf dem Grundgeruest" }
@@ -373,7 +404,7 @@ function Richte-Profil-Ein {
     $alt = @()
     if ($us.hooks.PSObject.Properties['PreToolUse']) { $alt = @($us.hooks.PreToolUse) }
     $kopieRx = [regex]::Escape($prof.kopie)
-    $behalten = @($alt | Where-Object { -not (@($_.hooks) | Where-Object { [string]$_.command -match $kopieRx }) })
+    $behalten = @($alt | Where-Object { -not (@($_.hooks) | Where-Object { [string]$_.command -match $kopieRx -or (Test-VerwaisterEintrag ([string]$_.command)) }) })
     $eigene = @()
     foreach ($s in $sperren) {
         $eigene += [pscustomobject]@{ matcher = $matcherJe[$s]; hooks = @([pscustomobject]@{ type = 'command'; command = ($exe + ' "' + $verteiler + '" -Repo "' + (Normalize-AbsolutePath $repo) + '" -Skript ' + $s); onFailure = 'block' }) }
@@ -395,7 +426,7 @@ function Richte-Profil-Ein {
     if ($Heim) { $reparaturBefehl += ' -Heim "' + $Heim + '"' }
     $ssAlt = @()
     if ($us.hooks.PSObject.Properties['SessionStart']) { $ssAlt = @($us.hooks.SessionStart) }
-    $ssBehalten = @($ssAlt | Where-Object { -not (@($_.hooks) | Where-Object { [string]$_.command -match $heRx -and [string]$_.command -match '-Reparatur' }) })
+    $ssBehalten = @($ssAlt | Where-Object { -not (@($_.hooks) | Where-Object { ([string]$_.command -match $heRx -and [string]$_.command -match '-Reparatur') -or (Test-VerwaisterEintrag ([string]$_.command)) }) })
     $ssNeu = @($ssBehalten) + @([pscustomobject]@{ hooks = @([pscustomobject]@{ type = 'command'; timeout = 60; command = $reparaturBefehl }) })
     $ssVorherJson = ConvertTo-Json @($ssAlt) -Depth 10 -Compress
     $ssNachherJson = ConvertTo-Json @($ssNeu) -Depth 10 -Compress

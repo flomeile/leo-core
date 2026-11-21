@@ -115,11 +115,30 @@ if (-not $isWindowsHost) {
     $allowPatterns += @('/dev/null', '/dev/stdout', '/dev/stderr', '/dev/tty')
 }
 
+# Nie ein Schreibziel, in keinem Projekt (seit dem Schlusstest von 6.0): die persoenlichen Einstellungen von Claude
+# Code und die Kopie der Sperren. Mit dem Projektordner ~/.claude (etwa um die globale CLAUDE.md zu bearbeiten) waren
+# sie sonst Teil des Arbeitsbereichs, und der Agent haette die Sperren fuer alle Projekte selbst austragen koennen.
+$immerGesperrt = @()
+if ($homePath) {
+    $immerGesperrt = @(
+        (Normalize-AbsolutePath (Join-Path (Join-Path $homePath '.claude') 'settings.json')),
+        (Normalize-AbsolutePath (Join-Path (Join-Path $homePath '.claude') 'settings.local.json')),
+        (Normalize-AbsolutePath (Join-Path $homePath '.leo-sperren')))
+}
+$immerGrund = "Schreiben gesperrt, in jedem Projekt: Die persoenlichen Einstellungen von Claude Code und die Kopie der Sperren (~/.leo-sperren) tragen die Sperren fuer alle Projekte; du aenderst sie nie (AGENTS.md Abschnitt 18). Soll sich dort etwas aendern, sag [NAME] in einem Satz, was und warum; er aendert es selbst oder fuehrt hooks-einrichten.ps1 aus."
+function Test-ImmerGesperrt([string]$path) {
+    $p = Normalize-AbsolutePath $path
+    if (-not $p) { return $false }
+    foreach ($g in $immerGesperrt) { if ($g -and (Test-PathWithin $p $g)) { return $true } }
+    return $false
+}
+
 function Test-Allowed([string]$path) {
     if ([string]::IsNullOrWhiteSpace($path)) { return $true }
     $p = Normalize-AbsolutePath $path
     # Relative Pfade werden hier nicht bewertet, dafuer zaehlt das Arbeitsverzeichnis.
     if (-not $p) { return $true }
+    if (Test-ImmerGesperrt $p) { return $false }
     foreach ($pat in $allowPatterns) {
         if ($pat -and (($isWindowsHost -and $p -like $pat) -or (-not $isWindowsHost -and $p -clike $pat))) { return $true }
     }
@@ -217,6 +236,7 @@ if ($tool -in @("Write", "Edit", "NotebookEdit", "MultiEdit")) {
     if (Test-PolicyDatei $target) {
         Write-Decision "deny" ("Schreiben gesperrt: " + $target + ". " + $policyGrund)
     }
+    if (Test-ImmerGesperrt $target) { Write-Decision "deny" ("Blockierter Pfad: " + $target + ". " + $immerGrund) }
     if (-not (Test-Allowed $target)) {
         Write-Decision "deny" (Get-SperrHinweis "Schreiben" $target $ab)
     }
@@ -312,6 +332,11 @@ if ($tool -in @("Bash", "PowerShell")) {
     # Arbeitsverzeichnis zaehlt mit: ein schreibendes Kommando mit relativen
     # Pfaden trifft sonst unbemerkt ein fremdes Verzeichnis.
     $cwd = [string]$in.cwd
+    # Relativ aus ~/.claude heraus (Set-Content settings.json ...): die Einstellungsdateien bleiben gesperrt.
+    if ($homePath -and (Test-PathWithin $cwd (Join-Path $homePath '.claude')) -and $cmd -match '(?i)(^|[\s"''\\/])settings(\.local)?\.json\b') {
+        Write-Decision "deny" ("Schreibendes Kommando auf settings.json im Ordner ~/.claude. " + $immerGrund)
+    }
+    if (Test-ImmerGesperrt $cwd) { Write-Decision "deny" ("Schreibendes Kommando in ~/.leo-sperren. " + $immerGrund) }
     if (-not (Test-Allowed $cwd)) {
         Write-Decision "deny" ("Schreibendes Kommando mit Arbeitsverzeichnis ausserhalb des Arbeitsbereichs. " + (Get-SperrHinweis "Schreiben" (Normalize-AbsolutePath $cwd) $ab))
     }

@@ -8,6 +8,7 @@
 #   adresse: <host oder host/pfad>     dorthin schreibt der Agent nur ueber ein Werkzeug mit Freigabefenster
 #   schluessel: <dateiname, * erlaubt>  Schluesseldatei, die der Agent nie liest, schreibt oder nennt
 #   werkzeug: <pfad im Repo>           das Werkzeug mit Freigabefenster, ueber das geschrieben werden darf
+#   werkzeug: <org/repo>:<pfad>        dasselbe in einem anderen eingehaengten Repo (seit dem Schlusstest von 6.0)
 # Schluessel selbst liegen nie in einem Repo, nur ihr Dateiname steht hier.
 # Gelesen wird die Fassung auf GitHub (upstream, sonst origin; Zweig HEAD, main oder master), nicht die
 # Arbeitskopie: Was der Agent im Ordner aendert, lockert die Liste nicht. Die Datei im Ordner kann sie nur
@@ -77,7 +78,8 @@ function Read-SchutzlisteRemote([string]$ordner) {
 function Get-SchutzStand([string]$repo, [switch]$Frisch) {
     $slug = ($repo -replace '[^A-Za-z0-9]', '-').Trim('-')
     # -v2: seit der Zweitpruefung von 6.0 tragen die Werkzeuge ihren vollen Pfad und die Repos den Abgleich.
-    $datei = Join-Path $schutzCacheOrdner ($slug + '-v2.json')
+    # -v3: seit dem Schlusstest von 6.0 auch Werkzeuge in einem anderen eingehaengten Repo (<org/repo>:<pfad>).
+    $datei = Join-Path $schutzCacheOrdner ($slug + '-v3.json')
     if (-not $Frisch -and (Test-Path -LiteralPath $datei)) {
         try {
             $alter = ((Get-Date) - (Get-Item -LiteralPath $datei).LastWriteTime).TotalMinutes
@@ -88,6 +90,7 @@ function Get-SchutzStand([string]$repo, [switch]$Frisch) {
         } catch { }
     }
     $stand = @{ repos = @(); adressen = @(); schluessel = @(); werkzeuge = @() }
+    $listen = @()
     foreach ($o in @(Get-EingehaengteOrdner $repo)) {
         $url = Invoke-SchutzGit $o @('remote', 'get-url', 'upstream')
         if (-not $url) { $url = Invoke-SchutzGit $o @('remote', 'get-url', 'origin') }
@@ -101,9 +104,25 @@ function Get-SchutzStand([string]$repo, [switch]$Frisch) {
         $l = ConvertFrom-SchutzlisteText ([string]$fern)
         $stand.adressen += @($l.adressen) + @($lokal.adressen)
         $stand.schluessel += @($l.schluessel) + @($lokal.schluessel)
-        foreach ($w in @($l.werkzeuge)) {
-            if (-not $w -or $w -match '(^|/)\.\.(/|$)' -or $w -match '^([A-Za-z]:|/)') { continue }
-            try { $stand.werkzeuge += (([System.IO.Path]::GetFullPath((Join-Path $o $w))) -replace '\\', '/') } catch { }
+        $listen += @{ ordner = [string]$o; werkzeuge = @($l.werkzeuge) }
+    }
+    # Werkzeuge erst, wenn alle Repos bekannt sind: "werkzeug: <org/repo>:<pfad>" (seit dem Schlusstest von 6.0) meint
+    # ein Werkzeug in einem anderen eingehaengten, abgeglichenen Repo, etwa wenn die Firmenschicht die Werkzeuge der
+    # Fachagenten nennt; "werkzeug: <pfad>" wie bisher eines im eigenen Repo der Liste. Nie ein absoluter Pfad, nie "..".
+    foreach ($e in $listen) {
+        foreach ($w in @($e.werkzeuge)) {
+            if (-not $w) { continue }
+            $basis = $e.ordner
+            $rel = $w
+            if ($w -match '^([^/:\s]+/[^/:\s]+):(.+)$') {
+                $soll = (Get-RepoKurzname $matches[1])
+                $rel = $matches[2].Trim()
+                $basis = $null
+                foreach ($r in @($stand.repos)) { if ([string]$r.quelle -eq $soll -and $r.abgeglichen -eq $true) { $basis = [string]$r.pfad; break } }
+                if (-not $basis) { continue }
+            }
+            if ($rel -match '(^|/)\.\.(/|$)' -or $rel -match '^([A-Za-z]:|/)') { continue }
+            try { $stand.werkzeuge += (([System.IO.Path]::GetFullPath((Join-Path $basis $rel))) -replace '\\', '/') } catch { }
         }
     }
     try {

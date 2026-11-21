@@ -328,18 +328,50 @@ Pruef "75 Sessionstart ohne Netz: Kopie aus geprueftem Stand" ([string]((Test-Pa
 $heimO = Join-Path $tmp 'Heim offline'
 $r = Starte $miniVc "-Hook SessionStart -Quelle `"$offline`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimO`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
 Pruef "76 Erstes Einrichten ohne Netz: Meldung statt Stille" ([string]($r.out -match 'stehen auf diesem Rechner nicht')) "True"
+# Schlusstest von 6.0, Befund 2: Im Kind verweigert -NurProfil (Update halb fertig, Tag lokal abweichend); die
+# Versionspruefung faellt dann auf die Reparatur aus dem gespeicherten Stand zurueck, statt gesperrt zu bleiben.
+[System.IO.File]::WriteAllText((Join-Path $mini 'MEIN-SYSTEM.md'), "| Eingespielte Version | 5.3 |`n", $utf8)
+Remove-Item -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/guard-extern.ps1') -Force
+$r = Starte $miniVc $vcArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "78 Kind, Update halb fertig: Kopie wiederhergestellt" ([string]((Test-Path -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/guard-extern.ps1')) -and $r.out -match 'wiederhergestellt')) "True"
+[System.IO.File]::WriteAllText((Join-Path $mini 'MEIN-SYSTEM.md'), "| Eingespielte Version | 6.0 |`n", $utf8)
+Remove-Item -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/guard-mail.ps1') -Force
+$r = Starte $miniVc "-Hook SessionStart -Quelle `"$fremdQ`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimE`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini }
+Pruef "79 Kind, Tag abweichend: Kopie wiederhergestellt" ([string]((Test-Path -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/guard-mail.ps1')) -and $r.out -notmatch 'stehen auf diesem Rechner nicht')) "True"
+$r = Starte $vpE "-Repo `"$mini`" -Skript guard-read" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "80 Danach: Verteiler entscheidet wieder" ([string]($r.code -eq 0 -and (Urteil $r) -eq 'PASS')) "True"
+# Schlusstest von 6.0, Befund 1: Repo verschoben, alte Kopie unvollstaendig. Der Start im verschobenen Repo (hier
+# ohne Netz, ueber den gespeicherten Stand des alten Orts) richtet die Sperren dort ein und raeumt die alten ab.
+$miniNeu = Join-Path $tmp 'Mini Kind verschoben'
+Move-Item -LiteralPath $mini -Destination $miniNeu
+Remove-Item -LiteralPath (Join-Path $poE.kopie '00_INDEX/scripts/guard-read.ps1') -Force
+$r = Starte $vpE "-Repo `"$mini`" -Skript guard-workspace" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "81 Verschoben: Exit 2, Meldung nennt den neuen Ort" ([string]($r.code -eq 2 -and $r.out -match 'gibt es dort nicht mehr' -and $r.out -match 'neuen Ort')) "True"
+$poN = Get-ProfilOrt $miniNeu $heimE
+$r = Starte (Join-Path $miniNeu '00_INDEX/scripts/version-check.ps1') "-Hook SessionStart -Quelle `"$offline`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimE`"" '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $miniNeu }
+$usN = Get-Content -LiteralPath $poE.settings -Raw -Encoding UTF8 | ConvertFrom-Json
+$preN = @(@($usN.hooks.PreToolUse) | ForEach-Object { @($_.hooks) } | ForEach-Object { [string]$_.command } | Where-Object { $_ -match 'leo-sperren' })
+$ssN = @(@($usN.hooks.SessionStart) | ForEach-Object { @($_.hooks) } | ForEach-Object { [string]$_.command } | Where-Object { $_ -match '-Reparatur' })
+Pruef "82 Verschoben: nur noch die sechs Eintraege des neuen Orts" ([string]($preN.Count -eq 6 -and @($preN | Where-Object { $_ -like ('*' + $poN.kopie + '*') }).Count -eq 6)) "True"
+Pruef "83 Verschoben: ein Reparatur-Eintrag, am neuen Ort" ([string]($ssN.Count -eq 1 -and $ssN[0] -like ('*' + $miniNeu + '*'))) "True"
+$vpN = Join-Path (Join-Path (Join-Path $poN.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
+$r = Starte $vpN "-Repo `"$miniNeu`" -Skript guard-read" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+Pruef "84 Verschoben: anderes Projekt wieder frei" ([string]($r.code -eq 0 -and (Urteil $r) -eq 'PASS')) "True"
 # Notausgang aus ANLEITUNG.md (Teil 5, Schritt 7c), gegen eine Kopie der Testeinstellungen: entfernt nur die Eintraege
 # der Sperren, fremde Eintraege bleiben, und die Datei bleibt gueltiges JSON ohne BOM.
 $notPfad = Join-Path $tmp 'notausgang-settings.json'
 Copy-Item -LiteralPath $poE.settings -Destination $notPfad
 $j0 = Get-Content -LiteralPath $notPfad -Raw | ConvertFrom-Json
-$j0.hooks.PreToolUse = @(@($j0.hooks.PreToolUse) + [pscustomobject]@{ matcher = 'Bash'; hooks = @([pscustomobject]@{ type = 'command'; command = 'echo eigener' }) })
+# Seit dem Schlusstest von 6.0 mit einem Umlaut im eigenen Hook und unter beiden Interpretern (Befund: unter 5.1 ging er
+# ohne -Encoding UTF8 verloren); der Befehl ist der aus der ANLEITUNG.
+$eigen = 'echo M' + [char]0xFC + 'ller'
+$j0.hooks.PreToolUse = @(@($j0.hooks.PreToolUse) + [pscustomobject]@{ matcher = 'Bash'; hooks = @([pscustomobject]@{ type = 'command'; command = $eigen }) })
 [System.IO.File]::WriteAllText($notPfad, ($j0 | ConvertTo-Json -Depth 30), $utf8)
-$notBefehl = '$p = "' + $notPfad + '"; $j = Get-Content $p -Raw | ConvertFrom-Json; foreach ($e in ''PreToolUse'',''SessionStart'') { if ($j.hooks.$e) { $j.hooks.$e = @($j.hooks.$e | Where-Object { -not ($_.hooks.command -match ''leo-sperren|-Reparatur -Stand'') }) } }; [IO.File]::WriteAllText($p, ($j | ConvertTo-Json -Depth 30))'
+$notBefehl = '$p = "' + $notPfad + '"; $j = Get-Content $p -Raw -Encoding UTF8 | ConvertFrom-Json; foreach ($e in ''PreToolUse'',''SessionStart'') { if ($j.hooks.$e) { $j.hooks.$e = @($j.hooks.$e | Where-Object { -not ($_.hooks.command -match ''leo-sperren|-Reparatur -Stand'') }) } }; [IO.File]::WriteAllText($p, ($j | ConvertTo-Json -Depth 30), (New-Object System.Text.UTF8Encoding($false)))'
 $ErrorActionPreference = 'Continue'; & $psExe -NoProfile -Command $notBefehl 2>&1 | Out-Null; $ErrorActionPreference = 'Stop'
-$j1 = Get-Content -LiteralPath $notPfad -Raw | ConvertFrom-Json
+$j1 = [System.IO.File]::ReadAllText($notPfad, $utf8) | ConvertFrom-Json
 $roh = [System.IO.File]::ReadAllBytes($notPfad)
-Pruef "77 Notausgang: nur eigener Hook bleibt" ([string]((@($j1.hooks.PreToolUse).Count -eq 1) -and ([string]@($j1.hooks.PreToolUse)[0].hooks[0].command -eq 'echo eigener') -and (@($j1.hooks.SessionStart | Where-Object { $_ }).Count -eq 0) -and $roh[0] -ne 0xEF)) "True"
+Pruef "77 Notausgang: nur eigener Hook bleibt, Umlaut heil" ([string]((@($j1.hooks.PreToolUse).Count -eq 1) -and ([string]@($j1.hooks.PreToolUse)[0].hooks[0].command -eq $eigen) -and (@($j1.hooks.SessionStart | Where-Object { $_ }).Count -eq 0) -and $roh[0] -ne 0xEF)) "True"
 
 # --- Nur der Besitzer, nie aus einer Session -------------------------------------------------------
 $r = Starte $haerten "" "j`n"

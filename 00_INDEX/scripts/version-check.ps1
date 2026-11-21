@@ -153,7 +153,7 @@ try {
         } catch { $testHeim = $false }
         if (-not $testHeim) { $Heim = '' }
     }
-    if ($Hook -and $eingespielt -and ($Quelle -eq 'https://github.com/flomeile/leo-core' -or $testHeim)) {
+    if ($Hook -and ($Quelle -eq 'https://github.com/flomeile/leo-core' -or $testHeim)) {
         try {
             . (Join-Path (Join-Path $PSScriptRoot 'lib') 'arbeitsbereich.ps1')
             $po = Get-ProfilOrt $root $Heim
@@ -163,13 +163,25 @@ try {
             # Seit der Zweitpruefung von 6.0 auch, wenn der Kopie eine Datei fehlt, und mit Meldung, wenn die Sperren
             # danach nicht stehen (vorher blieb das still, und der Agent arbeitete in anderen Projekten ungesperrt).
             $unvollstaendig = @($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $po.kopie $_)) }).Count -gt 0
-            if (-not (Test-Path -LiteralPath (Get-HaertungsOrt $root).dropin) -and (Test-Path -LiteralPath $he) -and ($frisch -or $kopieVersion -ne $eingespielt -or $unvollstaendig)) {
+            if (-not (Test-Path -LiteralPath (Get-HaertungsOrt $root).dropin) -and (Test-Path -LiteralPath $he) -and ($unvollstaendig -or ($eingespielt -and ($frisch -or $kopieVersion -ne $eingespielt)))) {
                 $exe = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { 'powershell' } else { Join-Path $PSHOME 'pwsh' }
                 $zusatz = @()
                 if ($testHeim) { $zusatz = @('-Heim', $Heim, '-Quelle', $Quelle) }
-                $aus = & $exe -NoProfile -ExecutionPolicy Bypass -File $he -NurProfil @zusatz 2>&1 | Out-String
+                $aus = ''
+                if ($eingespielt) { $aus = & $exe -NoProfile -ExecutionPolicy Bypass -File $he -NurProfil @zusatz 2>&1 | Out-String }
                 if ($aus -match 'Alle Projekte: Sperren aus Version [0-9.]+ eingerichtet \(') {
                     $zeilen.Add('Sperren fuer alle Projekte eingerichtet oder erneuert (ohne Modell, hooks-einrichten.ps1, AGENTS.md Abschnitt 18). Sag der Person in einer Zeile, dass sie ab dem naechsten Start von Claude Code auch in anderen Projekten gelten.')
+                }
+                # Rueckfall (seit dem Schlusstest von 6.0): Durfte -NurProfil die Kopie nicht erneuern (Update halb fertig,
+                # Tag lokal abweichend, keine Version lesbar) und fehlt ihr weiter eine Datei, stellt die Reparatur sie aus
+                # dem beim Einrichten auf GitHub geprueften Stand wieder her. Sonst bliebe jeder Werkzeugaufruf gesperrt,
+                # auch hier im Kind, und der einzige Heilweg waere ein Start in einem anderen Projekt.
+                if (@($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $po.kopie $_)) }).Count -gt 0) {
+                    $rzusatz = @()
+                    if ($testHeim) { $rzusatz = @('-Heim', $Heim) }
+                    $raus = & $exe -NoProfile -ExecutionPolicy Bypass -File $he -NurProfil -Reparatur -ImKind @rzusatz 2>&1 | Out-String
+                    if ($raus -match 'wiederhergestellt') { $zeilen.Add('Die Kopie der Sperren fuer alle Projekte war unvollstaendig und ist ohne Netz aus dem beim Einrichten geprueften Stand wiederhergestellt (hooks-einrichten.ps1 -Reparatur). Sag es der Person in einer Zeile.') }
+                    $aus += $raus
                 }
                 $stehen = (Test-Path -LiteralPath $po.settings) -and ([System.IO.File]::ReadAllText($po.settings)).Contains((ConvertTo-Json $po.kopie).Trim('"')) -and (@($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $po.kopie $_)) }).Count -eq 0)
                 if (-not $stehen) {

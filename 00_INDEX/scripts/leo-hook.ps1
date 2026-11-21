@@ -37,7 +37,12 @@ $teile = @('lib\arbeitsbereich.ps1', 'lib\schutzliste.ps1', 'lib\eingehaengt-aus
 $fehlt = @($teile | Where-Object { -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot ($_ -replace '\\', [string][System.IO.Path]::DirectorySeparatorChar))) })
 if ($fehlt.Count -gt 0) {
     $imSystem = $PSScriptRoot -notmatch '[\\/]\.leo-sperren[\\/]'
-    $weg = if ($imSystem) { 'Der Besitzer fuehrt sperre-haerten.ps1 in seinem eigenen Fenster erneut aus (Adminrechte).' } else { "Claude Code neu starten: Der Sessionstart stellt die Kopie ohne Netz wieder her. Sonst fuehrt der Besitzer in seinem eigenen Fenster aus: powershell -NoProfile -ExecutionPolicy Bypass -File `"$Repo\00_INDEX\scripts\hooks-einrichten.ps1`" -NurProfil" }
+    # Seit dem Schlusstest von 6.0: eigene Meldung, wenn das Repo verschoben oder geloescht ist; der Befehl im alten Pfad
+    # liefe dort ins Leere.
+    $repoDa = Test-Path -LiteralPath (Join-Path (Join-Path (Join-Path $Repo '00_INDEX') 'scripts') 'hooks-einrichten.ps1')
+    $weg = if ($imSystem) { 'Der Besitzer fuehrt sperre-haerten.ps1 in seinem eigenen Fenster erneut aus (Adminrechte).' }
+           elseif (-not $repoDa) { "Das Repo $Repo gibt es dort nicht mehr. Wurde es verschoben oder umbenannt, fuehrt der Besitzer in seinem eigenen Fenster am neuen Ort aus: powershell -NoProfile -ExecutionPolicy Bypass -File `"<neuer Ort>\00_INDEX\scripts\hooks-einrichten.ps1`" -NurProfil (das raeumt die alten Eintraege ab); ein Start von Claude Code im verschobenen Repo erledigt dasselbe mit Netz. Gibt es das Repo nicht mehr, steht der Notausgang in ANLEITUNG.md, Teil 5, Schritt 7c." }
+           else { "Claude Code neu starten: Der Sessionstart stellt die Kopie ohne Netz wieder her, auch im Repo des Kinds. Sonst fuehrt der Besitzer in seinem eigenen Fenster aus: powershell -NoProfile -ExecutionPolicy Bypass -File `"$Repo\00_INDEX\scripts\hooks-einrichten.ps1`" -NurProfil -Reparatur" }
     [Console]::Error.WriteLine("Die Kopie der Sperren ist unvollstaendig (" + ($fehlt -join ', ') + " fehlt in $PSScriptRoot). Bis sie repariert ist, bleibt jeder Werkzeugaufruf gesperrt, absichtlich. $weg Sag das der Person in zwei Saetzen; du kannst es nicht selbst beheben.")
     exit 2
 }
