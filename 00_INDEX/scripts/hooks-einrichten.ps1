@@ -217,20 +217,21 @@ function Get-GespeicherterStand($prof, [switch]$Alle) {
     try { $s = Get-Content -LiteralPath $prof.settings -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return $null }
     if (-not $s.hooks -or -not $s.hooks.PSObject.Properties['SessionStart']) { return $null }
     $heRx = [regex]::Escape((Join-Path (Join-Path (Join-Path $repo '00_INDEX') 'scripts') 'hooks-einrichten.ps1'))
-    $alle = @()
+    # Nicht $alle nennen: PowerShell unterscheidet Gross- und Kleinschreibung nicht, das waere der Schalter -Alle.
+    $staende = @()
     foreach ($g in @($s.hooks.SessionStart)) {
         foreach ($h in @($g.hooks)) {
             $c = [string]$h.command
             if ($c -match 'hooks-einrichten\.ps1' -and $c -match '-Reparatur\s+-Stand\s+([0-9a-f]{40})\s+-Version\s+([0-9]+\.[0-9]+)') {
                 $e = @{ stand = $matches[1]; version = $matches[2] }
                 if ($c -match $heRx -and -not $Alle) { return $e }
-                $alle += $e
+                $staende += $e
             }
         }
     }
     # -Alle (seit dem Schlusstest von 6.0): auch die Staende anderer Repos dieses Rechners, etwa des alten Orts eines
     # verschobenen Repos. Ein Commit, der beim Einrichten auf GitHub geprueft wurde, bleibt geprueft, wo immer er liegt.
-    if ($Alle) { return ,$alle }
+    if ($Alle) { return $staende }
     return $null
 }
 
