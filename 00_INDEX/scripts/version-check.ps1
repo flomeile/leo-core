@@ -162,7 +162,9 @@ try {
             $he = Join-Path $PSScriptRoot 'hooks-einrichten.ps1'
             # Seit der Zweitpruefung von 6.0 auch, wenn der Kopie eine Datei fehlt, und mit Meldung, wenn die Sperren
             # danach nicht stehen (vorher blieb das still, und der Agent arbeitete in anderen Projekten ungesperrt).
-            $unvollstaendig = @($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $po.kopie $_)) }).Count -gt 0
+            # Vollstaendig gemessen am Stand der Kopie (seit 6.1, Get-KopieFehlt): Nach einem Update ist eine Kopie aus der
+            # Vorversion nicht kaputt, sondern noch nicht erneuert; das erledigt der Abgleich der Versionsmarke.
+            $unvollstaendig = @(Get-KopieFehlt $po.kopie).Count -gt 0
             if (-not (Test-Path -LiteralPath (Get-HaertungsOrt $root).dropin) -and (Test-Path -LiteralPath $he) -and ($unvollstaendig -or ($eingespielt -and ($frisch -or $kopieVersion -ne $eingespielt)))) {
                 $exe = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { 'powershell' } else { Join-Path $PSHOME 'pwsh' }
                 $zusatz = @()
@@ -176,14 +178,14 @@ try {
                 # Tag lokal abweichend, keine Version lesbar) und fehlt ihr weiter eine Datei, stellt die Reparatur sie aus
                 # dem beim Einrichten auf GitHub geprueften Stand wieder her. Sonst bliebe jeder Werkzeugaufruf gesperrt,
                 # auch hier im Kind, und der einzige Heilweg waere ein Start in einem anderen Projekt.
-                if (@($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $po.kopie $_)) }).Count -gt 0) {
+                if (@(Get-KopieFehlt $po.kopie).Count -gt 0) {
                     $rzusatz = @()
                     if ($testHeim) { $rzusatz = @('-Heim', $Heim) }
                     $raus = & $exe -NoProfile -ExecutionPolicy Bypass -File $he -NurProfil -Reparatur -ImKind @rzusatz 2>&1 | Out-String
                     if ($raus -match 'wiederhergestellt') { $zeilen.Add('Die Kopie der Sperren fuer alle Projekte war unvollstaendig und ist ohne Netz aus dem beim Einrichten geprueften Stand wiederhergestellt (hooks-einrichten.ps1 -Reparatur). Sag es der Person in einer Zeile.') }
                     $aus += $raus
                 }
-                $stehen = (Test-Path -LiteralPath $po.settings) -and ([System.IO.File]::ReadAllText($po.settings)).Contains((ConvertTo-Json $po.kopie).Trim('"')) -and (@($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $po.kopie $_)) }).Count -eq 0)
+                $stehen = (Test-Path -LiteralPath $po.settings) -and ([System.IO.File]::ReadAllText($po.settings)).Contains((ConvertTo-Json $po.kopie).Trim('"')) -and (@(Get-KopieFehlt $po.kopie).Count -eq 0)
                 if (-not $stehen) {
                     $grund = @(($aus -split "`r?`n") | Where-Object { $_ -match '^Alle Projekte:' } | Select-Object -First 1)
                     $zeilen.Add('Die Sperren fuer alle Projekte stehen auf diesem Rechner nicht (' + $(if ($grund) { $grund[0].Trim() } else { 'Grund unbekannt' }) + '). In anderen Projekten arbeitet der Agent damit ohne Sperre. Sag es der Person in einer Zeile; der naechste Versuch kommt beim naechsten Sessionstart, mit Netz.')

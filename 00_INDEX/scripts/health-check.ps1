@@ -878,7 +878,7 @@ if (-not (Test-Path $guardSkript)) {
         $ohne = @()
         foreach ($g in @($hcJson.hooks.PreToolUse)) {
             foreach ($h in @($g.hooks)) {
-                if ([string]$h.command -match '(guard-read|guard-workspace|guard-git|guard-mail|guard-fremdsysteme|guard-extern)\.ps1' -and [string]$h.onFailure -ne 'block') { $ohne += $matches[1] }
+                if ([string]$h.command -match '(guard-read|guard-workspace|guard-git|guard-mail|guard-fremdsysteme|guard-extern|guard-finanzen)\.ps1' -and [string]$h.onFailure -ne 'block') { $ohne += $matches[1] }
             }
         }
         if ($ohne.Count -gt 0) {
@@ -918,6 +918,28 @@ if (-not (Test-Path $guardSkript)) {
             Add-Check "FAIL" $cat (".claude\settings.json haengt " + $neuSperre.n + ".ps1 nicht ein: " + $neuSperre.was + " ist nicht gesperrt. Einrichten mit 00_INDEX\scripts\hooks-einrichten.ps1 (der Agent darf es selbst ausfuehren).")
         } else {
             Add-Check "OK" $cat ("Eingehaengt: " + $neuSperre.n + ".ps1.")
+        }
+    }
+    # Seit 6.1: die Finanz-Sperre (AGENTS.md Abschnitt 18), in drei Ereignissen. Ohne PreToolUse ist nichts gesperrt;
+    # ohne PostToolUse sieht der Agent Sicherheitsmails ungeschwaerzt, ohne SessionStart meldet niemand den Audit.
+    $finanzSkript = Join-Path $repo "00_INDEX\scripts\guard-finanzen.ps1"
+    if (-not (Test-Path $finanzSkript)) {
+        Add-Check "FAIL" $cat "guard-finanzen.ps1 fehlt. Geldplattformen, gespeicherte Zugangsdaten und Sicherheitsmails sind damit nicht gesperrt. Datei aus der Zielversion holen (Skill leo-mechanik-update)."
+    } else {
+        $fehlendeEreignisse = @()
+        try {
+            $fj = $guardSettingsText | ConvertFrom-Json
+            foreach ($ev in @('PreToolUse', 'PostToolUse', 'SessionStart')) {
+                $treffer = @(@($fj.hooks.$ev) | ForEach-Object { @($_.hooks) } | Where-Object { [string]$_.command -match 'guard-finanzen\.ps1' })
+                if ($treffer.Count -eq 0) { $fehlendeEreignisse += $ev }
+            }
+        } catch { $fehlendeEreignisse = @('PreToolUse', 'PostToolUse', 'SessionStart') }
+        if ($fehlendeEreignisse -contains 'PreToolUse') {
+            Add-Check "FAIL" $cat ".claude\settings.json haengt guard-finanzen.ps1 nicht als PreToolUse-Hook ein: Geldplattformen und gespeicherte Zugangsdaten sind nicht gesperrt. Einrichten mit 00_INDEX\scripts\hooks-einrichten.ps1 (der Agent darf es selbst ausfuehren)."
+        } elseif ($fehlendeEreignisse.Count -gt 0) {
+            Add-Check "WARN" $cat (".claude\settings.json haengt guard-finanzen.ps1 nicht fuer " + ($fehlendeEreignisse -join ' und ') + " ein: Sicherheitsmails werden dann nicht ausgeblendet bzw. der Audit beim Sessionstart nicht gemeldet. Einrichten mit 00_INDEX\scripts\hooks-einrichten.ps1 (der Agent darf es selbst ausfuehren).")
+        } else {
+            Add-Check "OK" $cat "Eingehaengt: guard-finanzen.ps1 (vor und nach dem Werkzeugaufruf und beim Sessionstart)."
         }
     }
     # Seit 6.0: Verlangt die Organisation eine Firmenschicht (LEO_FIRMENSCHICHT aus ihrer zentralen
@@ -968,7 +990,7 @@ if (-not (Test-Path $guardSkript)) {
                 Add-Check "WARN" $cat "Haertung nicht eingerichtet: Der Agent koennte seine Sperren mit Absicht abschalten, weil sie im Repo liegen. Einrichten kann nur der Besitzer, in seinem eigenen Fenster, mit Bestaetigung der Adminrechte: $haertBefehl (ANLEITUNG.md, Schritt 7c). Der Agent fuehrt den Befehl nicht aus."
                 # Seit 6.0: Ohne Haertung greifen die Sperren in anderen Projekten nur ueber die persoenlichen Einstellungen.
                 # Seit der Zweitpruefung von 6.0: auch vollstaendig (jede Datei der Kopie da) und mit Reparatur-Eintrag.
-                $profilStand = & { param($l, $r) . $l; $po = Get-ProfilOrt $r; $t = if (Test-Path -LiteralPath $po.settings) { [System.IO.File]::ReadAllText($po.settings) } else { '' }; $fehlt = @($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $po.kopie $_)) }); @{ eingetragen = $t.Contains((ConvertTo-Json $po.kopie).Trim('"')); fehlt = $fehlt; reparatur = ($t -match 'hooks-einrichten\.ps1\\" -NurProfil -Reparatur -Stand [0-9a-f]{40}'); kopie = $po.kopie } } $sperrLib $repo
+                $profilStand = & { param($l, $r) . $l; $po = Get-ProfilOrt $r; $t = if (Test-Path -LiteralPath $po.settings) { [System.IO.File]::ReadAllText($po.settings) } else { '' }; $fehlt = @(Get-KopieFehlt $po.kopie); @{ eingetragen = $t.Contains((ConvertTo-Json $po.kopie).Trim('"')); fehlt = $fehlt; reparatur = ($t -match 'hooks-einrichten\.ps1\\" -NurProfil -Reparatur -Stand [0-9a-f]{40}'); kopie = $po.kopie } } $sperrLib $repo
                 if ($profilStand.eingetragen -and $profilStand.fehlt.Count -eq 0 -and $profilStand.reparatur) { Add-Check "OK" $cat ("Sperren in allen Projekten ueber die persoenlichen Einstellungen eingerichtet, Kopie vollstaendig (" + $profilStand.kopie + ").") }
                 elseif ($profilStand.eingetragen -and $profilStand.fehlt.Count -gt 0) { Add-Check "FAIL" $cat ("Die Kopie der Sperren ist unvollstaendig (" + ($profilStand.fehlt -join ', ') + "): Claude Code sperrt damit jeden Werkzeugaufruf in jedem anderen Projekt. Reparatur: Claude Code neu starten, oder der Besitzer fuehrt in seinem eigenen Fenster aus: powershell -NoProfile -ExecutionPolicy Bypass -File `"$repo\00_INDEX\scripts\hooks-einrichten.ps1`" -NurProfil") }
                 elseif ($profilStand.eingetragen) { Add-Check "WARN" $cat "Sperren in allen Projekten eingerichtet, aber ohne Reparatur-Eintrag beim Sessionstart. Erneuern mit 00_INDEX\scripts\hooks-einrichten.ps1 -NurProfil (der Agent darf es selbst ausfuehren)." }
@@ -2051,6 +2073,31 @@ if (Test-Path -LiteralPath $kostenSkript) {
     }
 }
 Write-Output "Lean-Check erledigt."
+Write-Output ""
+
+# ---------------------------------------------------------------------------
+# SICHERHEIT (seit 6.1, AGENTS.md Abschnitt 18; guard-finanzen.ps1 -Audit): jeder Weg zu Anmeldedaten und jeder
+# Zugang mit schreibenden Rechten wird gemeldet, mit Behebung. Schreibende Zugaenge, die in 10_System\Zugaenge.md
+# stehen, kommen als INFO (gewollt, aber gemeldet); alles andere ab "mittel" als WARN. Der Audit prueft den Rechner,
+# nicht das Repo; seine Ausgabe gehoert deshalb nie in eine Datei, die committet wird.
+# ---------------------------------------------------------------------------
+$cat = "Sicherheit"
+$auditSkript = Join-Path $repo "00_INDEX\scripts\guard-finanzen.ps1"
+if (Test-Path $auditSkript) {
+    try {
+        $auditExe = if ([System.IO.Path]::DirectorySeparatorChar -eq '\') { 'powershell' } else { 'pwsh' }
+        $audRoh = & $auditExe -NoProfile -ExecutionPolicy Bypass -File $auditSkript -Audit -Json -Repo $repo 2>$null | Out-String
+        # Unter Windows PowerShell 5.1 liefert ConvertFrom-Json ein Array als ein Objekt; ForEach-Object zerlegt es.
+        $aud = @(($audRoh | ConvertFrom-Json) | ForEach-Object { $_ })
+        foreach ($b in $aud) {
+            if (-not $b) { continue }
+            $lvl = if ($b.schwere -eq 'info' -or [string]$b.id -like 'zugang-schreibend:*') { 'INFO' } else { 'WARN' }
+            Add-Check $lvl $cat ("[" + $b.schwere + "] " + $b.titel + " | Behebung: " + $b.behebung)
+        }
+        if (@($aud | Where-Object { $_ }).Count -eq 0) { Add-Check "OK" $cat "Sicherheits-Audit ohne Befund." }
+    } catch { Add-Check "WARN" $cat ("Sicherheits-Audit nicht ausfuehrbar: " + $_.Exception.Message) }
+}
+Write-Output "Sicherheits-Check erledigt."
 Write-Output ""
 
 

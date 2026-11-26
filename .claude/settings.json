@@ -61,6 +61,16 @@
             "onFailure": "block"
           }
         ]
+      },
+      {
+        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*__(javascript_tool|browser_batch|navigate|computer|form_input|find|read_page|get_page_text|preview_start|tabs_select|tabs_create|tabs_create_mcp|file_upload|upload_image|scroll_to)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\guard-finanzen.ps1\"",
+            "onFailure": "block"
+          }
+        ]
       }
     ],
     "SessionStart": [
@@ -75,6 +85,11 @@
             "type": "command",
             "timeout": 60,
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\version-check.ps1\" -Hook SessionStart"
+          },
+          {
+            "type": "command",
+            "timeout": 60,
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\guard-finanzen.ps1\""
           }
         ]
       }
@@ -87,6 +102,16 @@
             "type": "command",
             "timeout": 20,
             "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\pruef-frontmatter.ps1\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell|Read|Grep|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 20,
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${CLAUDE_PROJECT_DIR}\\00_INDEX\\scripts\\guard-finanzen.ps1\""
           }
         ]
       }

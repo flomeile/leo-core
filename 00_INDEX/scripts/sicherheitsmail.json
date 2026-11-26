@@ -1,0 +1,36 @@
+{
+  "zweck": "Muster fuer Sicherheitsmails (Einmalcodes, Anmelde- und Passwortlinks, Wiederherstellungscodes). Ein Agent liest und verwendet solche Mails nie (AGENTS.md Abschnitt 18). Genutzt von guard-finanzen.ps1, das sie in jeder Werkzeugausgabe ausblendet; ein eigenes Leseskript fuer Mails kann dieselbe Datei nutzen, um eine solche Mail schon beim Lesen auszublenden. Liegt in jeder Kopie der Sperren; ist die Haertung eingerichtet, wirkt eine Aenderung erst nach erneutem Haerten. Regex, gross/klein egal, ASCII mit \\u-Escapes.",
+  "hinweis": "[Ausgeblendet von guard-finanzen: sicherheitsrelevante Mail zu Anmeldung oder Konto. Nicht verwenden und nicht weitergeben; der Besitzer liest sie bei Bedarf selbst.]",
+  "fenster": 400,
+  "beleg_zweck": "Ein Muster zaehlt nur, wenn im Umkreis von 'fenster' Zeichen ein Beleg steht: ein Code, eine Ziffernfolge nach Code/TAN/PIN, ein Link mit Token oder eine Klick-Aufforderung. So schlaegt eine Anleitung, die das Wort Einmalcode nur erwaehnt, nicht an.",
+  "beleg": [
+    "(?<![\\d.,:/-])\\d{6,8}(?![\\d,:/-])(?!\\.\\d)",
+    "\\b\\d{3}[ -]\\d{3}\\b(?![ -]?\\d)",
+    "(code|\\btan|\\bpin|passcode|\\botp)\\b\\D{0,20}\\b\\d{4,8}\\b",
+    "\\b(?=[A-Z0-9]*\\d)[A-Z0-9]{4,5}-(?=[A-Z0-9]*\\d)[A-Z0-9]{4,5}\\b",
+    "https?://[^\\s\"'<>)]*[?&/=][A-Za-z0-9_\\-%.~]{24,}",
+    "\\b(klicken|klicke|click|tap|tippen)\\b.{0,80}\\b(link|button|schaltfl(\u00e4|ae|a)che|hier|here|below|unten)\\b"
+  ],
+  "muster": [
+    "(verification|security|sign[- ]?in|log[- ]?in|one[- ]?time|confirmation|authentication|authori[sz]ation|access|2fa|mfa|otp|backup|recovery)[- ]codes?\\b",
+    "\\bpasscode\\b",
+    "(best(\u00e4|ae|a)tigungs|sicherheits|anmelde|einmal|verifizierungs|verifikations|login|zugangs|authentifizierungs|wiederherstellungs|freigabe|sms)-?codes?\\b",
+    "\\bcode\\s+(de\\s+(v(\u00e9|e)rification|s(\u00e9|e)curit(\u00e9|e)|connexion|confirmation)|di\\s+(verifica|sicurezza|accesso|conferma))",
+    "(einmal|one[- ]?time)[- ]?(passwort|password|pin|kennwort)",
+    "\\b(m?tan|otp|pin)\\s*[:=]\\s*\\d{4,8}\\b",
+    "\\b\\d{4,8}\\s+(is|ist)\\s+(your|ihr|dein)\\b",
+    "\\b(your|ihr|dein)\\s+(code|pin)\\s*(is|lautet|ist)?\\s*[:=]?\\s*\\d{4,8}\\b",
+    "(reset|change|recover|forgot(ten)?)\\s+(your\\s+)?password",
+    "password\\s+(reset|recovery)",
+    "(passwort|kennwort)\\s+(zur(\u00fc|ue|u)cksetzen|vergessen|neu\\s+(setzen|vergeben)|wiederherstellen)",
+    "(neues|tempor(\u00e4|ae|a)res|vorl(\u00e4|ae|a)ufiges|initiales)\\s+(passwort|kennwort)",
+    "(temporary|new|initial)\\s+password\\s*(is|:)",
+    "mot\\s+de\\s+passe\\s+(oubli(\u00e9|e)|temporaire)",
+    "(magic|sign[- ]?in|log[- ]?in|one[- ]?click)\\s+link",
+    "(anmelde|login)-?link",
+    "(verify|confirm)\\s+(your\\s+)?(e-?mail|identity|sign[- ]?in|login|device|account)",
+    "(e-?mail-?adresse|identit(\u00e4|ae|a)t|anmeldung|ger(\u00e4|ae|a)t|konto)\\s+(best(\u00e4|ae|a)tigen|verifizieren)",
+    "(recovery|backup|wiederherstellungs)[- ]?(schl(\u00fc|ue|u)ssel|key|phrase)",
+    "(seed|recovery)\\s+phrase"
+  ]
+}
