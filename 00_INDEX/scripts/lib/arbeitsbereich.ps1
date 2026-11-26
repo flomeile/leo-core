@@ -462,10 +462,11 @@ $haertungsDateien = @(
     '00_INDEX/scripts/guard-git.ps1', '00_INDEX/scripts/guard-mail.ps1',
     '00_INDEX/scripts/guard-fremdsysteme.ps1', '00_INDEX/scripts/guard-extern.ps1',
     '00_INDEX/scripts/leo-hook.ps1', '00_INDEX/scripts/lib/arbeitsbereich.ps1',
-    '00_INDEX/scripts/lib/schutzliste.ps1', '00_INDEX/scripts/lib/eingehaengt-ausschluss.ps1')
+    '00_INDEX/scripts/lib/schutzliste.ps1', '00_INDEX/scripts/lib/eingehaengt-ausschluss.ps1',
+    '00_INDEX/scripts/guard-finanzen.ps1', '00_INDEX/scripts/sicherheitsmail.json')
 $haertungsListen = @('00_INDEX/freigegebene-pfade.txt', '00_INDEX/gesperrte-pfade.txt', '00_INDEX/extern-freigaben.txt')
-# Die Sperren als Hook-Namen (seit 6.0 sechs).
-$sperrNamen = @('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'guard-fremdsysteme', 'guard-extern')
+# Die Sperren als Hook-Namen (seit 6.0 sechs, seit 6.1 sieben).
+$sperrNamen = @('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'guard-fremdsysteme', 'guard-extern', 'guard-finanzen')
 # Die Werkzeuge, bei denen jede Sperre laeuft. Eine Stelle fuer hooks-einrichten.ps1 (Profil und Projektdatei) und
 # sperre-haerten.ps1 (Haertung): Seit der vierten Pruefung von 6.0 nimmt die Haertung die Matcher von hier und nicht
 # aus .claude/settings.json, die der Agent beschreiben kann.
@@ -476,6 +477,41 @@ $matcherJe = @{
     'guard-read'         = 'Read|Grep|Glob|NotebookRead|Bash|PowerShell'
     'guard-fremdsysteme' = 'Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*(javascript|browser_batch|navigate).*'
     'guard-extern'       = 'mcp__.*'
+    'guard-finanzen'     = 'Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|NotebookRead|Grep|Glob|mcp__.*__(javascript_tool|browser_batch|navigate|computer|form_input|find|read_page|get_page_text|preview_start|tabs_select|tabs_create|tabs_create_mcp|file_upload|upload_image|scroll_to)$'
+}
+# Sperren, die zusaetzlich nach dem Werkzeugaufruf oder beim Sessionstart laufen (seit 6.1). Nur PreToolUse traegt
+# "onFailure": "block": Ein PostToolUse- oder SessionStart-Hook, der nicht startet, haelt keinen Aufruf auf, und
+# ein "block" dort sperrte nichts, was nicht schon geschehen ist. Matcher und Zeitlimit stehen hier fest, nicht in
+# der Projektdatei, aus demselben Grund wie $matcherJe.
+$sperrZusatz = @(
+    @{ name = 'guard-finanzen'; ereignis = 'PostToolUse'; matcher = 'Bash|PowerShell|Read|Grep|mcp__.*'; timeout = 20 }
+    @{ name = 'guard-finanzen'; ereignis = 'SessionStart'; matcher = ''; timeout = 60 }
+)
+
+# Welche Dateien eine Kopie der Sperren braucht, gemessen an IHRER Version (seit 6.1): Eine Kopie aus einem aelteren
+# Stand ist vollstaendig, wenn sie hat, was ihr eigener Stand verlangt. Gemessen an der neuen Liste galt nach einem
+# Update jede Kopie aus 6.0 als unvollstaendig (guard-finanzen.ps1 fehlte), und Sessionstart und Reparatur meldeten
+# faelschlich, die Sperren stuenden nicht. Quelle ist die Liste in der arbeitsbereich.ps1 dieses Stands.
+function Get-SollAusText([string]$text) {
+    if (-not $text) { return $null }
+    $m = [regex]::Match($text, '(?s)\$haertungsDateien\s*=\s*@\((.*?)\)')
+    if (-not $m.Success) { return $null }
+    $liste = @([regex]::Matches($m.Groups[1].Value, '''(00_INDEX/[^'']+)''') | ForEach-Object { $_.Groups[1].Value })
+    if ($liste.Count -eq 0) { return $null }
+    return $liste
+}
+function Get-KopieSoll([string]$kopie) {
+    $ab = Join-Path (Join-Path (Join-Path (Join-Path $kopie '00_INDEX') 'scripts') 'lib') 'arbeitsbereich.ps1'
+    try {
+        if (Test-Path -LiteralPath $ab) {
+            $liste = Get-SollAusText ([System.IO.File]::ReadAllText($ab))
+            if ($liste) { return $liste }
+        }
+    } catch { }
+    return $haertungsDateien
+}
+function Get-KopieFehlt([string]$kopie) {
+    return @(Get-KopieSoll $kopie | Where-Object { -not (Test-Path -LiteralPath (Join-Path $kopie $_)) })
 }
 
 # Der auf dem Grundgeruest gepruefte Stand der eingespielten Version (seit der vierten Pruefung von 6.0, fuer

@@ -120,6 +120,14 @@ Pruef "26 SessionStart ohne onFailure" ([string]$start[0].onFailure) ""
 Pruef "26b Versionspruefung ueber Verteiler mit -Hook (seit 5.3)" (@($start | Where-Object { [string]$_.command -like '*-Skript version-check -Hook SessionStart' }).Count) "1"
 Pruef "27 Deny fuer Freigabeliste" (@($d.permissions.deny) -contains 'Edit(**/00_INDEX/freigegebene-pfade.txt)') "True"
 Pruef "28 Schutzkopie hat Lese-Sperre und Logik" ((Test-Path -LiteralPath (Join-Path $ort.kopie '00_INDEX/scripts/guard-read.ps1')) -and (Test-Path -LiteralPath (Join-Path $ort.kopie '00_INDEX/scripts/lib/arbeitsbereich.ps1'))) "True"
+# Seit 6.1: die Finanz-Sperre in drei Ereignissen, "onFailure" nur vor dem Werkzeugaufruf, Matcher aus der festen Liste.
+$gfPre = @($d.hooks.PreToolUse | Where-Object { @($_.hooks | Where-Object { $_.command -like '*-Skript guard-finanzen' }) })
+$gfPost = @($d.hooks.PostToolUse | Where-Object { @($_.hooks | Where-Object { $_.command -like '*-Skript guard-finanzen' }) })
+$gfStart = @($d.hooks.SessionStart | ForEach-Object { $_.hooks } | Where-Object { $_.command -like '*-Skript guard-finanzen' })
+Pruef "28b Finanz-Sperre vorher mit block, feste Matcher" ([string]($gfPre.Count -eq 1 -and $gfPre[0].hooks[0].onFailure -eq 'block' -and $gfPre[0].matcher -eq $matcherJe['guard-finanzen'])) "True"
+Pruef "28c Finanz-Sperre nachher ohne block" ([string]($gfPost.Count -eq 1 -and -not $gfPost[0].hooks[0].onFailure -and $gfPost[0].matcher -eq ($sperrZusatz | Where-Object { $_.ereignis -eq 'PostToolUse' }).matcher)) "True"
+Pruef "28d Finanz-Sperre beim Sessionstart ohne block" ([string]($gfStart.Count -eq 1 -and -not $gfStart[0].onFailure)) "True"
+Pruef "28e Schutzkopie hat Finanz-Sperre und Muster" ((Test-Path -LiteralPath (Join-Path $ort.kopie '00_INDEX/scripts/guard-finanzen.ps1')) -and (Test-Path -LiteralPath (Join-Path $ort.kopie '00_INDEX/scripts/sicherheitsmail.json'))) "True"
 $r = Starte $haerten "-Ziel `"$sys`" -Pruefen"
 Pruef "29 Stand aktuell" ($r.out -match 'Stand:\s+aktuell') "True"
 
@@ -147,6 +155,17 @@ $r = Starte $verteiler "-Repo `"$repo`" -Skript guard-extern" '{"tool_name":"mcp
 Pruef "31f Anderes Projekt: Connector-Versand zu" (Urteil $r) "DENY"
 $r = Starte $verteiler "-Repo `"$repo`" -Skript version-check -Hook SessionStart" '{"source":"compact"}' @{ CLAUDE_PROJECT_DIR = $anderes }
 Pruef "31g Anderes Projekt: keine Kern-Hooks" ([string]($r.code -eq 0 -and -not $r.out.Trim())) "True"
+# Seit 6.1: die Finanz-Sperre laeuft auch in anderen Projekten, vor und nach dem Werkzeugaufruf. Die Faelle zu
+# Geldplattformen selbst stehen in guard-finanzen-tests.ps1; hier zaehlt, dass der Verteiler die Sperre startet.
+$gfTest = Join-Path $tmp 'finanzen-zustand'
+$jsPw = '{"tool_name":"mcp__x__javascript_tool","tool_input":{"text":"document.querySelector(\"input[type=password]\").value"}}'
+$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-finanzen" $jsPw @{ CLAUDE_PROJECT_DIR = $anderes; LEO_FINANZEN_DIR = $gfTest }
+Pruef "31i Anderes Projekt: Passwortfeld zu" (Urteil $r) "DENY"
+$postFin = '{"hook_event_name":"PostToolUse","tool_name":"Bash","tool_input":{"command":"x"},"tool_response":{"stdout":"Your sign-in code is 773311","stderr":""}}'
+$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-finanzen" $postFin @{ CLAUDE_PROJECT_DIR = $anderes; LEO_FINANZEN_DIR = $gfTest }
+Pruef "31j Anderes Projekt: Sicherheitsmail ausgeblendet" ([string]($r.code -eq 0 -and $r.out -match 'updatedToolOutput' -and $r.out -notmatch '773311')) "True"
+$r = Starte $verteiler "-Repo `"$repo`" -Skript guard-finanzen" '{"tool_name":"Bash","cwd":"x","tool_input":{"command":"git status"}}' @{ CLAUDE_PROJECT_DIR = $anderes; LEO_FINANZEN_DIR = $gfTest }
+Pruef "31k Anderes Projekt: git status frei" ([string]($r.code -eq 0 -and (Urteil $r) -eq 'PASS')) "True"
 $eingabeD = (@{ tool_name = 'Write'; cwd = $homePath; tool_input = @{ file_path = (Join-Path $desktop 'x.md') } } | ConvertTo-Json -Compress -Depth 5)
 $r = Starte $verteiler "-Repo `"$repo`" -Skript guard-workspace" $eingabeD @{ CLAUDE_PROJECT_DIR = $homePath }
 Pruef "31h Projekt = Benutzerordner: kein Arbeitsbereich" (Urteil $r) "DENY"
@@ -204,8 +223,12 @@ $r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini
 Pruef "50 Profil: Kopie der Sperren angelegt" ([string]((Test-Path -LiteralPath (Join-Path $po.kopie '00_INDEX/scripts/guard-fremdsysteme.ps1')) -and (Test-Path -LiteralPath (Join-Path $po.kopie '00_INDEX/scripts/leo-hook.ps1')))) "True"
 $us = Get-Content -LiteralPath $po.settings -Raw -Encoding UTF8 | ConvertFrom-Json
 $eig = @($us.hooks.PreToolUse | Where-Object { [string]$_.hooks[0].command -like ('*' + $po.kopie + '*') })
-Pruef "51 Profil: sechs Sperren in den Einstellungen" $eig.Count "6"
-Pruef "52 Profil: mit onFailure block" (@($eig | Where-Object { $_.hooks[0].onFailure -eq 'block' }).Count) "6"
+Pruef "51 Profil: sieben Sperren in den Einstellungen" $eig.Count "7"
+Pruef "52 Profil: mit onFailure block" (@($eig | Where-Object { $_.hooks[0].onFailure -eq 'block' }).Count) "7"
+$eigPost = @($us.hooks.PostToolUse | Where-Object { [string]$_.hooks[0].command -like ('*' + $po.kopie + '*-Skript guard-finanzen') })
+$eigStart = @($us.hooks.SessionStart | ForEach-Object { $_.hooks } | Where-Object { [string]$_.command -like ('*' + $po.kopie + '*-Skript guard-finanzen') })
+Pruef "52b Profil: Finanz-Sperre nachher, ohne block" ([string]($eigPost.Count -eq 1 -and -not $eigPost[0].hooks[0].onFailure)) "True"
+Pruef "52c Profil: Finanz-Sperre beim Sessionstart" ([string]($eigStart.Count -eq 1 -and -not $eigStart[0].onFailure)) "True"
 Pruef "53 Profil: Leseverbote dazu" ([string](@($us.permissions.deny) -contains 'Read(~/.ssh/**)')) "True"
 $r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`" -Pruefen"
 Pruef "54 Profil: zweiter Lauf nichts zu tun" $r.code "0"
@@ -265,7 +288,8 @@ $us.hooks.PreToolUse = @(@($us.hooks.PreToolUse) + [pscustomobject]@{ matcher = 
 [System.IO.File]::WriteAllText($po.settings, ($us | ConvertTo-Json -Depth 20), $utf8)
 $r = Starte $miniEinrichten "-Plattform windows -Heim `"$heimT`" -Quelle `"$mini`" -System `"$sysT`""
 $us = Get-Content -LiteralPath $po.settings -Raw -Encoding UTF8 | ConvertFrom-Json
-Pruef "57 Profil: eigener Hook bleibt, keine Doppel" ([string](@($us.hooks.PreToolUse).Count)) "7"
+Pruef "57 Profil: eigener Hook bleibt, keine Doppel" ([string](@($us.hooks.PreToolUse).Count)) "8"
+Pruef "57b Profil: keine Doppel nachher und beim Start" ([string](@($us.hooks.PostToolUse).Count -eq 1 -and @($us.hooks.SessionStart | ForEach-Object { $_.hooks }).Count -eq 2)) "True"
 # Der Verteiler aus der Profil-Kopie sperrt in einem anderen Projekt.
 $vp = Join-Path (Join-Path (Join-Path $po.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
 $r = Starte $vp "-Repo `"$mini`" -Skript guard-read" $eingabe @{ CLAUDE_PROJECT_DIR = $anderes }
@@ -289,7 +313,7 @@ $r = Starte $miniVc $vcArg '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $mini 
 Pruef "60 Sessionstart: Profil eingerichtet" ([string]($r.out -match 'Sperren fuer alle Projekte eingerichtet')) "True"
 $usE = if (Test-Path -LiteralPath $poE.settings) { Get-Content -LiteralPath $poE.settings -Raw -Encoding UTF8 | ConvertFrom-Json } else { $null }
 $eigE = @($usE.hooks.PreToolUse | Where-Object { [string]$_.hooks[0].command -like ('*' + $poE.kopie + '*') })
-Pruef "61 Sessionstart: sechs Sperren eingetragen" $eigE.Count "6"
+Pruef "61 Sessionstart: sieben Sperren eingetragen" $eigE.Count "7"
 $gleich = $true
 foreach ($rel in $haertungsDateien) {
     $k = Join-Path $poE.kopie $rel
@@ -382,7 +406,9 @@ $r = Starte (Join-Path $miniNeu '00_INDEX/scripts/version-check.ps1') "-Hook Ses
 $usN = Get-Content -LiteralPath $poE.settings -Raw -Encoding UTF8 | ConvertFrom-Json
 $preN = @(@($usN.hooks.PreToolUse) | ForEach-Object { @($_.hooks) } | ForEach-Object { [string]$_.command } | Where-Object { $_ -match 'leo-sperren' })
 $ssN = @(@($usN.hooks.SessionStart) | ForEach-Object { @($_.hooks) } | ForEach-Object { [string]$_.command } | Where-Object { $_ -match '-Reparatur' })
-Pruef "82 Verschoben: nur noch die sechs Eintraege des neuen Orts" ([string]($preN.Count -eq 6 -and @($preN | Where-Object { $_ -like ('*' + $poN.kopie + '*') }).Count -eq 6)) "True"
+Pruef "82 Verschoben: nur noch die sieben Eintraege des neuen Orts" ([string]($preN.Count -eq 7 -and @($preN | Where-Object { $_ -like ('*' + $poN.kopie + '*') }).Count -eq 7)) "True"
+$postN = @(@($usN.hooks.PostToolUse) | ForEach-Object { @($_.hooks) } | ForEach-Object { [string]$_.command } | Where-Object { $_ -match 'leo-sperren' })
+Pruef "82b Verschoben: Finanz-Sperre nachher nur am neuen Ort" ([string]($postN.Count -eq 1 -and $postN[0] -like ('*' + $poN.kopie + '*'))) "True"
 Pruef "83 Verschoben: ein Reparatur-Eintrag, am neuen Ort" ([string]($ssN.Count -eq 1 -and $ssN[0] -like ('*' + $miniNeu + '*'))) "True"
 $vpN = Join-Path (Join-Path (Join-Path $poN.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
 $r = Starte $vpN "-Repo `"$miniNeu`" -Skript guard-read" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
@@ -397,11 +423,109 @@ $j0 = Get-Content -LiteralPath $notPfad -Raw | ConvertFrom-Json
 $eigen = 'echo M' + [char]0xFC + 'ller'
 $j0.hooks.PreToolUse = @(@($j0.hooks.PreToolUse) + [pscustomobject]@{ matcher = 'Bash'; hooks = @([pscustomobject]@{ type = 'command'; command = $eigen }) })
 [System.IO.File]::WriteAllText($notPfad, ($j0 | ConvertTo-Json -Depth 30), $utf8)
-$notBefehl = '$p = "' + $notPfad + '"; $j = Get-Content $p -Raw -Encoding UTF8 | ConvertFrom-Json; foreach ($e in ''PreToolUse'',''SessionStart'') { if ($j.hooks.$e) { $j.hooks.$e = @($j.hooks.$e | Where-Object { -not ($_.hooks.command -match ''leo-sperren|-Reparatur -Stand'') }) } }; [IO.File]::WriteAllText($p, ($j | ConvertTo-Json -Depth 30), (New-Object System.Text.UTF8Encoding($false)))'
+$notBefehl = '$p = "' + $notPfad + '"; $j = Get-Content $p -Raw -Encoding UTF8 | ConvertFrom-Json; foreach ($e in ''PreToolUse'',''PostToolUse'',''SessionStart'') { if ($j.hooks.$e) { $j.hooks.$e = @($j.hooks.$e | Where-Object { -not ($_.hooks.command -match ''leo-sperren|-Reparatur -Stand'') }) } }; [IO.File]::WriteAllText($p, ($j | ConvertTo-Json -Depth 30), (New-Object System.Text.UTF8Encoding($false)))'
 $ErrorActionPreference = 'Continue'; & $psExe -NoProfile -Command $notBefehl 2>&1 | Out-Null; $ErrorActionPreference = 'Stop'
 $j1 = [System.IO.File]::ReadAllText($notPfad, $utf8) | ConvertFrom-Json
 $roh = [System.IO.File]::ReadAllBytes($notPfad)
-Pruef "77 Notausgang: nur eigener Hook bleibt, Umlaut heil" ([string]((@($j1.hooks.PreToolUse).Count -eq 1) -and ([string]@($j1.hooks.PreToolUse)[0].hooks[0].command -eq $eigen) -and (@($j1.hooks.SessionStart | Where-Object { $_ }).Count -eq 0) -and $roh[0] -ne 0xEF)) "True"
+Pruef "77 Notausgang: nur eigener Hook bleibt, Umlaut heil" ([string]((@($j1.hooks.PreToolUse).Count -eq 1) -and ([string]@($j1.hooks.PreToolUse)[0].hooks[0].command -eq $eigen) -and (@($j1.hooks.SessionStart | Where-Object { $_ }).Count -eq 0) -and (@($j1.hooks.PostToolUse | Where-Object { $_ }).Count -eq 0) -and $roh[0] -ne 0xEF)) "True"
+
+# --- Update von 6.0 auf 6.1: die Kopie aus 6.0 ist nicht kaputt, nur noch nicht erneuert (seit 6.1) -----------
+# Ein Kind mit den Dateien aus dem Tag v6.0 des Grundgeruests richtet sein Profil ein; danach kommen die Dateien des
+# Arbeitsstands als v6.1. Gemessen: keine falsche Meldung waehrend des Updates, danach die Finanz-Sperre im Profil.
+# Braucht den Tag v6.0 in diesem Repo; fehlt er, werden die Faelle uebersprungen und so gemeldet.
+function Hole-Blob([string]$quelle, [string]$objekt) {
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = 'git'; $psi.Arguments = '-C "' + $quelle + '" cat-file blob "' + $objekt + '"'
+    $psi.UseShellExecute = $false; $psi.RedirectStandardOutput = $true; $psi.RedirectStandardError = $true
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $ms = New-Object System.IO.MemoryStream
+    $p.StandardOutput.BaseStream.CopyTo($ms); [void]$p.StandardError.ReadToEnd(); $p.WaitForExit()
+    if ($p.ExitCode -ne 0) { return $null }
+    return , $ms.ToArray()
+}
+$ErrorActionPreference = 'Continue'
+$hat60 = [bool](& git -C $repo rev-parse --verify --quiet 'v6.0^{commit}' 2>$null)
+$ErrorActionPreference = 'Stop'
+if (-not $hat60) {
+    "{0,-52} {1}" -f "90-99 Update 6.0 auf 6.1", "uebersprungen (Tag v6.0 fehlt in diesem Repo)"
+} else {
+    $up = Join-Path $tmp 'Kind Update'
+    $heimU = Join-Path $tmp 'Heim Update 61'
+    $abAlt = Hole-Blob $repo 'v6.0:00_INDEX/scripts/lib/arbeitsbereich.ps1'
+    $listeAlt = Get-SollAusText ($utf8.GetString($abAlt))
+    $zusatz = @('00_INDEX/scripts/hooks-einrichten.ps1', '00_INDEX/scripts/version-check.ps1', '.claude/settings.json')
+    foreach ($rel in ($listeAlt + $zusatz)) {
+        $z = Join-Path $up $rel; New-Item -ItemType Directory -Force -Path (Split-Path -Parent $z) | Out-Null
+        [System.IO.File]::WriteAllBytes($z, (Hole-Blob $repo ('v6.0:' + $rel)))
+    }
+    [System.IO.File]::WriteAllText((Join-Path $up 'MEIN-SYSTEM.md'), "| Eingespielte Version | 6.0 |`n", $utf8)
+    [System.IO.File]::WriteAllText((Join-Path $up 'AGENTS.md'), "---`nversion: 6.0`n---`n", $utf8)
+    $ErrorActionPreference = 'Continue'
+    & git init -q -b main $up 2>&1 | Out-Null
+    & git -C $up add -- . 2>&1 | Out-Null
+    & git -C $up -c user.email=t@example.org -c user.name=t commit -q -m v60 2>&1 | Out-Null
+    & git -C $up tag v6.0 2>&1 | Out-Null
+    $ErrorActionPreference = 'Stop'
+    $poU = Get-ProfilOrt $up $heimU
+    $vcU = Join-Path $up '00_INDEX/scripts/version-check.ps1'
+    $vcArgU = "-Hook SessionStart -Quelle `"$up`" -Mitteilungen `"$keineMitteilung`" -Heim `"$heimU`""
+    $r = Starte $vcU $vcArgU '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $up }
+    $usU = Get-Content -LiteralPath $poU.settings -Raw -Encoding UTF8 | ConvertFrom-Json
+    Pruef "90 Kind 6.0: Profil mit sechs Sperren" (@($usU.hooks.PreToolUse | Where-Object { [string]$_.hooks[0].command -like ('*' + $poU.kopie + '*') }).Count) "6"
+    # Update: Dateien des Arbeitsstands, AGENTS.md schon 6.1, MEIN-SYSTEM.md noch 6.0 (Update halb fertig)
+    foreach ($rel in ($haertungsDateien + $zusatz)) {
+        $z = Join-Path $up $rel; New-Item -ItemType Directory -Force -Path (Split-Path -Parent $z) | Out-Null
+        Copy-Item -LiteralPath (Join-Path $repo $rel) -Destination $z -Force
+    }
+    [System.IO.File]::WriteAllText((Join-Path $up 'AGENTS.md'), "---`nversion: 6.1`n---`n", $utf8)
+    $ErrorActionPreference = 'Continue'
+    & git -C $up add -- . 2>&1 | Out-Null
+    & git -C $up -c user.email=t@example.org -c user.name=t commit -q -m v61 2>&1 | Out-Null
+    & git -C $up tag v6.1 2>&1 | Out-Null
+    $ErrorActionPreference = 'Stop'
+    Pruef "91 Kopie aus 6.0 gilt als vollstaendig" (@(Get-KopieFehlt $poU.kopie).Count) "0"
+    $r = Starte $vcU $vcArgU '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $up }
+    Pruef "92 Mitten im Update: keine falsche Meldung" ([string]($r.out -notmatch 'stehen auf diesem Rechner nicht' -and $r.out -notmatch 'unvollstaendig')) "True"
+    $repU = @(@($usU.hooks.SessionStart) | ForEach-Object { @($_.hooks) } | Where-Object { [string]$_.command -match '-Reparatur' })
+    $null = [string]$repU[0].command -match '-File "([^"]+)" (.*)$'
+    $r = Starte $matches[1] $matches[2] '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $anderes }
+    Pruef "93 Reparatur in anderem Projekt schweigt" ([string]([string]::IsNullOrWhiteSpace($r.out))) "True"
+    $vpU = Join-Path (Join-Path (Join-Path $poU.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
+    $r = Starte $vpU "-Repo `"$up`" -Skript guard-read" $bashEin @{ CLAUDE_PROJECT_DIR = $anderes }
+    Pruef "94 Mitten im Update: alte Kopie entscheidet weiter" ([string]($r.code -eq 0 -and (Urteil $r) -eq 'PASS')) "True"
+    # Ganz geloeschte alte Kopie: die Reparatur stellt den Stand 6.0 her, ohne nach Dateien aus 6.1 zu suchen.
+    Remove-Item -LiteralPath $poU.kopie -Recurse -Force
+    $null = [string]$repU[0].command -match '-File "([^"]+)" (.*)$'
+    $r = Starte $matches[1] $matches[2] '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $anderes }
+    Pruef "95 Alte Kopie geloescht: Stand 6.0 wiederhergestellt" ([string]((Test-Path -LiteralPath $vpU) -and -not (Test-Path -LiteralPath (Join-Path $poU.kopie '00_INDEX/scripts/guard-finanzen.ps1')) -and @(Get-KopieFehlt $poU.kopie).Count -eq 0)) "True"
+    # Update fertig: MEIN-SYSTEM.md 6.1. Der naechste Sessionstart erneuert Kopie und Eintraege.
+    [System.IO.File]::WriteAllText((Join-Path $up 'MEIN-SYSTEM.md'), "| Eingespielte Version | 6.1 |`n", $utf8)
+    $r = Starte $vcU $vcArgU '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $up }
+    Pruef "96 Update fertig: Profil erneuert" ([string]($r.out -match 'Sperren fuer alle Projekte eingerichtet')) "True"
+    $usU = Get-Content -LiteralPath $poU.settings -Raw -Encoding UTF8 | ConvertFrom-Json
+    $preU = @($usU.hooks.PreToolUse | Where-Object { [string]$_.hooks[0].command -like ('*' + $poU.kopie + '*') })
+    $postU = @($usU.hooks.PostToolUse | Where-Object { [string]$_.hooks[0].command -like ('*' + $poU.kopie + '*-Skript guard-finanzen') })
+    $startU = @($usU.hooks.SessionStart | ForEach-Object { $_.hooks } | Where-Object { [string]$_.command -like ('*' + $poU.kopie + '*-Skript guard-finanzen') })
+    Pruef "97 Update fertig: sieben Sperren, Finanz-Sperre dreimal" ([string]($preU.Count -eq 7 -and $postU.Count -eq 1 -and $startU.Count -eq 1 -and (Test-Path -LiteralPath (Join-Path $poU.kopie '00_INDEX/scripts/guard-finanzen.ps1')))) "True"
+    # Jeder eingetragene Befehl der Finanz-Sperre startet aus der Kopie und urteilt: git status frei, Mail mit Code
+    # ausgeblendet, Sessionstart ohne Fehler.
+    $fehlstart = 0
+    foreach ($c in @(@($preU | ForEach-Object { [string]$_.hooks[0].command } | Where-Object { $_ -like '*-Skript guard-finanzen' }) + @($postU | ForEach-Object { [string]$_.hooks[0].command }) + @($startU | ForEach-Object { [string]$_.command }))) {
+        if ($c -notmatch '-File "([^"]+)" (.*)$') { $fehlstart++; continue }
+        $s = $matches[1]; $a = $matches[2]
+        $rr = Starte $s $a $bashEin @{ CLAUDE_PROJECT_DIR = $anderes; LEO_GRUNDPFLEGE = 'aus' }
+        if ($rr.code -ne 0 -or (Urteil $rr) -ne 'PASS') { $fehlstart++ }
+    }
+    $c = [string]$postU[0].hooks[0].command; $null = $c -match '-File "([^"]+)" (.*)$'
+    $rr = Starte $matches[1] $matches[2] $postFin @{ CLAUDE_PROJECT_DIR = $anderes }
+    if ($rr.code -ne 0 -or $rr.out -notmatch 'updatedToolOutput' -or $rr.out -match '773311') { $fehlstart++ }
+    $c = [string]$startU[0].command; $null = $c -match '-File "([^"]+)" (.*)$'
+    $rr = Starte $matches[1] $matches[2] '{"hook_event_name":"SessionStart","source":"startup"}' @{ CLAUDE_PROJECT_DIR = $anderes; LEO_GRUNDPFLEGE = 'aus' }
+    if ($rr.code -ne 0 -or $rr.out.Trim()) { $fehlstart++ }
+    Pruef "98 Profil-Befehle der Finanz-Sperre starten und urteilen" $fehlstart "0"
+    $r = Starte $vcU $vcArgU '{"source":"startup"}' @{ CLAUDE_PROJECT_DIR = $up }
+    Pruef "99 Danach: nichts mehr zu tun, keine Meldung" ([string]($r.out -notmatch 'Sperren fuer alle Projekte' -and $r.out -notmatch 'stehen auf diesem Rechner nicht')) "True"
+}
 
 # --- Nur der Besitzer, nie aus einer Session -------------------------------------------------------
 $r = Starte $haerten "" "j`n"

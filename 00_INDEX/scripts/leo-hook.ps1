@@ -25,7 +25,7 @@
 # ASCII-only: laeuft unter Windows PowerShell 5.1 und PowerShell 7.
 param(
     [Parameter(Mandatory)][string]$Repo,
-    [Parameter(Mandatory)][ValidateSet('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'guard-fremdsysteme', 'guard-extern', 'eingehaengte-repos-aktuell', 'pruef-frontmatter', 'version-check')][string]$Skript,
+    [Parameter(Mandatory)][ValidateSet('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'guard-fremdsysteme', 'guard-extern', 'guard-finanzen', 'eingehaengte-repos-aktuell', 'pruef-frontmatter', 'version-check')][string]$Skript,
     [string]$Hook = ''
 )
 
@@ -33,7 +33,9 @@ $ErrorActionPreference = 'Stop'
 
 # Unvollstaendige Kopie (seit 6.0, Zweitpruefung): Statt mit einem Ladefehler zu enden, sperrt der Verteiler mit
 # einer Meldung, die sagt, wie die Kopie heilt. Exit 2 zeigt Claude Code die Meldung als Sperrgrund an.
-$teile = @('lib\arbeitsbereich.ps1', 'lib\schutzliste.ps1', 'lib\eingehaengt-ausschluss.ps1', 'guard-read.ps1', 'guard-workspace.ps1', 'guard-git.ps1', 'guard-mail.ps1', 'guard-fremdsysteme.ps1', 'guard-extern.ps1')
+# Seit 6.1 gehoert guard-finanzen.ps1 dazu; sicherheitsmail.json nicht: Fehlt sie, blendet die Finanz-Sperre keine
+# Mails aus und meldet das im Audit, sperrt aber nichts zu viel.
+$teile = @('lib\arbeitsbereich.ps1', 'lib\schutzliste.ps1', 'lib\eingehaengt-ausschluss.ps1', 'guard-read.ps1', 'guard-workspace.ps1', 'guard-git.ps1', 'guard-mail.ps1', 'guard-fremdsysteme.ps1', 'guard-extern.ps1', 'guard-finanzen.ps1')
 $fehlt = @($teile | Where-Object { -not (Test-Path -LiteralPath (Join-Path $PSScriptRoot ($_ -replace '\\', [string][System.IO.Path]::DirectorySeparatorChar))) })
 if ($fehlt.Count -gt 0) {
     $imSystem = $PSScriptRoot -notmatch '[\\/]\.leo-sperren[\\/]'
@@ -57,10 +59,13 @@ if ($env:CLAUDE_PROJECT_DIR -and -not (Test-PathWithin $env:CLAUDE_PROJECT_DIR $
     $zone = if ((-not $proj) -or (Test-ZuWeit $proj)) { Join-Path (Join-Path $tempPath 'claude') 'leo-kein-projekt' } else { $proj }
 }
 
-foreach ($v in @('LEO_GUARD_FREIGABE_KONFIG', 'LEO_GUARD_READ_KONFIG')) {
+foreach ($v in @('LEO_GUARD_FREIGABE_KONFIG', 'LEO_GUARD_READ_KONFIG', 'LEO_FINANZEN_DIR')) {
     Remove-Item -Path ('Env:' + $v) -ErrorAction SilentlyContinue
 }
 $env:LEO_KIND_REPO = $kind
+# Die Finanz-Sperre (seit 6.1) liest fuer ihren Audit das Repo des Leo-Kinds (Zugaenge.md, gesperrte Pfade); aus der
+# Kopie heraus kennt sie es nur ueber diese Variable.
+$env:LEO_REPO_PFAD = $kind
 
 if ($Skript -like 'guard-*') {
     $ziel = Join-Path $PSScriptRoot ($Skript + '.ps1')

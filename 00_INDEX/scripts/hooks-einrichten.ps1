@@ -85,9 +85,10 @@ if ($Plattform -eq 'posix' -and -not $Pwsh) {
     if (-not $Pwsh) { "PowerShell 7 (pwsh) nicht gefunden. Auf dem Mac installieren mit: brew install --cask powershell"; exit 2 }
 }
 
-$kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|guard-fremdsysteme|guard-extern|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(.*)$'
-$sperren = @('guard-read', 'guard-workspace', 'guard-git', 'guard-mail', 'guard-fremdsysteme', 'guard-extern')
-# $matcherJe steht seit der vierten Pruefung von 6.0 in lib\arbeitsbereich.ps1 (gemeinsam mit sperre-haerten.ps1).
+$kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|guard-fremdsysteme|guard-extern|guard-finanzen|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(.*)$'
+$sperren = $sperrNamen
+# $matcherJe steht seit der vierten Pruefung von 6.0 in lib\arbeitsbereich.ps1 (gemeinsam mit sperre-haerten.ps1), seit
+# 6.1 auch $sperrNamen und $sperrZusatz (Sperren, die zusaetzlich nach dem Werkzeugaufruf und beim Sessionstart laufen).
 
 # Ersatzobjekte (git replace) aendern nie, was aus einem Tag gelesen wird (seit der vierten Pruefung von 6.0).
 $env:GIT_NO_REPLACE_OBJECTS = '1'
@@ -141,7 +142,10 @@ $pflicht = @(
     @{ ereignis = 'SessionStart'; name = 'version-check'; rest = ' -Hook SessionStart'; timeout = 60; matcher = '' }
     @{ ereignis = 'PreToolUse'; name = 'guard-fremdsysteme'; rest = ''; timeout = 0; matcher = $matcherJe['guard-fremdsysteme'] }
     @{ ereignis = 'PreToolUse'; name = 'guard-extern'; rest = ''; timeout = 0; matcher = $matcherJe['guard-extern'] }
+    # Seit 6.1 die Finanz-Sperre, in drei Ereignissen; "onFailure" bekommt nur der PreToolUse-Eintrag.
+    @{ ereignis = 'PreToolUse'; name = 'guard-finanzen'; rest = ''; timeout = 0; matcher = $matcherJe['guard-finanzen'] }
 )
+foreach ($z in $sperrZusatz) { $pflicht += @{ ereignis = $z.ereignis; name = $z.name; rest = ''; timeout = $z.timeout; matcher = $z.matcher } }
 function Ergaenze-Pflicht($json, [string]$wurzel, [switch]$MitOnFailure) {
     $aenderungen = @()
     if (-not $json.PSObject.Properties['hooks']) { $json | Add-Member -NotePropertyName hooks -NotePropertyValue ([pscustomobject]@{}) }
@@ -263,20 +267,27 @@ if ($Reparatur) {
         # Sessionstart-Hooks nicht gleichzeitig in die Kopie schreiben.
         if (-not $ImKind -and $env:CLAUDE_PROJECT_DIR -and (Test-PathWithin $env:CLAUDE_PROJECT_DIR $repo)) { exit 0 }
         if (Test-Path -LiteralPath (Get-HaertungsOrt $repo $System).dropin) { exit 0 }
-        $fehlend = @($haertungsDateien | Where-Object { -not (Test-Path -LiteralPath (Join-Path $prof.kopie $_)) })
+        # Vollstaendig heisst: alles da, was der Stand der Kopie verlangt (seit 6.1, Get-KopieFehlt). Eine Kopie aus 6.0
+        # ohne guard-finanzen.ps1 ist nach dem Update auf 6.1 nicht kaputt, sondern nur noch nicht erneuert.
+        $fehlend = @(Get-KopieFehlt $prof.kopie)
         if ($fehlend.Count -eq 0) { exit 0 }
         if (-not $Stand) {
             $gesp = Get-GespeicherterStand $prof
             if ($gesp) { $Stand = $gesp.stand; if (-not $Version) { $Version = $gesp.version } }
         }
         if ($Stand -notmatch '^[0-9a-f]{40}$') { throw 'kein gepruefter Stand in den persoenlichen Einstellungen' }
+        # Wiederhergestellt wird die Liste dieses Stands, nicht die der Arbeitskopie: Der gespeicherte Stand kann aelter
+        # sein als das Repo (Update eingespielt, Kopie noch nicht erneuert).
+        $ab = Get-GitBlob $repo ($Stand + ':00_INDEX/scripts/lib/arbeitsbereich.ps1')
+        $standListe = if ($null -ne $ab) { Get-SollAusText ((New-Object System.Text.UTF8Encoding($false)).GetString($ab)) } else { $null }
+        if (-not $standListe) { $standListe = $haertungsDateien }
         $blobs = @{}
-        foreach ($rel in $haertungsDateien) {
+        foreach ($rel in $standListe) {
             $inhalt = Get-GitBlob $repo ($Stand + ':' + $rel)
             if ($null -eq $inhalt) { throw "$rel fehlt im Stand $Stand (Repo verschoben oder geloescht?)" }
             $blobs[$rel] = $inhalt
         }
-        foreach ($rel in $haertungsDateien) {
+        foreach ($rel in $standListe) {
             $ziel = Join-Path $prof.kopie $rel
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $ziel) | Out-Null
             [System.IO.File]::WriteAllBytes($ziel, $blobs[$rel])
@@ -446,11 +457,23 @@ function Richte-Profil-Ein {
     if ($Heim) { $reparaturBefehl += ' -Heim "' + $Heim + '"' }
     $ssAlt = @()
     if ($us.hooks.PSObject.Properties['SessionStart']) { $ssAlt = @($us.hooks.SessionStart) }
-    $ssBehalten = @($ssAlt | Where-Object { -not (@($_.hooks) | Where-Object { ([string]$_.command -match $heRx -and [string]$_.command -match '-Reparatur') -or (Test-VerwaisterEintrag ([string]$_.command)) }) })
+    $ssBehalten = @($ssAlt | Where-Object { -not (@($_.hooks) | Where-Object { ([string]$_.command -match $heRx -and [string]$_.command -match '-Reparatur') -or [string]$_.command -match $kopieRx -or (Test-VerwaisterEintrag ([string]$_.command)) }) })
     $ssNeu = @($ssBehalten) + @([pscustomobject]@{ hooks = @([pscustomobject]@{ type = 'command'; timeout = 60; command = $reparaturBefehl }) })
+    # Sperren, die zusaetzlich nach dem Werkzeugaufruf und beim Sessionstart laufen (seit 6.1, $sperrZusatz), ohne
+    # "onFailure": Ein Hook dieser Ereignisse haelt nichts auf, ein "block" saehe nur nach Schutz aus.
+    $ptAlt = @()
+    if ($us.hooks.PSObject.Properties['PostToolUse']) { $ptAlt = @($us.hooks.PostToolUse) }
+    $ptNeu = @($ptAlt | Where-Object { -not (@($_.hooks) | Where-Object { [string]$_.command -match $kopieRx -or (Test-VerwaisterEintrag ([string]$_.command)) }) })
+    foreach ($z in $sperrZusatz) {
+        $e = [pscustomobject]@{ type = 'command'; timeout = $z.timeout; command = ($exe + ' "' + $verteiler + '" -Repo "' + (Normalize-AbsolutePath $repo) + '" -Skript ' + $z.name) }
+        if ($z.ereignis -eq 'PostToolUse') { $ptNeu += [pscustomobject]@{ matcher = $z.matcher; hooks = @($e) } }
+        elseif ($z.ereignis -eq 'SessionStart') { $ssNeu += [pscustomobject]@{ hooks = @($e) } }
+    }
     $ssVorherJson = ConvertTo-Json @($ssAlt) -Depth 10 -Compress
     $ssNachherJson = ConvertTo-Json @($ssNeu) -Depth 10 -Compress
-    $einstellungNeu = ($vorherJson -ne $nachherJson) -or ($denyNeu.Count -ne $denyAlt.Count) -or ($ssVorherJson -ne $ssNachherJson)
+    $ptVorherJson = ConvertTo-Json @($ptAlt) -Depth 10 -Compress
+    $ptNachherJson = ConvertTo-Json @($ptNeu) -Depth 10 -Compress
+    $einstellungNeu = ($vorherJson -ne $nachherJson) -or ($denyNeu.Count -ne $denyAlt.Count) -or ($ssVorherJson -ne $ssNachherJson) -or ($ptVorherJson -ne $ptNachherJson)
     if ($einstellungNeu) { $neu += $prof.settings }
     if ($neu.Count -eq 0) { "Alle Projekte: Sperren aus Version $version eingerichtet, nichts zu tun ($($prof.kopie))."; return $false }
     if ($Pruefen) { "Alle Projekte: fehlt noch:"; $neu | ForEach-Object { "  $_" }; return $true }
@@ -460,6 +483,8 @@ function Richte-Profil-Ein {
     else { $us.permissions | Add-Member -NotePropertyName deny -NotePropertyValue $denyNeu }
     if ($us.hooks.PSObject.Properties['SessionStart']) { $us.hooks.SessionStart = $ssNeu }
     else { $us.hooks | Add-Member -NotePropertyName SessionStart -NotePropertyValue $ssNeu }
+    if ($us.hooks.PSObject.Properties['PostToolUse']) { $us.hooks.PostToolUse = $ptNeu }
+    elseif ($ptNeu.Count -gt 0) { $us.hooks | Add-Member -NotePropertyName PostToolUse -NotePropertyValue $ptNeu }
     Schreibe-Json $us $prof.settings
     [System.IO.File]::WriteAllText((Join-Path $prof.kopie 'version.txt'), $version)
     "Alle Projekte: Sperren aus Version $version eingerichtet ($($prof.kopie), $($prof.settings)):"

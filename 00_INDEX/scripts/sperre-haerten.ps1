@@ -12,8 +12,8 @@
 # Benutzerkontensteuerung oder ein Passwortfenster bestaetigen, das man nicht selbst ausgeloest hat.
 #
 # WAS ES EINRICHTET:
-#   1. Eine Schutzkopie der sechs Sperren (seit 6.0), ihrer gemeinsamen Logik, des Verteilers leo-hook.ps1 und
-#      der drei Freigabelisten unter <Systemordner>\leo\<Repo-Name>.
+#   1. Eine Schutzkopie der sieben Sperren (seit 6.1; die Finanz-Sperre samt sicherheitsmail.json), ihrer gemeinsamen
+#      Logik, des Verteilers leo-hook.ps1 und der drei Freigabelisten unter <Systemordner>\leo\<Repo-Name>.
 #   2. Eine eigene Datei in <Systemordner>\managed-settings.d (eine bestehende managed-settings.json
 #      der IT bleibt unangetastet) mit:
 #      - allowManagedHooksOnly: Hooks aus den Projekt- und Benutzereinstellungen laufen nicht mehr,
@@ -229,7 +229,7 @@ try {
     # --- Verwaltete Einstellungen ---------------------------------------------------------------
     $exe = if ($isWindowsHost) { 'powershell -NoProfile -ExecutionPolicy Bypass -File' } else { '"' + (Join-Path $PSHOME 'pwsh') + '" -NoProfile -File' }
     $verteiler = Join-Path (Join-Path (Join-Path $ort.kopie '00_INDEX') 'scripts') 'leo-hook.ps1'
-    $kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|guard-fremdsysteme|guard-extern|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(?:\s+-Hook\s+(\w+))?'
+    $kernRx = '00_INDEX[\\/]+scripts[\\/]+(guard-read|guard-workspace|guard-git|guard-mail|guard-fremdsysteme|guard-extern|guard-finanzen|eingehaengte-repos-aktuell|pruef-frontmatter|version-check)\.ps1"?(?:\s+-Hook\s+(\w+))?'
     $settings = Get-Content -LiteralPath (Join-Path (Join-Path $repo '.claude') 'settings.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     $hooks = [ordered]@{}
     $fremd = @()
@@ -255,6 +255,11 @@ try {
                 # beschreiben kann (seit der vierten Pruefung von 6.0).
                 $sp = @($neue | ForEach-Object { if ([string]$_.command -match '-Skript (guard-[a-z-]+)') { $matches[1] } } | Select-Object -First 1)
                 if ($ereignis.Name -eq 'PreToolUse' -and $sp.Count -gt 0 -and $matcherJe.ContainsKey($sp[0])) { $g.matcher = $matcherJe[$sp[0]] }
+                # Seit 6.1 auch fuer die Sperren nach dem Werkzeugaufruf und beim Sessionstart ($sperrZusatz).
+                if ($ereignis.Name -ne 'PreToolUse' -and $sp.Count -gt 0) {
+                    $zs = @($sperrZusatz | Where-Object { $_.name -eq $sp[0] -and $_.ereignis -eq $ereignis.Name })
+                    if ($zs.Count -gt 0) { if ($zs[0].matcher) { $g.matcher = $zs[0].matcher } elseif ($g.Contains('matcher')) { $g.Remove('matcher') } }
+                }
                 $g.hooks = $neue
                 $gruppen += $g
             }
@@ -272,6 +277,18 @@ try {
         $ergaenzt += [ordered]@{ matcher = $matcherJe[$s]; hooks = @($e) }
     }
     if ($ergaenzt.Count -gt 0) { $hooks['PreToolUse'] = @(@($hooks['PreToolUse']) + $ergaenzt | Where-Object { $_ }) }
+    # Dasselbe fuer die Sperren nach dem Werkzeugaufruf und beim Sessionstart (seit 6.1), ohne "onFailure".
+    foreach ($z in $sperrZusatz) {
+        $da = $false
+        if ($hooks.Contains($z.ereignis)) { foreach ($g in @($hooks[$z.ereignis])) { foreach ($h in @($g.hooks)) { if ([string]$h.command -match ('-Skript ' + [regex]::Escape($z.name) + '$')) { $da = $true } } } }
+        if ($da) { continue }
+        $e = [ordered]@{ type = 'command'; command = ($exe + ' "' + $verteiler + '" -Repo "' + $repo + '" -Skript ' + $z.name) }
+        if ($z.timeout) { $e.timeout = $z.timeout }
+        $g = [ordered]@{}
+        if ($z.matcher) { $g.matcher = $z.matcher }
+        $g.hooks = @($e)
+        $hooks[$z.ereignis] = @(@($hooks[$z.ereignis]) + $g | Where-Object { $_ })
+    }
     $deny = @('Read(**/.env)', 'Read(**/.env.*)', 'Read(**/*.pem)', 'Read(**/*.key)', 'Read(**/*.pfx)',
               'Read(**/*.p12)', 'Read(**/*.kdbx)', 'Read(**/*.ppk)', 'Read(**/id_rsa*)', 'Read(**/id_ed25519*)',
               'Read(~/.ssh/**)', 'Read(~/.aws/**)', 'Read(~/.gnupg/**)', 'Read(~/.azure/**)', 'Read(~/.kube/**)',

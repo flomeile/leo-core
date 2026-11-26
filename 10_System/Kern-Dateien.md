@@ -2,8 +2,8 @@
 titel: Kern-Dateien
 zweck: Legt fest, welche Dateien zum Grundgerüst gehören und bei einem Update ersetzt werden dürfen, und welche dir gehören
 type: systemdoku
-version: 6.0
-stand: 2026-11-20
+version: 6.1
+stand: 2026-11-26
 ---
 
 # Kern-Dateien: was ein Update anfassen darf
@@ -60,6 +60,9 @@ Diese Dateien sind Mechanik. Sie sind bei allen Nutzern identisch und sollen es 
 | `00_INDEX\scripts\guard-fremdsysteme-tests.ps1` | Regressionsreihe dafür, 86 Fälle (seit 6.0) |
 | `00_INDEX\scripts\guard-extern.ps1` | Connector-Sperre: Versenden (auch Posten und Einladen), Löschen, Teilen, Mergen und Schreiben in Google über einen Connector gesperrt, Freigabe nur durch den Besitzer (Abschnitt 16, seit 6.0) |
 | `00_INDEX\scripts\guard-extern-tests.ps1` | Regressionsreihe dafür, 36 Fälle (seit 6.0) |
+| `00_INDEX\scripts\guard-finanzen.ps1` | Finanz-Sperre: Geldplattformen, gespeicherte Anmeldedaten, Webmail und Konto-Sicherheitsseiten gesperrt, Sicherheitsmails in Werkzeugausgaben ausgeblendet, Sicherheits-Audit beim Sessionstart und im Health-Check (Abschnitt 18, seit 6.1) |
+| `00_INDEX\scripts\guard-finanzen-tests.ps1` | Regressionsreihe dafür, 113 Fälle, unter `pwsh` und mit `-Exe powershell` zu fahren (seit 6.1) |
+| `00_INDEX\scripts\sicherheitsmail.json` | Muster für Sicherheitsmails (Einmalcodes, Anmelde- und Passwortlinks), gelesen von der Finanz-Sperre aus jeder Kopie der Sperren (seit 6.1) |
 | `00_INDEX\scripts\lib\schutzliste.ps1` | Liest die Schutzlisten der eingehängten Repos aus ihrer Fassung auf GitHub und prüft die Pflicht der Firmenschicht (seit 6.0) |
 | `00_INDEX\scripts\pruef-frontmatter.ps1` | Frontmatter-Prüfung nach jedem Schreiben: gibt ungültiges YAML im Frontmatter einer geschriebenen `.md` sofort zur Reparatur zurück und erinnert an `stand:`, wenn das Datum vor heute liegt (Abschnitte 5 und 7, seit 4.9) |
 | `00_INDEX\scripts\lib\frontmatter-pruefung.ps1` | Die Prüfregeln für Frontmatter, gemeinsam für den Hook und den Health-Check (Kategorie `Frontmatter`), damit beide dasselbe melden (seit 4.9) |
